@@ -55,20 +55,32 @@ Scan for any of the following — surface a hit only if at least one is found:
 |---------------------------------------------------------------------|---------------------------------------------------------------------------|
 | `docs/superpowers/` directory                                       | `test -d docs/superpowers`                                                |
 | Intermediate fork tree `docs/amazingabilities/` (rare)             | `test -d docs/amazingabilities`                                           |
-| `superpowers:<skill>` namespace references                          | `grep -rn 'superpowers:' --include='*.md' .` (skipping `.git`)            |
-| Plugin-name references (`obra/superpowers`, `superpowers@…`)        | `grep -rin 'obra/superpowers\|superpowers@' --include='*.md' --include='*.json' .` |
+| `superpowers:<skill>` namespace references                          | `grep -rn 'superpowers:' .` (with the standard exclusions below)          |
+| Plugin-name references (`obra/superpowers`, `superpowers@…`)        | `grep -rin 'obra/superpowers\|superpowers@' .`                            |
 | `Superpowers` mentioned in CLAUDE.md / AGENTS.md / GEMINI.md        | `grep -lin 'superpowers' CLAUDE.md AGENTS.md GEMINI.md 2>/dev/null`       |
+
+**Scope:** all files in the working tree, regardless of extension. References to `superpowers` can land in JSON, shell scripts, env files, YAML configs, etc. — not just markdown. Apply only the standard exclusions: `.git/`, `node_modules/`, `dist/`, `build/`, anything matched by `.gitignore`, and binary files (grep's default `-I` behaviour, or `git grep` which already skips binaries).
 
 Report all hits as one combined finding. Do not act yet.
 
 ### Question 1 — what to do with the legacy artefacts
 
-Ask the user to pick one. Present all three options regardless of which signals were detected (some only affect references, but the user may still want a "do nothing" path).
+Before asking, **enumerate the full contents of `docs/superpowers/`** (`find docs/superpowers -type f`) and bucket each entry:
+
+| Bucket                              | Auto-route to              | Example                                |
+|-------------------------------------|----------------------------|----------------------------------------|
+| `docs/superpowers/specs/**`         | `docs/specs/**`            | `…/specs/2026-05-09-p9-…-design.md`    |
+| `docs/superpowers/plans/**`         | `docs/plans/**`            | `…/plans/2026-05-09-p9-….md`           |
+| Anything else under `docs/superpowers/` | **Unknown — ask the user.** | `docs/superpowers/p3-execution-kickoff.md`, loose handoff notes, README scratch files |
+
+Loose files are common (kickoff notes, handoff prompts that predated `docs/handoffs/`, ad-hoc README scratch). If any exist, include them in the dry-run summary with a per-file prompt: move to `docs/specs/`, `docs/plans/`, `docs/handoffs/`, `docs/`, leave in place, or delete. **Never silently route an unknown file.** Resolve every loose file before applying Q1.
+
+Then ask the user to pick one. Present all three options regardless of which signals were detected:
 
 | Choice            | Action                                                                                                                            |
 |-------------------|-----------------------------------------------------------------------------------------------------------------------------------|
-| **Duplicate**     | Copy `docs/superpowers/specs/` → `docs/specs/` and `docs/superpowers/plans/` → `docs/plans/`. Leave originals in place.           |
-| **Migrate fully** | `git mv` the contents into the new paths; remove the now-empty `docs/superpowers/` tree once empty.                               |
+| **Duplicate**     | Copy `docs/superpowers/specs/` → `docs/specs/`, `docs/superpowers/plans/` → `docs/plans/`, and per-file copies for loose files per the per-file prompt. Leave originals in place. |
+| **Migrate fully** | `git mv` everything per the auto-route table + per-file resolutions. Once `docs/superpowers/` is empty, `rmdir` it. If any loose file was left in place or its parent is non-empty for any reason, leave the tree alone and report it.|
 | **Do nothing**    | Leave the legacy paths untouched.                                                                                                 |
 
 ### Question 2 — what to do with references to those paths
@@ -77,9 +89,11 @@ Ask the user to pick one. This question is asked **after** Q1 is answered but **
 
 | Choice                | Action                                                                                                                            |
 |-----------------------|-----------------------------------------------------------------------------------------------------------------------------------|
-| **Update references** | Grep the codebase for old paths and the `superpowers:` namespace, rewrite each to the new equivalent in place.                    |
+| **Update references** | Grep the entire working tree (all extensions, not just `*.md`) for old paths and the `superpowers:` namespace; rewrite each in place per the mapping table below. |
 | **List references**   | Print a `file:line` table of every reference. Do not write. User decides per-file out of band.                                    |
 | **Leave alone**       | Don't touch references. Apply Q1's choice only.                                                                                   |
+
+The rewrite covers **all file types** — markdown, JSON, YAML, shell scripts, env files, code comments. Do not narrow to `*.md`. Apply only the standard exclusions (`.git/`, `node_modules/`, `dist/`, `build/`, gitignored paths, binary files). Do not stop to ask whether non-markdown files are in scope — they always are.
 
 ### Mapping from old to new
 
