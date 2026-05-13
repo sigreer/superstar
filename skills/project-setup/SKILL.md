@@ -45,89 +45,85 @@ For each check the skill must report **status** (`present` / `missing` / `partia
 
 ## Legacy migration (when superpowers artefacts are present)
 
-Run this **before** the standard audit. The flow is a two-question dialogue. **Do not take any action until both answers are collected.**
+Run this **before** the standard audit. **All of the heavy lifting is performed by a Python script** at `skills/project-setup/scripts/migrate-from-superpowers.py`. The skill's job is to detect, ask the two questions, and invoke the script with the right flags. **Do not freestyle the migration logic.** The script is the single source of truth for the mapping table, file enumeration, and rewrite rules; deviating from it risks inconsistent state across projects.
 
 ### Detection
 
-Scan for any of the following — surface a hit only if at least one is found:
+A single dry-run invocation is the cheapest detection mechanism:
 
-| Signal                                                              | How to find it                                                            |
-|---------------------------------------------------------------------|---------------------------------------------------------------------------|
-| `docs/superpowers/` directory                                       | `test -d docs/superpowers`                                                |
-| Intermediate fork tree `docs/amazingabilities/` (rare)             | `test -d docs/amazingabilities`                                           |
-| `superpowers:<skill>` namespace references                          | `grep -rn 'superpowers:' .` (with the standard exclusions below)          |
-| Plugin-name references (`obra/superpowers`, `superpowers@…`)        | `grep -rin 'obra/superpowers\|superpowers@' .`                            |
-| `Superpowers` mentioned in CLAUDE.md / AGENTS.md / GEMINI.md        | `grep -lin 'superpowers' CLAUDE.md AGENTS.md GEMINI.md 2>/dev/null`       |
+```bash
+python3 skills/project-setup/scripts/migrate-from-superpowers.py --emit=json
+```
 
-**Scope:** all files in the working tree, regardless of extension. References to `superpowers` can land in JSON, shell scripts, env files, YAML configs, etc. — not just markdown. Apply only the standard exclusions: `.git/`, `node_modules/`, `dist/`, `build/`, anything matched by `.gitignore`, and binary files (grep's default `-I` behaviour, or `git grep` which already skips binaries).
+The JSON output has two keys to gate on:
 
-Report all hits as one combined finding. Do not act yet.
+- `paths.has_legacy_dir` — `true` if `docs/superpowers/` exists.
+- `refs` — non-empty object if any `superpowers:` / `obra/superpowers` / `superpowers@…` references remain.
+
+If both are empty, skip the migration flow entirely. Otherwise, present the findings to the user and proceed to Q1/Q2.
+
+### Simplification — no per-file prompting
+
+Loose files at the root of `docs/superpowers/` (kickoff notes, handoff scratch) are **always** moved to `docs/` alongside the rest. No per-file dialog; the script enumerates them and routes them deterministically. If the user wants to delete any of them, they do that themselves after the migration. This keeps the flow predictable.
 
 ### Question 1 — what to do with the legacy artefacts
 
-Before asking, **enumerate the full contents of `docs/superpowers/`** (`find docs/superpowers -type f`) and bucket each entry:
-
-| Bucket                              | Auto-route to              | Example                                |
-|-------------------------------------|----------------------------|----------------------------------------|
-| `docs/superpowers/specs/**`         | `docs/specs/**`            | `…/specs/2026-05-09-p9-…-design.md`    |
-| `docs/superpowers/plans/**`         | `docs/plans/**`            | `…/plans/2026-05-09-p9-….md`           |
-| Anything else under `docs/superpowers/` | **Unknown — ask the user.** | `docs/superpowers/p3-execution-kickoff.md`, loose handoff notes, README scratch files |
-
-Loose files are common (kickoff notes, handoff prompts that predated `docs/handoffs/`, ad-hoc README scratch). If any exist, include them in the dry-run summary with a per-file prompt: move to `docs/specs/`, `docs/plans/`, `docs/handoffs/`, `docs/`, leave in place, or delete. **Never silently route an unknown file.** Resolve every loose file before applying Q1.
-
-Then ask the user to pick one. Present all three options regardless of which signals were detected:
-
-| Choice            | Action                                                                                                                            |
-|-------------------|-----------------------------------------------------------------------------------------------------------------------------------|
-| **Duplicate**     | Copy `docs/superpowers/specs/` → `docs/specs/`, `docs/superpowers/plans/` → `docs/plans/`, and per-file copies for loose files per the per-file prompt. Leave originals in place. |
-| **Migrate fully** | `git mv` everything per the auto-route table + per-file resolutions. Once `docs/superpowers/` is empty, `rmdir` it. If any loose file was left in place or its parent is non-empty for any reason, leave the tree alone and report it.|
-| **Do nothing**    | Leave the legacy paths untouched.                                                                                                 |
+| Choice            | Script flag             | Action                                                                                                                            |
+|-------------------|-------------------------|-----------------------------------------------------------------------------------------------------------------------------------|
+| **Migrate fully** | `--paths=migrate`       | `git mv` `specs/` and `plans/` subtrees to their canonical destinations; `git mv` loose files into `docs/`; `rmdir docs/superpowers/` once empty. |
+| **Duplicate**     | `--paths=duplicate`     | `cp -r` everything into the new locations, `git add -N` the copies. Originals left in place.                                      |
+| **Do nothing**    | `--paths=nothing`       | Leave the legacy paths untouched.                                                                                                 |
 
 ### Question 2 — what to do with references to those paths
 
-Ask the user to pick one. This question is asked **after** Q1 is answered but **before** any action is taken on either:
+| Choice                | Script flag        | Action                                                                                                                            |
+|-----------------------|--------------------|-----------------------------------------------------------------------------------------------------------------------------------|
+| **Update references** | `--refs=update`    | In-place rewrite per the canonical mapping (all file types, not just `.md`). Trailing-slash form `docs/superpowers/` only — bare references without trailing slash are flagged in the summary but not rewritten. |
+| **List references**   | `--refs=list`      | Print a per-file occurrence table. No writes. User decides what to do out of band.                                                |
+| **Leave alone**       | `--refs=nothing`   | Don't touch references. Apply Q1's choice only.                                                                                   |
 
-| Choice                | Action                                                                                                                            |
-|-----------------------|-----------------------------------------------------------------------------------------------------------------------------------|
-| **Update references** | Grep the entire working tree (all extensions, not just `*.md`) for old paths and the `superpowers:` namespace; rewrite each in place per the mapping table below. |
-| **List references**   | Print a `file:line` table of every reference. Do not write. User decides per-file out of band.                                    |
-| **Leave alone**       | Don't touch references. Apply Q1's choice only.                                                                                   |
+### Canonical mapping (defined in the script)
 
-The rewrite covers **all file types** — markdown, JSON, YAML, shell scripts, env files, code comments. Do not narrow to `*.md`. Apply only the standard exclusions (`.git/`, `node_modules/`, `dist/`, `build/`, gitignored paths, binary files). Do not stop to ask whether non-markdown files are in scope — they always are.
+The script applies these substitutions, in this order. The skill does not duplicate this list — it is documented here for human reference only:
 
-### Mapping from old to new
+1. `docs/superpowers/specs/` → `docs/specs/`
+2. `docs/superpowers/plans/` → `docs/plans/`
+3. `docs/superpowers/` → `docs/`
+4. `superpowers:requesting-code-review` → `superstar:requesting-internal-review`
+5. `superpowers:receiving-code-review` → `superstar:receiving-internal-review`
+6. `superpowers:using-superpowers` → `superstar:using-superstar`
+7. `superpowers:` → `superstar:` (catch-all for other skills)
+8. `obra/superpowers` → `sigreer/superstar`
+9. `superpowers@` → `superstar@`
 
-When applying either Q1=Migrate or Q2=Update, use exactly this mapping. Never invent new mappings:
+Trailing-slash form for path rewrites avoids mangling hyphenated filenames like `docs/superpowers-old.md`. Bare references without trailing slash (e.g. `[link](docs/superpowers)`) are not rewritten automatically — they're rare and the user can clean them up after the migration.
 
-| Old                                        | New                                              |
-|--------------------------------------------|--------------------------------------------------|
-| `docs/superpowers/specs/`                  | `docs/specs/`                                    |
-| `docs/superpowers/plans/`                  | `docs/plans/`                                    |
-| `superpowers:requesting-code-review`       | `superstar:requesting-internal-review`           |
-| `superpowers:receiving-code-review`        | `superstar:receiving-internal-review`            |
-| `superpowers:using-superpowers`            | `superstar:using-superstar`                      |
-| `superpowers:<other-skill>`                | `superstar:<other-skill>` (one-for-one rename)   |
-| `obra/superpowers` / `superpowers@*`       | `sigreer/superstar` / `superstar@*`              |
+The script exempts a small set of files from rewriting so historical/definitional references aren't corrupted: the script itself, `skills/project-setup/SKILL.md`, `RELEASE-NOTES.md`, and `CHANGELOG.md`.
 
 ### Applying the migration
 
 After **both** answers are in:
 
-1. **Print a dry-run summary.** Show every path that will be created/moved/deleted and every file whose contents will be rewritten (counts + sample line). One section per action.
-2. **Confirm once more** if Q1 ∈ {Migrate} or Q2 = Update. (Duplicate + List + Leave alone are non-destructive — no second confirm needed.)
-3. **Apply.**
-   - Path moves: `git mv` to preserve history.
-   - Path duplicates: `cp -r` (and `git add -N` the new paths).
-   - Reference rewrites: in-place `sed`, scoped to the file list grepped earlier. Never re-grep mid-apply.
-4. **Re-run the standard audit** so the regular table reflects the post-migration state. The migration may have satisfied items 2–6 of the checklist (the `docs/specs/`, `docs/plans/` etc. directories now exist).
+1. **Show the dry-run summary.** Re-run the script without `--apply`, with the user's chosen `--paths` and `--refs` values:
+   ```bash
+   python3 skills/project-setup/scripts/migrate-from-superpowers.py \
+       --paths=<choice> --refs=<choice>
+   ```
+   Surface the output to the user.
+2. **Confirm once more** if Q1 = `migrate` or Q2 = `update`. (Duplicate / list / nothing are non-destructive — no second confirm needed.)
+3. **Apply.** Re-run the same command with `--apply` appended:
+   ```bash
+   python3 skills/project-setup/scripts/migrate-from-superpowers.py \
+       --apply --paths=<choice> --refs=<choice>
+   ```
+4. **Re-run the standard audit** so the regular table reflects the post-migration state. The migration may have satisfied items 2–6 of the checklist (`docs/specs/`, `docs/plans/` etc. now exist).
 
 ### Rules
 
-- Never delete legacy paths when Q1 ∈ {Duplicate, Do nothing}.
-- Never modify references when Q2 = Leave alone.
-- Never run the reference rewrite without showing the dry-run summary first.
-- Skip files in `.git/`, `node_modules/`, `dist/`, `build/`, and any path matching `.gitignore` patterns.
-- If the user picked Migrate but the old tree has files newer than their `docs/specs/` counterparts (rare — would indicate prior partial migration), surface a conflict report and ask before overwriting.
+- **Never reimplement the migration in shell or inline edits.** Always shell out to the script. It is the single source of truth.
+- Never run `--apply` without first showing the dry-run summary.
+- The script handles its own exclusions (`.git/`, gitignored paths, binaries, exempt files). Do not pre-filter or duplicate that logic.
+- If the script reports that `docs/superpowers/` is non-empty after a `migrate` run (rare — would indicate an unexpected file type or permission issue), surface the warning to the user instead of pressing on.
 
 ## Extending the checklist
 
