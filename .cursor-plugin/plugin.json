@@ -1,14 +1,14 @@
 {
-  "name": "superpowers",
-  "displayName": "Superpowers",
+  "name": "superstar",
+  "displayName": "Superstar",
   "description": "Core skills library: TDD, debugging, collaboration patterns, and proven techniques",
   "version": "5.1.0",
   "author": {
-    "name": "Jesse Vincent",
-    "email": "jesse@fsck.com"
+    "name": "Simon Greer",
+    "email": "simon@sidewayssystems.co.uk"
   },
-  "homepage": "https://github.com/obra/superpowers",
-  "repository": "https://github.com/obra/superpowers",
+  "homepage": "https://github.com/sigreer/superstar",
+  "repository": "https://github.com/sigreer/superstar",
   "license": "MIT",
   "keywords": [
     "skills",

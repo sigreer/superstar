@@ -1,14 +1,14 @@
 # Worktree Rototill Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superstar:subagent-driven-development (recommended) or superstar:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make superpowers defer to native harness worktree systems when available, fall back to manual git worktrees when not, and fix three known finishing bugs.
+**Goal:** Make superstar defer to native harness worktree systems when available, fall back to manual git worktrees when not, and fix three known finishing bugs.
 
 **Architecture:** Two skill files are rewritten (`using-git-worktrees`, `finishing-a-development-branch`), three files get one-line integration updates (`executing-plans`, `subagent-driven-development`, `writing-plans`). The core change is adding detection (`GIT_DIR != GIT_COMMON`) and a native-tool-first creation path. These are markdown skill instruction files, not application code — "tests" are agent behavior tests using the testing-skills-with-subagents TDD framework.
 
 **Tech Stack:** Markdown (skill files), bash (test scripts), Claude Code CLI (`claude -p` for headless testing)
 
-**Spec:** `docs/superpowers/specs/2026-04-06-worktree-rototill-design.md`
+**Spec:** `docs/superstar/specs/2026-04-06-worktree-rototill-design.md`
 
 ---
 
@@ -285,7 +285,7 @@ Follow this priority order:
 2. **Check for existing global directory:**
    ```bash
    project=$(basename "$(git rev-parse --show-toplevel)")
-   ls -d ~/.config/superpowers/worktrees/$project 2>/dev/null
+   ls -d ~/.config/superstar/worktrees/$project 2>/dev/null
    ```
    If found, use it (backward compatibility with legacy global path).
 
@@ -305,7 +305,7 @@ git check-ignore -q .worktrees 2>/dev/null || git check-ignore -q worktrees 2>/d
 
 **Why critical:** Prevents accidentally committing worktree contents to repository.
 
-Global directories (`~/.config/superpowers/worktrees/`) need no verification.
+Global directories (`~/.config/superstar/worktrees/`) need no verification.
 
 #### Create the Worktree
 
@@ -314,7 +314,7 @@ project=$(basename "$(git rev-parse --show-toplevel)")
 
 # Determine path based on chosen location
 # For project-local: path="$LOCATION/$BRANCH_NAME"
-# For global: path="~/.config/superpowers/worktrees/$project/$BRANCH_NAME"
+# For global: path="~/.config/superstar/worktrees/$project/$BRANCH_NAME"
 
 git worktree add "$path" -b "$BRANCH_NAME"
 cd "$path"
@@ -663,7 +663,7 @@ WORKTREE_PATH=$(git rev-parse --show-toplevel)
 
 **If `GIT_DIR == GIT_COMMON`:** Normal repo, no worktree to clean up. Done.
 
-**If worktree path is under `.worktrees/` or `~/.config/superpowers/worktrees/`:** Superpowers created this worktree — we own cleanup.
+**If worktree path is under `.worktrees/` or `~/.config/superstar/worktrees/`:** Superstar created this worktree — we own cleanup.
 
 ```bash
 MAIN_ROOT=$(git -C "$(git rev-parse --git-common-dir)/.." rev-parse --show-toplevel)
@@ -707,7 +707,7 @@ git worktree prune  # Self-healing: clean up any stale registrations
 
 **Cleaning up harness-owned worktrees**
 - **Problem:** Removing a worktree the harness created causes phantom state
-- **Fix:** Only clean up worktrees under `.worktrees/` or `~/.config/superpowers/worktrees/`
+- **Fix:** Only clean up worktrees under `.worktrees/` or `~/.config/superstar/worktrees/`
 
 **No confirmation for discard**
 - **Problem:** Accidentally delete work
@@ -780,13 +780,13 @@ One-line changes to three files that reference `using-git-worktrees`.
 In `skills/executing-plans/SKILL.md`, change line 68 from:
 
 ```markdown
-- **superpowers:using-git-worktrees** - REQUIRED: Set up isolated workspace before starting
+- **superstar:using-git-worktrees** - REQUIRED: Set up isolated workspace before starting
 ```
 
 to:
 
 ```markdown
-- **superpowers:using-git-worktrees** - Ensures isolated workspace (creates one or verifies existing)
+- **superstar:using-git-worktrees** - Ensures isolated workspace (creates one or verifies existing)
 ```
 
 - [ ] **Step 2: Update subagent-driven-development integration line**
@@ -794,13 +794,13 @@ to:
 In `skills/subagent-driven-development/SKILL.md`, change line 268 from:
 
 ```markdown
-- **superpowers:using-git-worktrees** - REQUIRED: Set up isolated workspace before starting
+- **superstar:using-git-worktrees** - REQUIRED: Set up isolated workspace before starting
 ```
 
 to:
 
 ```markdown
-- **superpowers:using-git-worktrees** - Ensures isolated workspace (creates one or verifies existing)
+- **superstar:using-git-worktrees** - Ensures isolated workspace (creates one or verifies existing)
 ```
 
 - [ ] **Step 3: Update writing-plans context line**

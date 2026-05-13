@@ -1,6 +1,6 @@
 # Claude Code Skills Tests
 
-Automated tests for superpowers skills using Claude Code CLI.
+Automated tests for superstar skills using Claude Code CLI.
 
 ## Overview
 
@@ -9,7 +9,7 @@ This test suite verifies that skills are loaded correctly and Claude follows the
 ## Requirements
 
 - Claude Code CLI installed and in PATH (`claude --version` should work)
-- Local superpowers plugin installed (see main README for installation)
+- Local superstar plugin installed (see main README for installation)
 
 ## Running Tests
 
@@ -115,11 +115,11 @@ Full workflow execution test (~10-30 minutes):
 - Subagents follow the skill correctly
 - Final code is functional and tested
 
-#### test-requesting-code-review.sh
+#### test-requesting-internal-review.sh
 Behavioral test for the code reviewer subagent (~5 minutes):
 - Builds a tiny project with a baseline commit
 - Adds a second commit that plants two real bugs (SQL injection, plaintext password handling)
-- Dispatches the code reviewer via the requesting-code-review skill
+- Dispatches the code reviewer via the requesting-internal-review skill
 - Verifies the reviewer flags the planted bugs at Critical/Important severity and refuses to approve
 
 **What it tests:**

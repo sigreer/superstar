@@ -7,7 +7,7 @@
 
 ## Problem
 
-Superpowers is opinionated about worktree management — specific paths (`.worktrees/<branch>`), specific commands (`git worktree add`), specific cleanup (`git worktree remove`). Meanwhile, Claude Code, Codex App, Gemini CLI, and Cursor all provide native worktree support with their own paths, lifecycle management, and cleanup.
+Superstar is opinionated about worktree management — specific paths (`.worktrees/<branch>`), specific commands (`git worktree add`), specific cleanup (`git worktree remove`). Meanwhile, Claude Code, Codex App, Gemini CLI, and Cursor all provide native worktree support with their own paths, lifecycle management, and cleanup.
 
 This creates three failure modes:
 
@@ -15,7 +15,7 @@ This creates three failure modes:
 2. **Conflict** — on Codex App, the skill tries to create worktrees inside an already-managed worktree
 3. **Phantom state** — skill-created worktrees at `.worktrees/` are invisible to the harness; harness-created worktrees at `.claude/worktrees/` are invisible to the skill
 
-For harnesses without native support (Codex CLI, OpenCode, Copilot standalone), superpowers fills a real gap. The skill shouldn't go away — it should get out of the way when native support exists.
+For harnesses without native support (Codex CLI, OpenCode, Copilot standalone), superstar fills a real gap. The skill shouldn't go away — it should get out of the way when native support exists.
 
 ## Goals
 
@@ -31,7 +31,7 @@ For harnesses without native support (Codex CLI, OpenCode, Copilot standalone), 
 - PreToolUse hooks for path enforcement — Phase 4
 - Multi-repo worktree documentation — Phase 4
 - Brainstorming checklist changes for worktrees — Phase 4
-- `.superpowers-session.json` metadata tracking (interesting PR #997 idea, not needed for v1)
+- `.superstar-session.json` metadata tracking (interesting PR #997 idea, not needed for v1)
 - Hooks symlinking into worktrees (PR #965 idea, separate concern)
 
 ## Design Principles
@@ -46,7 +46,7 @@ The skill describes the goal ("ensure work happens in an isolated workspace") an
 
 ### Provenance-based ownership
 
-Whoever creates the worktree owns its cleanup. If the harness created it, superpowers doesn't touch it. If superpowers created it (via git fallback), superpowers cleans it up. The heuristic: if the worktree lives under `.worktrees/` or `~/.config/superpowers/worktrees/`, superpowers owns it. Anything else (`.claude/worktrees/`, `~/.codex/worktrees/`, `.gemini/worktrees/`) belongs to the harness.
+Whoever creates the worktree owns its cleanup. If the harness created it, superstar doesn't touch it. If superstar created it (via git fallback), superstar cleans it up. The heuristic: if the worktree lives under `.worktrees/` or `~/.config/superstar/worktrees/`, superstar owns it. Anything else (`.claude/worktrees/`, `~/.codex/worktrees/`, `.gemini/worktrees/`) belongs to the harness.
 
 ## Design
 
@@ -111,11 +111,11 @@ When no native tool is available, create a worktree manually.
 
 **Directory selection** (priority order):
 1. Check for existing `.worktrees/` or `worktrees/` directory — if found, use it. If both exist, `.worktrees/` wins.
-2. Check for existing `~/.config/superpowers/worktrees/<project>/` directory — if found, use it (backward compatibility with legacy global path).
+2. Check for existing `~/.config/superstar/worktrees/<project>/` directory — if found, use it (backward compatibility with legacy global path).
 3. Check the project's agent instruction file (CLAUDE.md, GEMINI.md, AGENTS.md, .cursorrules, or equivalent) for a worktree directory preference.
 4. Default to `.worktrees/`.
 
-No interactive directory selection prompt. The global path (`~/.config/superpowers/worktrees/`) is no longer offered as a choice to new users, but existing worktrees at that location are detected and used for backward compatibility.
+No interactive directory selection prompt. The global path (`~/.config/superstar/worktrees/`) is no longer offered as a choice to new users, but existing worktrees at that location are detected and used for backward compatibility.
 
 **Safety verification** (project-local directories only):
 
@@ -211,7 +211,7 @@ git merge <feature-branch>
 <run tests>
 
 # Only after merge succeeds: remove worktree, then delete branch (Bug #999 fix)
-git worktree remove "$WORKTREE_PATH"  # only if superpowers owns it
+git worktree remove "$WORKTREE_PATH"  # only if superstar owns it
 git branch -d <feature-branch>
 ```
 
@@ -223,7 +223,7 @@ Push branch, create PR. Do NOT clean up worktree — user needs it for PR iterat
 
 **Option 3 (Keep as-is):** No action.
 
-**Option 4 (Discard):** Require typed "discard" confirmation. Then remove worktree (if superpowers owns it), force-delete branch.
+**Option 4 (Discard):** Require typed "discard" confirmation. Then remove worktree (if superstar owns it), force-delete branch.
 
 #### Step 5: Cleanup (updated)
 
@@ -232,8 +232,8 @@ if GIT_DIR == GIT_COMMON:
     # Normal repo, no worktree to clean up
     done
 
-if worktree path is under .worktrees/ or ~/.config/superpowers/worktrees/:
-    # Superpowers created it — we own cleanup
+if worktree path is under .worktrees/ or ~/.config/superstar/worktrees/:
+    # Superstar created it — we own cleanup
     cd to main repo root       # Bug #238 fix
     git worktree remove <path>
 
@@ -318,7 +318,7 @@ As of 2026-04-06, Claude Code is the only harness with an agent-callable mid-ses
 
 ### Provenance heuristic
 
-The `.worktrees/` or `~/.config/superpowers/worktrees/` = ours, anything else = hands off` heuristic works for every current harness. If a future harness adopts `.worktrees/` as its convention, we'd have a false positive (superpowers tries to clean up a harness-owned worktree). Similarly, if a user manually runs `git worktree add .worktrees/experiment` without superpowers, we'd incorrectly claim ownership. Both are low risk — every harness uses branded paths, and manual `.worktrees/` creation is unlikely — but worth noting.
+The `.worktrees/` or `~/.config/superstar/worktrees/` = ours, anything else = hands off` heuristic works for every current harness. If a future harness adopts `.worktrees/` as its convention, we'd have a false positive (superstar tries to clean up a harness-owned worktree). Similarly, if a user manually runs `git worktree add .worktrees/experiment` without superstar, we'd incorrectly claim ownership. Both are low risk — every harness uses branded paths, and manual `.worktrees/` creation is unlikely — but worth noting.
 
 ### Detached HEAD finishing
 

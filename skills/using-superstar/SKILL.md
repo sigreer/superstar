@@ -1,5 +1,5 @@
 ---
-name: using-superpowers
+name: using-superstar
 description: Use when starting any conversation - establishes how to find and use skills, requiring Skill tool invocation before ANY response including clarifying questions
 ---
 
@@ -17,10 +17,10 @@ This is not negotiable. This is not optional. You cannot rationalize your way ou
 
 ## Instruction Priority
 
-Superpowers skills override default system prompt behavior, but **user instructions always take precedence**:
+Superstar skills override default system prompt behavior, but **user instructions always take precedence**:
 
 1. **User's explicit instructions** (CLAUDE.md, GEMINI.md, AGENTS.md, direct requests) — highest priority
-2. **Superpowers skills** — override default system behavior where they conflict
+2. **Superstar skills** — override default system behavior where they conflict
 3. **Default system prompt** — lowest priority
 
 If CLAUDE.md, GEMINI.md, or AGENTS.md says "don't use TDD" and a skill says "always use TDD," follow the user's instructions. The user is in control.
@@ -98,11 +98,14 @@ These thoughts mean STOP—you're rationalizing:
 
 When multiple skills could apply, use this order:
 
-1. **Process skills first** (brainstorming, debugging) - these determine HOW to approach the task
-2. **Implementation skills second** (frontend-design, mcp-builder) - these guide execution
+1. **Setup skills** (project-setup) — when the user asks to initialise a project or a workflow precondition is missing.
+2. **Process skills** (brainstorming, debugging, tasklist-discipline) — these determine HOW to approach the task.
+3. **Implementation skills** (writing-plans, subagent-driven-development, executing-plans) — these guide execution.
+4. **Gating skills** (external-review, verification-before-completion) — run at the boundaries (spec/plan written, slice/phase done).
 
-"Let's build X" → brainstorming first, then implementation skills.
+"Let's build X" → brainstorming first, then writing-plans, then subagent-driven-development.
 "Fix this bug" → debugging first, then domain-specific skills.
+"Init project for superstar" → project-setup.
 
 ## Skill Types
 

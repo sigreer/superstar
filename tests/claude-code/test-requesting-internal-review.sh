@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Integration Test: requesting-code-review skill
+# Integration Test: requesting-internal-review skill
 # Verifies the code reviewer dispatched via the skill catches a planted bug
 set -euo pipefail
 
@@ -8,13 +8,13 @@ PLUGIN_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 source "$SCRIPT_DIR/test-helpers.sh"
 
 echo "========================================"
-echo " Integration Test: requesting-code-review"
+echo " Integration Test: requesting-internal-review"
 echo "========================================"
 echo ""
 echo "This test verifies the code reviewer subagent by:"
 echo "  1. Setting up a tiny project with a baseline commit"
 echo "  2. Adding a second commit that plants an obvious bug"
-echo "  3. Dispatching the code reviewer via the requesting-code-review skill"
+echo "  3. Dispatching the code reviewer via the requesting-internal-review skill"
 echo "  4. Verifying the reviewer flags the planted bug as Critical/Important"
 echo ""
 
@@ -94,7 +94,7 @@ OUTPUT_FILE="$TEST_PROJECT/claude-output.txt"
 
 PROMPT="I just finished a refactor. The change is between commits $BASE_SHA and $HEAD_SHA on the current branch.
 
-Use the superpowers:requesting-code-review skill to review these changes before I merge. Follow the skill exactly: dispatch the code reviewer subagent with the template, give the subagent the SHA range, and report back what it found.
+Use the superstar:requesting-internal-review skill to review these changes before I merge. Follow the skill exactly: dispatch the code reviewer subagent with the template, give the subagent the SHA range, and report back what it found.
 
 Print the reviewer's full output."
 
@@ -133,12 +133,12 @@ echo "=== Verification Tests ==="
 echo ""
 
 # Test 1: Skill was actually invoked, and a subagent was actually dispatched
-echo "Test 1: requesting-code-review skill invoked + reviewer subagent dispatched..."
+echo "Test 1: requesting-internal-review skill invoked + reviewer subagent dispatched..."
 if [ -z "$SESSION_FILE" ] || [ ! -f "$SESSION_FILE" ]; then
     echo "  [FAIL] Could not locate session transcript in $SESSION_DIR"
     FAILED=$((FAILED + 1))
-elif ! grep -q '"skill":"superpowers:requesting-code-review"' "$SESSION_FILE"; then
-    echo "  [FAIL] requesting-code-review skill was not invoked"
+elif ! grep -q '"skill":"superstar:requesting-internal-review"' "$SESSION_FILE"; then
+    echo "  [FAIL] requesting-internal-review skill was not invoked"
     echo "         Session: $SESSION_FILE"
     FAILED=$((FAILED + 1))
 elif ! grep -q '"name":"Agent"' "$SESSION_FILE"; then
@@ -199,7 +199,7 @@ echo ""
 if [ $FAILED -eq 0 ]; then
     echo "STATUS: PASSED"
     echo "The code reviewer correctly:"
-    echo "  ✓ Was dispatched via the requesting-code-review skill"
+    echo "  ✓ Was dispatched via the requesting-internal-review skill"
     echo "  ✓ Flagged the SQL injection"
     echo "  ✓ Flagged the credential handling issues"
     echo "  ✓ Classified findings at Critical/Important severity"

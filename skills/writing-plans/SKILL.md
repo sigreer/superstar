@@ -13,10 +13,11 @@ Assume they are a skilled developer, but know almost nothing about our toolset o
 
 **Announce at start:** "I'm using the writing-plans skill to create the implementation plan."
 
-**Context:** If working in an isolated worktree, it should have been created via the `superpowers:using-git-worktrees` skill at execution time.
+**Context:** If working in an isolated worktree, it should have been created via the `superstar:using-git-worktrees` skill at execution time.
 
-**Save plans to:** `docs/superpowers/plans/YYYY-MM-DD-<feature-name>.md`
-- (User preferences for plan location override this default)
+**Save plans to:** `docs/plans/YYYY-MM-DD-<id>-<slug>.md` where `<id>` is the TASKLIST ID for the work (e.g. `p2-s3a`). If the project does not use TASKLIST.md, omit the ID segment. User preferences for plan location override this default.
+
+**TASKLIST integration:** If `docs/TASKLIST.md` exists, this plan must correspond to a TASKLIST entry. See [[tasklist-discipline]] for the ID scheme and status rules.
 
 ## Scope Check
 
@@ -49,7 +50,7 @@ This structure informs the task decomposition. Each task should produce self-con
 ```markdown
 # [Feature Name] Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superstar:subagent-driven-development (recommended) or superstar:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** [One sentence describing what this builds]
 
@@ -131,22 +132,44 @@ After writing the complete plan, look at the spec with fresh eyes and check the 
 
 If you find issues, fix them inline. No need to re-review — just fix and move on. If you find a spec requirement with no task, add the task.
 
+## External review checkpoints
+
+This skill enforces two **gating** external reviews. Both are mandatory unless the user explicitly waives them.
+
+### 1. Spec review (after spec save, before plan drafting)
+
+If the brainstorming step produced a spec under `docs/specs/`, run `[[external-review]]` with `--kind spec` against that spec **before** starting the plan. Iterate until the verdict is `ready` or `ready with small edits`. During this stage you may apply the reviewer's edits directly — no parallel implementation subagents exist yet.
+
+### 2. Plan review (after plan save, before execution handoff)
+
+After saving the plan, run `[[external-review]]` with `--kind plan` against the plan, passing the spec as `--context`. Iterate until the verdict is `ready` or `ready with small edits` before proceeding to the handoff step below.
+
 ## Execution Handoff
 
-After saving the plan, offer execution choice:
+After both reviews are passed, write a **handoff prompt** for the next session and offer the execution choice.
 
-**"Plan complete and saved to `docs/superpowers/plans/<filename>.md`. Two execution options:**
+### Step A — Write the handoff prompt
 
-**1. Subagent-Driven (recommended)** - I dispatch a fresh subagent per task, review between tasks, fast iteration
+Copy `handoff-prompt.template.md` (next to this SKILL) to `docs/handoffs/<plan-stem>-prompt.md` and fill in the placeholders: phase/slice ID, project name, absolute repo path, spec path, plan path, reviewer chain folder name. Commit it alongside the plan.
 
-**2. Inline Execution** - Execute tasks in this session using executing-plans, batch execution with checkpoints
+### Step B — Echo the handoff to chat
+
+Print the filled-in handoff prompt to chat in a fenced block, plus the absolute path to the committed file, so the user can copy it into a new session immediately.
+
+### Step C — Offer execution choice in-session
+
+**"Plan complete and saved to `docs/plans/<filename>.md`. Handoff prompt saved to `docs/handoffs/<filename>-prompt.md`. Two execution options:**
+
+**1. Subagent-Driven (recommended)** - I dispatch a fresh subagent per task, review between tasks, run external-review at each slice and phase close.
+
+**2. Inline Execution** - Execute tasks in this session using executing-plans, batch execution with checkpoints.
 
 **Which approach?"**
 
 **If Subagent-Driven chosen:**
-- **REQUIRED SUB-SKILL:** Use superpowers:subagent-driven-development
-- Fresh subagent per task + two-stage review
+- **REQUIRED SUB-SKILL:** Use superstar:subagent-driven-development
+- Fresh subagent per task + two-stage review + external-review at slice/phase boundaries
 
 **If Inline Execution chosen:**
-- **REQUIRED SUB-SKILL:** Use superpowers:executing-plans
+- **REQUIRED SUB-SKILL:** Use superstar:executing-plans
 - Batch execution with checkpoints for review

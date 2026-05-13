@@ -5,13 +5,41 @@ description: Use when executing implementation plans with independent tasks in t
 
 # Subagent-Driven Development
 
-Execute plan by dispatching fresh subagent per task, with two-stage review after each: spec compliance review first, then code quality review.
+Execute plan by dispatching fresh subagent per task, with two-stage in-loop review after each task, and external-review gates at slice and phase boundaries.
 
 **Why subagents:** You delegate tasks to specialized agents with isolated context. By precisely crafting their instructions and context, you ensure they stay focused and succeed at their task. They should never inherit your session's context or history — you construct exactly what they need. This also preserves your own context for coordination work.
 
-**Core principle:** Fresh subagent per task + two-stage review (spec then quality) = high quality, fast iteration
+**Core principle:** Fresh subagent per task + two-stage in-loop review (spec then quality) + external-review at slice/phase boundaries = high quality, fast iteration.
 
 **Continuous execution:** Do not pause to check in with your human partner between tasks. Execute all tasks from the plan without stopping. The only reasons to stop are: BLOCKED status you cannot resolve, ambiguity that genuinely prevents progress, or all tasks complete. "Should I continue?" prompts and progress summaries waste their time — they asked you to execute the plan, so execute it.
+
+## Coordinator Charter
+
+**You are a coordinator. Your role is strictly orchestration.** This charter applies for the entire duration of subagent-driven execution. Internalise it before dispatching anything.
+
+| Rule                                                                           | Why                                                                                  |
+|--------------------------------------------------------------------------------|--------------------------------------------------------------------------------------|
+| **Do not perform fixes yourself.**                                             | A fix you do directly pollutes your coordinator context and starves the parallel-subagent model of work. Tiebreak: delegate. |
+| **Do not read large files or run investigations yourself.**                    | Delegate to an investigator subagent. Receive a short summary back, not the file contents. |
+| **Do not edit files in response to reviewer findings.**                        | Dispatch a fix subagent with the response file as input. The coordinator's job is to submit, gate on verdict, dispatch, and re-submit. |
+| **Only orchestrate.**                                                          | Your value is sequencing work, holding the plan in mind, and gating on verdicts.    |
+
+**Exception — genuinely cheaper to do inline.** A one-line typo fix, a `.gitkeep` write, a TASKLIST status flip — if dispatching a subagent costs strictly more than doing the action, you may do it. The bar is *strictly cheaper*, not *roughly equal*. When in doubt, delegate.
+
+## Slice and phase boundaries
+
+Plans are organised into **slices** (and slices into **tasks**) per `[[tasklist-discipline]]`. The coordinator tracks slice and phase boundaries explicitly:
+
+- **At the end of each slice** (all the slice's tasks closed, in-loop reviews passed):
+  1. Invoke `[[external-review]]` with `--kind post-slice`, passing the plan as `--file` and the spec + TASKLIST.md as `--context`.
+  2. Read the verdict. On `ready` / `ready with small edits`, proceed.
+  3. On `revise`, **dispatch a fix subagent** with the response file as input. Wait for completion. Re-submit. Iterate.
+  4. Once the verdict gates pass, flip the slice's status in TASKLIST.md per `[[tasklist-discipline]]`.
+
+- **At the end of the phase** (the last slice in the phase closes):
+  1. Invoke `[[external-review]]` with `--kind post-phase`, passing the phase plan or archive note as `--file` and the spec + plan + TASKLIST.md as `--context`.
+  2. Same delegation rule — coordinator does not apply findings directly.
+  3. On verdict acceptance, archive the phase per `[[tasklist-discipline]]` and invoke `[[finishing-a-development-branch]]`.
 
 ## When to Use
 
@@ -63,7 +91,7 @@ digraph process {
     "Read plan, extract all tasks with full text, note context, create TodoWrite" [shape=box];
     "More tasks remain?" [shape=diamond];
     "Dispatch final code reviewer subagent for entire implementation" [shape=box];
-    "Use superpowers:finishing-a-development-branch" [shape=box style=filled fillcolor=lightgreen];
+    "Use superstar:finishing-a-development-branch" [shape=box style=filled fillcolor=lightgreen];
 
     "Read plan, extract all tasks with full text, note context, create TodoWrite" -> "Dispatch implementer subagent (./implementer-prompt.md)";
     "Dispatch implementer subagent (./implementer-prompt.md)" -> "Implementer subagent asks questions?";
@@ -82,7 +110,7 @@ digraph process {
     "Mark task complete in TodoWrite" -> "More tasks remain?";
     "More tasks remain?" -> "Dispatch implementer subagent (./implementer-prompt.md)" [label="yes"];
     "More tasks remain?" -> "Dispatch final code reviewer subagent for entire implementation" [label="no"];
-    "Dispatch final code reviewer subagent for entire implementation" -> "Use superpowers:finishing-a-development-branch";
+    "Dispatch final code reviewer subagent for entire implementation" -> "Use superstar:finishing-a-development-branch";
 }
 ```
 
@@ -130,7 +158,7 @@ Implementer subagents report one of four statuses. Handle each appropriately:
 ```
 You: I'm using Subagent-Driven Development to execute this plan.
 
-[Read plan file once: docs/superpowers/plans/feature-plan.md]
+[Read plan file once: docs/superstar/plans/feature-plan.md]
 [Extract all 5 tasks with full text and context]
 [Create TodoWrite with all tasks]
 
@@ -141,7 +169,7 @@ Task 1: Hook installation script
 
 Implementer: "Before I begin - should the hook be installed at user or system level?"
 
-You: "User level (~/.config/superpowers/hooks/)"
+You: "User level (~/.config/superstar/hooks/)"
 
 Implementer: "Got it. Implementing now..."
 [Later] Implementer:
@@ -235,10 +263,21 @@ Done!
 
 ## Red Flags
 
-**Never:**
+**Coordinator-discipline reds (the failure mode this skill exists to prevent):**
+
+| Thought                                                                   | Reality                                                                |
+|---------------------------------------------------------------------------|------------------------------------------------------------------------|
+| "I'll just quickly edit this file myself, it's faster"                    | No. Dispatch a subagent. You are the coordinator.                      |
+| "The reviewer flagged three small things, I'll patch them inline"         | No. Pass the response file to a fix subagent.                          |
+| "I'll read the file to figure out what's wrong before delegating"         | No. Dispatch an investigator subagent and wait for the summary.        |
+| "It's just a one-line change, no need to delegate"                        | Bar is *strictly cheaper than delegating*. When in doubt, delegate.    |
+| "I'll skip post-slice review on this one, it's a small slice"             | No. Slice boundary is a gate. Run `[[external-review]] --kind post-slice`.|
+
+**Process reds (also never):**
 - Start implementation on main/master branch without explicit user consent
-- Skip reviews (spec compliance OR code quality)
-- Proceed with unfixed issues
+- Skip in-loop reviews (spec compliance OR code quality)
+- Skip external-review at slice or phase boundaries
+- Proceed with unfixed issues or `revise` verdicts
 - Dispatch multiple implementation subagents in parallel (conflicts)
 - Make subagent read plan file (provide full text instead)
 - Skip scene-setting context (subagent needs to understand where task fits)
@@ -267,13 +306,15 @@ Done!
 ## Integration
 
 **Required workflow skills:**
-- **superpowers:using-git-worktrees** - Ensures isolated workspace (creates one or verifies existing)
-- **superpowers:writing-plans** - Creates the plan this skill executes
-- **superpowers:requesting-code-review** - Code review template for reviewer subagents
-- **superpowers:finishing-a-development-branch** - Complete development after all tasks
+- **superstar:using-git-worktrees** - Ensures isolated workspace (creates one or verifies existing)
+- **superstar:writing-plans** - Creates the plan this skill executes
+- **superstar:requesting-internal-review** - In-loop code review template for reviewer subagents
+- **superstar:external-review** - Out-of-loop reviewer at slice and phase boundaries
+- **superstar:tasklist-discipline** - Slice/phase status flips and phase archival rules
+- **superstar:finishing-a-development-branch** - Complete development after the phase closes
 
 **Subagents should use:**
-- **superpowers:test-driven-development** - Subagents follow TDD for each task
+- **superstar:test-driven-development** - Subagents follow TDD for each task
 
 **Alternative workflow:**
-- **superpowers:executing-plans** - Use for parallel session instead of same-session execution
+- **superstar:executing-plans** - Use for parallel session instead of same-session execution

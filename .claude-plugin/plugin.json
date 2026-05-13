@@ -1,13 +1,13 @@
 {
-  "name": "superpowers",
+  "name": "superstar",
   "description": "Core skills library for Claude Code: TDD, debugging, collaboration patterns, and proven techniques",
   "version": "5.1.0",
   "author": {
-    "name": "Jesse Vincent",
-    "email": "jesse@fsck.com"
+    "name": "Simon Greer",
+    "email": "simon@sidewayssystems.co.uk"
   },
-  "homepage": "https://github.com/obra/superpowers",
-  "repository": "https://github.com/obra/superpowers",
+  "homepage": "https://github.com/sigreer/superstar",
+  "repository": "https://github.com/sigreer/superstar",
   "license": "MIT",
   "keywords": [
     "skills",

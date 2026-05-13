@@ -2,7 +2,7 @@
 
 **Date:** 2025-11-28
 **Status:** Draft
-**Source:** Two Claude instances using superpowers in real development scenarios
+**Source:** Two Claude instances using superstar in real development scenarios
 
 ---
 
@@ -387,7 +387,7 @@ Adds ~30 seconds per task, but catches issues before review.
 
 ---
 
-### 5. requesting-code-review: Add Explicit File Reading
+### 5. requesting-internal-review: Add Explicit File Reading
 
 **Modify the code-reviewer template:**
 
@@ -507,7 +507,7 @@ Directly addresses the failure pattern from feedback.
 BEFORE writing any tests:
 
 1. Read testing-anti-patterns skill:
-   Use Skill tool: superpowers:testing-anti-patterns
+   Use Skill tool: superstar:testing-anti-patterns
 
 2. Apply gate functions from that skill when:
    - Writing mocks
@@ -574,10 +574,10 @@ Slightly more complex prompt, but faster end-to-end.
    - Addresses high-impact problem (runtime crashes)
    - File: `skills/testing-anti-patterns/SKILL.md`
 
-3. **requesting-code-review: Explicit file reading**
+3. **requesting-internal-review: Explicit file reading**
    - Simple addition to template
    - Fixes concrete problem (reviewers can't find files)
-   - File: `skills/requesting-code-review/SKILL.md`
+   - File: `skills/requesting-internal-review/SKILL.md`
 
 ### Phase 2: Moderate Changes (Test Carefully)
 
@@ -697,7 +697,7 @@ How do we know these improvements work?
 **Proceed with Phase 1 immediately:**
 - verification-before-completion: Configuration change verification
 - testing-anti-patterns: Mock-interface drift
-- requesting-code-review: Explicit file reading
+- requesting-internal-review: Explicit file reading
 
 **Test Phase 2 with Jesse before finalizing:**
 - Get feedback on self-reflection impact

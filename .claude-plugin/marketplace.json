@@ -1,19 +1,19 @@
 {
-  "name": "superpowers-dev",
-  "description": "Development marketplace for Superpowers core skills library",
+  "name": "superstar-dev",
+  "description": "Development marketplace for Superstar core skills library",
   "owner": {
-    "name": "Jesse Vincent",
-    "email": "jesse@fsck.com"
+    "name": "Simon Greer",
+    "email": "simon@sidewayssystems.co.uk"
   },
   "plugins": [
     {
-      "name": "superpowers",
+      "name": "superstar",
       "description": "Core skills library for Claude Code: TDD, debugging, collaboration patterns, and proven techniques",
       "version": "5.1.0",
       "source": "./",
       "author": {
-        "name": "Jesse Vincent",
-        "email": "jesse@fsck.com"
+        "name": "Simon Greer",
+        "email": "simon@sidewayssystems.co.uk"
       }
     }
   ]
