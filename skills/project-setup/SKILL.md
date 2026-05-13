@@ -35,12 +35,85 @@ For each check the skill must report **status** (`present` / `missing` / `partia
 
 ## The process
 
-1. **Run the audit.** Iterate the checks above. Build a status table.
-2. **Report findings.** Present the table to the user. Use the standard `present` / `missing` / `partial` language.
-3. **Offer scaffolding.** For each `missing` or `partial` item, ask the user whether to scaffold it. Allow "all", "none", or per-item selection.
-4. **Apply.** For each accepted item, run the scaffold action. Use `git add -N` (intent-to-add) on new empty files so `.gitkeep`s show up in `git status` but aren't auto-staged.
-5. **Verify.** Re-run the audit and confirm everything the user accepted is now `present`. Print the new table.
-6. **Report.** Summarise what was created, what was skipped, and what manual action (if any) is still required — e.g. installing the reviewer command, editing the placeholder fields in `TASKLIST.md`.
+1. **Legacy detection.** Scan for upstream `superpowers` artefacts (see "Legacy migration" below). If any are present, run that flow **before** the standard audit so the audit sees the migrated layout, not the legacy one.
+2. **Run the audit.** Iterate the checks above. Build a status table.
+3. **Report findings.** Present the table to the user. Use the standard `present` / `missing` / `partial` language.
+4. **Offer scaffolding.** For each `missing` or `partial` item, ask the user whether to scaffold it. Allow "all", "none", or per-item selection.
+5. **Apply.** For each accepted item, run the scaffold action. Use `git add -N` (intent-to-add) on new empty files so `.gitkeep`s show up in `git status` but aren't auto-staged.
+6. **Verify.** Re-run the audit and confirm everything the user accepted is now `present`. Print the new table.
+7. **Report.** Summarise what was created, what was skipped, and what manual action (if any) is still required — e.g. installing the reviewer command, editing the placeholder fields in `TASKLIST.md`.
+
+## Legacy migration (when superpowers artefacts are present)
+
+Run this **before** the standard audit. The flow is a two-question dialogue. **Do not take any action until both answers are collected.**
+
+### Detection
+
+Scan for any of the following — surface a hit only if at least one is found:
+
+| Signal                                                              | How to find it                                                            |
+|---------------------------------------------------------------------|---------------------------------------------------------------------------|
+| `docs/superpowers/` directory                                       | `test -d docs/superpowers`                                                |
+| Intermediate fork tree `docs/amazingabilities/` (rare)             | `test -d docs/amazingabilities`                                           |
+| `superpowers:<skill>` namespace references                          | `grep -rn 'superpowers:' --include='*.md' .` (skipping `.git`)            |
+| Plugin-name references (`obra/superpowers`, `superpowers@…`)        | `grep -rin 'obra/superpowers\|superpowers@' --include='*.md' --include='*.json' .` |
+| `Superpowers` mentioned in CLAUDE.md / AGENTS.md / GEMINI.md        | `grep -lin 'superpowers' CLAUDE.md AGENTS.md GEMINI.md 2>/dev/null`       |
+
+Report all hits as one combined finding. Do not act yet.
+
+### Question 1 — what to do with the legacy artefacts
+
+Ask the user to pick one. Present all three options regardless of which signals were detected (some only affect references, but the user may still want a "do nothing" path).
+
+| Choice            | Action                                                                                                                            |
+|-------------------|-----------------------------------------------------------------------------------------------------------------------------------|
+| **Duplicate**     | Copy `docs/superpowers/specs/` → `docs/specs/` and `docs/superpowers/plans/` → `docs/plans/`. Leave originals in place.           |
+| **Migrate fully** | `git mv` the contents into the new paths; remove the now-empty `docs/superpowers/` tree once empty.                               |
+| **Do nothing**    | Leave the legacy paths untouched.                                                                                                 |
+
+### Question 2 — what to do with references to those paths
+
+Ask the user to pick one. This question is asked **after** Q1 is answered but **before** any action is taken on either:
+
+| Choice                | Action                                                                                                                            |
+|-----------------------|-----------------------------------------------------------------------------------------------------------------------------------|
+| **Update references** | Grep the codebase for old paths and the `superpowers:` namespace, rewrite each to the new equivalent in place.                    |
+| **List references**   | Print a `file:line` table of every reference. Do not write. User decides per-file out of band.                                    |
+| **Leave alone**       | Don't touch references. Apply Q1's choice only.                                                                                   |
+
+### Mapping from old to new
+
+When applying either Q1=Migrate or Q2=Update, use exactly this mapping. Never invent new mappings:
+
+| Old                                        | New                                              |
+|--------------------------------------------|--------------------------------------------------|
+| `docs/superpowers/specs/`                  | `docs/specs/`                                    |
+| `docs/superpowers/plans/`                  | `docs/plans/`                                    |
+| `superpowers:requesting-code-review`       | `superstar:requesting-internal-review`           |
+| `superpowers:receiving-code-review`        | `superstar:receiving-internal-review`            |
+| `superpowers:using-superpowers`            | `superstar:using-superstar`                      |
+| `superpowers:<other-skill>`                | `superstar:<other-skill>` (one-for-one rename)   |
+| `obra/superpowers` / `superpowers@*`       | `sigreer/superstar` / `superstar@*`              |
+
+### Applying the migration
+
+After **both** answers are in:
+
+1. **Print a dry-run summary.** Show every path that will be created/moved/deleted and every file whose contents will be rewritten (counts + sample line). One section per action.
+2. **Confirm once more** if Q1 ∈ {Migrate} or Q2 = Update. (Duplicate + List + Leave alone are non-destructive — no second confirm needed.)
+3. **Apply.**
+   - Path moves: `git mv` to preserve history.
+   - Path duplicates: `cp -r` (and `git add -N` the new paths).
+   - Reference rewrites: in-place `sed`, scoped to the file list grepped earlier. Never re-grep mid-apply.
+4. **Re-run the standard audit** so the regular table reflects the post-migration state. The migration may have satisfied items 2–6 of the checklist (the `docs/specs/`, `docs/plans/` etc. directories now exist).
+
+### Rules
+
+- Never delete legacy paths when Q1 ∈ {Duplicate, Do nothing}.
+- Never modify references when Q2 = Leave alone.
+- Never run the reference rewrite without showing the dry-run summary first.
+- Skip files in `.git/`, `node_modules/`, `dist/`, `build/`, and any path matching `.gitignore` patterns.
+- If the user picked Migrate but the old tree has files newer than their `docs/specs/` counterparts (rare — would indicate prior partial migration), surface a conflict report and ask before overwriting.
 
 ## Extending the checklist
 
