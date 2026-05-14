@@ -40,29 +40,95 @@ If `reviewer-agent` is missing, `[[project-setup]]` will offer to install/config
 ## How a round runs
 
 ```bash
-python3 skills/external-review/scripts/external-reviewer.py review \
+python3 scripts/external-reviewer.py review \
     --kind <spec|plan|post-slice|post-phase> \
     --file <path/to/target.md> \
+    --work-id <P2.S3 | P2>   # required for post-slice / post-phase
     [--context <path>]... \
+    [--review-depth thorough] \
     --emit json
 ```
 
-- Output folder: `docs/reviewer/<target-stem-no-date>-<kind>/`
-- Round number is derived from the count of `r{N}-*-request.md` files already in the folder; existing rounds are never overwritten.
-- Each round emits `r{N}-{timestamp}-request.md` (prompt) and `r{N}-{timestamp}-response.md` (review body + status).
-- `--emit json` returns `review_path`, `prompt_path`, `round`, `status`, `returncode`, and the full `review` text. Always use `--emit json` from this skill — agents consume the JSON, not paths or human prose.
+- Output folder: `docs/reviewer/<target-stem-no-date>[-<work-id-dotless>]-<kind>/`
+- Round number, base ref, and prior verdict are read from `chain.json` in the chain folder.
+- Each round emits `r{N}-{timestamp}-request.md` and `r{N}-{timestamp}-response.md`. When `--review-depth thorough` or `exhaustive` runs sweep reviewers, filenames become `r{N}-{ts}-primary-*.md` and `r{N}-{ts}-sweep{K}-*.md`, plus a `r{N}-merged-findings.md`.
+- `--emit json` returns the structured payload described in "Reading the response". Always use `--emit json` from this skill — agents consume the JSON, not paths or human prose.
 
 The command **blocks** until the reviewer exits (default `--timeout 900`). Run it in the **foreground**. Do not background it, do not poll the chain folder, do not retry in a loop.
 
+**Prompt transport for incremental rounds.** Round 2+ prompts embed prior findings, the fixer's resolution doc, and a diff, and routinely exceed `ARG_MAX` for `--prompt-transport arg`. Pass `--prompt-transport stdin` (or `file`) for any incremental round; `arg` is safe only for short round-1 spec/plan prompts.
+
 ## Reading the response
 
-The response ends with **Overall verdict**, one of:
+The JSON output (always use `--emit json`) is the source of truth. Agents MUST consult:
+
+- `merged_verdict` — authoritative for gating slice/phase progress.
+- `verdict_valid` — if `false`, treat as `revise`.
+- `resolution_parse_status` — `ok` | `partial` | `unparseable` | `null`.
+- `reviewers[]` — per-reviewer verdicts and review text.
+- `review` — for multi-reviewer rounds, this contains the merged findings; for single-reviewer rounds, the primary review.
+
+Verdict values: `ready`, `ready with small edits`, `revise` (or `null` if unparseable).
 
 | Verdict                  | Action                                                                          |
 |--------------------------|---------------------------------------------------------------------------------|
 | `ready`                  | Proceed to the next stage.                                                      |
 | `ready with small edits` | Apply the suggested edits, proceed. Do not re-submit unless the edits are large.|
 | `revise`                 | Apply findings, then re-submit with the same `--kind` for round N+1.            |
+
+## Round mode
+
+- **Round 1** is **broad**: the reviewer reads target and context from scratch and emits findings tagged with stable IDs (`F1`, `F2`, …).
+- **Round N+** is **incremental** by default: the prompt embeds the prior round's findings (or merged findings), the fixer's `r{N-1}-resolution.md`, and a diff. The reviewer verifies whether prior findings are resolved, reusing the same IDs.
+- `--mode broad` forces round-1-style on a later round (rare; only when fixes changed broad architecture).
+- `--mode incremental` on round 1 is rejected.
+
+## Review depth
+
+`--review-depth` controls whether independent sweep reviewers run alongside the primary chain reviewer at high-risk checkpoints.
+
+- `standard` (CLI default; cheapest). One primary reviewer. Round 2+ incremental. No sweeps.
+- `thorough` (**recommended for `post-slice` and `post-phase`**). One sweep on round 1; one fresh sweep when the primary first returns `ready` / `ready with small edits`.
+- `exhaustive`. Two sweeps at each checkpoint. Use for risky phases.
+
+Sweep reviewers do not see the primary reviewer's findings on their first pass (anti-anchoring). Findings are merged into `r{N}-merged-findings.md` and a `merged_verdict` is computed: `revise` if any reviewer (or `verdict_valid: false`) says so; `ready with small edits` if any does and the rest are `ready`; `ready` only if every reviewer is `ready`.
+
+Checkpoint state (`first-round`, `final-ready`) is persisted in `chain.json` so sweeps fire once per chain.
+
+## Resolution artifact
+
+When a post-slice or post-phase round returns `merged_verdict: revise`, the fix subagent MUST write `docs/reviewer/<chain>/r{N}-resolution.md` before the next round is submitted. The script's gate refuses round N+1 without it (exit code 3) unless `--allow-missing-resolution` is passed.
+
+Required parseable shape:
+
+```markdown
+# Resolution for r{N}
+
+## F1
+Status: fixed | waived | deferred
+Evidence:
+- Commit: <sha>
+- Files: `path:line`
+- Verification: `command and result`
+
+Notes:
+Free-form prose.
+
+## F2
+Status: ...
+```
+
+- One `## F<id>` heading per addressed finding.
+- One `Status:` line per finding (case-insensitive).
+- Sweep findings use namespaced IDs like `S1.F1`; reference them with the same form in the resolution doc.
+
+Parse failures soft-fail: `resolution_parse_status: partial` or `unparseable` is reported in the JSON, but the reviewer still receives the prose verbatim in the next round's prompt.
+
+## Chain manifest
+
+Each chain folder contains a `chain.json` manifest that records every round's metadata: round number, request/response paths, head SHAs, verdicts (primary and merged), reviewers, sweep checkpoint state, and resolution attachment. The script reads it on every invocation; existing chains without a manifest are soft-migrated on first touch.
+
+**Invariant:** a review chain is single-writer. Do not run two rounds concurrently against the same chain — `chain.json` is not locked and may be corrupted.
 
 ## Context files
 
@@ -121,13 +187,16 @@ Round number is auto-incremented. Commit the entire chain folder alongside the w
 
 ## Exit codes
 
-| Code | Meaning                              | Action                                                                |
-|------|--------------------------------------|-----------------------------------------------------------------------|
-| 0    | Reviewer succeeded                   | Apply feedback.                                                       |
-| 2    | Target / context file not found      | Fix the path and re-run. Do not invent paths.                         |
-| 124  | Reviewer timed out                   | Raise `--timeout`, or split the target.                               |
-| 127  | Reviewer command not found           | Set `AGENT_REVIEWER_CMD` or run `[[project-setup]]` to wire it up.    |
-| other| Reviewer's own non-zero exit         | A response file was still written. Read it and surface the issue.     |
+| Code | Meaning | Action |
+|---|---|---|
+| 0 | Reviewer succeeded. | Apply feedback. |
+| 2 | Target / context file not found, or required `--work-id` missing. | Fix the path or pass `--work-id`. |
+| 3 | Resolution-required gate violated. | Author the resolution doc and re-run, or pass `--allow-missing-resolution`. |
+| 4 | `chain.json` schema_version newer than supported. | Upgrade `external-reviewer.py`. |
+| 5 | Ambiguous legacy-chain match. | Migrate manually. |
+| 124 | Reviewer timed out. | Raise `--timeout`, or split the target. |
+| 127 | Reviewer command not found. | Set `AGENT_REVIEWER_CMD` or run `[[project-setup]]`. |
+| other | Reviewer's own non-zero exit. | A response file was still written. Read it and surface the issue. |
 
 ## Reporting back to the user
 
