@@ -558,10 +558,11 @@ def compute_diff_section(
     diff_proc = subprocess.run(diff_args, text=True, capture_output=True)
     diff_text = diff_proc.stdout
 
-    status = subprocess.run(
-        ["git", "-C", str(root), "status", "--porcelain"],
-        text=True, capture_output=True,
-    ).stdout
+    status_args = ["git", "-C", str(root), "status", "--porcelain"]
+    if paths:
+        status_args.append("--")
+        status_args.extend(paths)
+    status = subprocess.run(status_args, text=True, capture_output=True).stdout
     dirty = bool(status.strip())
 
     parts = [f"Worktree status: {'dirty' if dirty else 'clean'}", "", "## git diff base..HEAD", ""]
@@ -807,7 +808,7 @@ def main() -> int:
         "blocking_findings_count": blocking_count,
         "base_ref": base_ref,
         "base_ref_source": base_source,
-        "diff_included": bool(diff_section) and not args.no_diff,
+        "diff_included": base_source in ("auto", "explicit") and not args.no_diff and bool(diff_section),
     }
     manifest["rounds"].append(round_entry)
     write_manifest(manifest_path, manifest)
