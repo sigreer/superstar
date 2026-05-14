@@ -3023,7 +3023,11 @@ Plus the post-review fix commits:
 - `cc07bf5` fix(external-reviewer): persist work_id in manifest; guard legacy match by chain.json absence
 - `8743c63` chore(external-reviewer): migrate misrouted Slice-2 post-slice round to S2 chain
 
-**Final test result:** `36 passed` — `python3 -m pytest skills/external-review/tests/`.
+**Documentation / closeout commits:**
+- `3aa3790` docs(external-reviewer): tick Slice 2 checkboxes; add Slice 2 closeout note
+- `1df15e3` docs(external-reviewer): r1-resolution for S2 post-slice chain
+
+**Final test result:** `36 passed` — `python3 -m pytest skills/external-review/tests/` (39 after the round-2 parser fix).
 
 **Chain-routing defect found and fixed during this review.** The original Slice-2 post-slice review was invoked with `--work-id S2` but landed in the existing Slice-1 chain folder (`docs/reviewer/external-reviewer-redesign-post-slice/`) as round 5, because `discover_legacy_chain` matched the bare legacy slug (`<target>-<kind>`) without first checking whether the candidate already contained a `chain.json`. Fix in `cc07bf5`: a candidate folder only qualifies as a legacy chain if it has no `chain.json`. Migration in `8743c63`: the misrouted artefacts were moved to `docs/reviewer/external-reviewer-redesign-S2-post-slice/` as round 1, a fresh `chain.json` was written for the S2 chain, and round 5 was dropped from the Slice-1 chain manifest. The post-slice gate for Slice 2 now lives in the correct work-id-keyed chain folder.
 
