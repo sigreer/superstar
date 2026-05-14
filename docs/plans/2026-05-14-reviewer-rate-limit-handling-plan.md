@@ -783,16 +783,55 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 ```
 
-**In `main()`**, immediately after `args = parse_args()`, add the state-file override BEFORE the pre-spawn check:
+**In `main()`**, immediately after `args = parse_args()`, add the state-file hoist and **dispatch ALL non-`review` subcommands BEFORE any access to review-only args** (`args.kind`, `args.file`, `args.context`, `args.output_dir`). The existing script (line 1080) accesses `args.kind` immediately after `parse_args()` — `show-limit`/`clear-limit` don't define those attrs; `manual-approve`/`ingest-response` don't define `context`/`output_dir`. Without early dispatch, workers get `AttributeError`.
+
+**F2 (r3 fix): The complete top-of-main() structure that Task 2.0 must produce:**
 
 ```python
+def main() -> int:
     args = parse_args()
-    # Honour --state-file override (spec §5) — must be set before any state access.
+    # --state-file is global: hoist to env so load_state()/save_state() honour it.
     if getattr(args, "state_file", None):
         os.environ["AGENT_REVIEWER_STATE_FILE"] = args.state_file
+
+    # Dispatch non-review subcommands BEFORE accessing review-only args
+    # (kind, file, context, output_dir).  show-limit/clear-limit don't define
+    # those attrs; manual-approve/ingest-response don't define context/output_dir.
+    if args.command == "manual-approve":
+        return run_manual_approve(args)
+    if args.command == "ingest-response":
+        return run_ingest_response(args)
+    if args.command == "show-limit":
+        return run_show_limit(args)
+    if args.command == "clear-limit":
+        return run_clear_limit(args)
+
+    # From here on: args.command == "review"
+    # (existing main() body resumes — args.kind, args.file, etc. are all safe to access)
+    if args.kind in ("post-slice", "post-phase") and not args.work_id:
+        ...  # existing validation unchanged
 ```
 
-Dispatch on `args.command` is already satisfied by the positional `choices` approach (`args.command == "review"`) — changing to subparsers preserves this exactly.
+**F3 (r3 fix): Eager-write the manifest before `run_one_reviewer` is first called.** On the first round of a new chain, `chain.json` doesn't exist until after reviewer execution (line ~1444). The rate-limit handlers inside `run_one_reviewer` do `read_manifest(chain_dir / "chain.json")` — on a new chain that returns `None` and the round entry is silently dropped. Fix by writing the freshly-initialised in-memory manifest to disk immediately after it is built, BEFORE `run_one_reviewer` is called:
+
+```python
+    if manifest is None:
+        manifest = {
+            "schema_version": SUPPORTED_SCHEMA_VERSION,
+            "chain": new_slug,
+            "kind": args.kind,
+            "target": rel_or_abs(target, root),
+            "work_id": args.work_id,
+            "legacy_migrated": False,
+            "rounds": [],
+            "sweep_checkpoints": {"first-round": "pending", "final-ready": "pending"},
+        }
+        # F3 (r3 fix): Eager-write so run_one_reviewer rate-limit paths can read
+        # chain.json on the first round (before the normal post-reviewer write at ~1444).
+        write_manifest(manifest_path, manifest)
+```
+
+This replaces the existing `if manifest is None: manifest = { ... }` block. The cost is one extra disk write at chain creation (negligible). Because `chain.json` is now guaranteed to exist before `run_one_reviewer` is called, all `read_manifest` calls inside that function succeed unconditionally — remove the `if _manifest is not None:` guard from Tasks 2.4 and 2.5 (see those tasks for updated snippets).
 
 **Note:** The argparse refactor for Slice 5's other subcommands (`manual-approve`, `ingest-response`, `show-limit`, `clear-limit`) is scaffolded here by having real `subparsers`. Those tasks add their `subparsers.add_parser(...)` calls when they arrive.
 
@@ -1180,31 +1219,25 @@ Find `run_one_reviewer` in `external-reviewer.py`. After the subprocess complete
                 reviewer_cmd=key, reset_at=reset_at_iso,
                 raw_stderr_tail=result.stderr or "",
             )
-            # F3 (r2 fix): Append a rate-limited round entry to chain.json BEFORE raising.
-            # This must happen here because the normal round-append (line ~1407 in main)
-            # is bypassed when we raise. The manifest/manifest_path are NOT in scope in
-            # run_one_reviewer — pass them via the exception or read/write here using
-            # chain_dir directly.
-            #
-            # Strategy: read/write chain.json from chain_dir inside run_one_reviewer.
+            # F3 (r3 fix): chain.json is guaranteed to exist (Task 2.0 eager-write).
+            # read_manifest always returns a dict here — no None guard needed.
             _manifest_path = chain_dir / "chain.json"
             _manifest = read_manifest(_manifest_path)
-            if _manifest is not None:
-                new_round = {
-                    "round": round_num,
-                    "status": "rate-limited",
-                    "returncode": None,       # subprocess ran but result isn't authoritative
-                    "verdict": None,
-                    "verdict_valid": False,
-                    "merged_verdict": None,
-                    "reset_at": reset_at_iso,
-                    "reviewer_cmd": key,
-                    "request": request_path.name,
-                    "response": artifact_path.name,
-                    "limited_at": _now_local().isoformat(timespec="seconds"),
-                }
-                _manifest["rounds"].append(new_round)
-                write_manifest(_manifest_path, _manifest)
+            new_round = {
+                "round": round_num,
+                "status": "rate-limited",
+                "returncode": None,       # subprocess ran but result isn't authoritative
+                "verdict": None,
+                "verdict_valid": False,
+                "merged_verdict": None,
+                "reset_at": reset_at_iso,
+                "reviewer_cmd": key,
+                "request": request_path.name,
+                "response": artifact_path.name,
+                "limited_at": _now_local().isoformat(timespec="seconds"),
+            }
+            _manifest["rounds"].append(new_round)
+            write_manifest(_manifest_path, _manifest)
             # Signal up to main(): use a dedicated exception type
             raise ReviewerRateLimited(
                 reviewer_cmd=key, reset_at=reset_at_iso,
@@ -1398,28 +1431,27 @@ In `run_one_reviewer`, BEFORE the subprocess is built (i.e., before `subprocess.
             reviewer_cmd=key, reset_at=active["reset_at"],
             raw_stderr_tail=active.get("raw_stderr_tail", ""),
         )
-        # F3 (r2 fix): Append a rate-limited round entry to chain.json BEFORE raising.
-        # The normal round-append in main() (line ~1443) is bypassed when we raise.
+        # F3 (r3 fix): chain.json is guaranteed to exist (Task 2.0 eager-write).
+        # read_manifest always returns a dict here — no None guard needed.
         _manifest_path = chain_dir / "chain.json"
         _manifest = read_manifest(_manifest_path)
-        if _manifest is not None:
-            new_round = {
-                "round": round_num,
-                "status": "rate-limited",
-                "returncode": None,       # subprocess never ran
-                "verdict": None,
-                "verdict_valid": False,
-                "merged_verdict": None,
-                "reset_at": active["reset_at"],
-                "reviewer_cmd": key,
-                "request": request_path.name,
-                "response": artifact_path.name,
-                "limited_at": _now_local().isoformat(timespec="seconds"),
-            }
-            _manifest["rounds"].append(new_round)
-            write_manifest(_manifest_path, _manifest)
-            # write_manifest signature: write_manifest(path: Path, data: dict)
-            # i.e., write_manifest(chain_dir / "chain.json", manifest) — NOT write_manifest(chain_dir, ...)
+        new_round = {
+            "round": round_num,
+            "status": "rate-limited",
+            "returncode": None,       # subprocess never ran
+            "verdict": None,
+            "verdict_valid": False,
+            "merged_verdict": None,
+            "reset_at": active["reset_at"],
+            "reviewer_cmd": key,
+            "request": request_path.name,
+            "response": artifact_path.name,
+            "limited_at": _now_local().isoformat(timespec="seconds"),
+        }
+        _manifest["rounds"].append(new_round)
+        write_manifest(_manifest_path, _manifest)
+        # write_manifest signature: write_manifest(path: Path, data: dict)
+        # i.e., write_manifest(chain_dir / "chain.json", manifest) — NOT write_manifest(chain_dir, ...)
         raise ReviewerRateLimited(
             reviewer_cmd=key, reset_at=active["reset_at"],
             reset_source=active.get("reset_source", "unknown"),
@@ -2054,14 +2086,7 @@ In `external-reviewer.py`'s `parse_args()`, add a sub-parser via the `subparsers
     sp_manual.add_argument("--state-file", default=None)
 ```
 
-In `main()`, add the dispatch branch:
-
-```python
-    if args.command == "manual-approve":
-        if args.state_file:
-            os.environ["AGENT_REVIEWER_STATE_FILE"] = args.state_file
-        return run_manual_approve(args)
-```
+**F2 (r3 fix): Do NOT add a dispatch branch in `main()` here.** The `main()` dispatch block for all non-`review` subcommands (including `manual-approve`) is defined ONCE in Task 2.0's top-of-main() structure. This task only adds the `subparsers.add_parser(...)` argparse entry and the `run_manual_approve` handler function.
 
 Implement `run_manual_approve`:
 
@@ -2307,14 +2332,7 @@ Argparse (add to `parse_args()` alongside the `subparsers` object from Task 2.0)
     sp_ingest.add_argument("--state-file", default=None)
 ```
 
-Dispatch:
-
-```python
-    if args.command == "ingest-response":
-        if args.state_file:
-            os.environ["AGENT_REVIEWER_STATE_FILE"] = args.state_file
-        return run_ingest_response(args)
-```
+**F2 (r3 fix): Do NOT add a dispatch branch in `main()` here.** The dispatch for `ingest-response` is already part of the top-of-main() block defined in Task 2.0. This task only adds the argparse sub-parser and the `run_ingest_response` handler.
 
 Implementation:
 
@@ -2544,18 +2562,7 @@ def run_clear_limit(args) -> int:
     return 0
 ```
 
-Dispatch in `main()`:
-
-```python
-    if args.command == "show-limit":
-        if args.state_file:
-            os.environ["AGENT_REVIEWER_STATE_FILE"] = args.state_file
-        return run_show_limit(args)
-    if args.command == "clear-limit":
-        if args.state_file:
-            os.environ["AGENT_REVIEWER_STATE_FILE"] = args.state_file
-        return run_clear_limit(args)
-```
+**F2 (r3 fix): Do NOT add dispatch branches in `main()` here.** The dispatch for `show-limit` and `clear-limit` is already part of the top-of-main() block defined in Task 2.0. This task only adds the argparse sub-parsers and the handler functions.
 
 - [ ] **Step 4: Run tests**
 
@@ -2581,7 +2588,7 @@ git commit -m "external-reviewer: show-limit + clear-limit subcommands"
 
 **Sweep dispatch — real mechanism (r2 fix):** Sweeps are NOT invoked via a separate env var. The script (lines 1353-1368) calls `run_one_reviewer(role="sweep", sweep_index=k, ...)` in a for-loop, using the same `args.reviewer_cmd` template. There is no `REVIEWER_ROLE` env var. Each sweep is a completely separate `run_one_reviewer` call that goes through the same subprocess path.
 
-**Chosen approach — Option A (two reviewer scripts):** Since all roles use the same command template, distinguish primary vs sweep invocations via separate wrapper scripts: the primary reviewer script succeeds; the sweep reviewer script emits the rate-limit error. Use `--independent-reviewers 1` to force a sweep invocation with `--sweep-policy always` (or `first-round`). Two separate scripts pointed to via the args, or a single script that behaves differently based on invocation count (writing a sentinel file).
+**Chosen approach — Option A (two reviewer scripts):** Since all roles use the same command template, distinguish primary vs sweep invocations via separate wrapper scripts: the primary reviewer script succeeds; the sweep reviewer script emits the rate-limit error. Use `--independent-reviewers 1` to force a sweep invocation with `--sweep-policy first-round` (F4 fix: `always` is not a valid choice; real choices are `first-round`, `final-ready`, `both`, `never`). A single script that behaves differently based on invocation count (writing a sentinel file) is simplest.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -2647,7 +2654,7 @@ def test_sweep_rate_limited_primary_ok_round_still_succeeds(tmp_path):
     proc = subprocess.run(
         [sys.executable, str(SCRIPTS / "external-reviewer.py"),
          "review", "--kind", "plan", "--file", "plan.md",
-         "--independent-reviewers", "1", "--sweep-policy", "always", "--emit", "json"],
+         "--independent-reviewers", "1", "--sweep-policy", "first-round", "--emit", "json"],
         cwd=repo, env=env, capture_output=True, text=True, timeout=30,
     )
     # Round succeeded (primary was ok)
@@ -2701,23 +2708,49 @@ Expected: the sweep's failure is currently recorded as `status="failed"`, not `"
             if role == "sweep":
                 # Sweep rate-limited: do NOT raise — let the round proceed on primary's verdict.
                 # Return a ReviewerResult with status="rate-limited" so the round-entry records it.
+                # F4 (r3 fix): MUST set status="rate-limited" explicitly — the dataclass default
+                # is "ok", so omitting it silently records the sweep as "ok".
                 return ReviewerResult(
-                    role=role, sweep_index=sweep_index,
-                    request_path=request_path, response_path=artifact_path,
-                    review_body="", verdict=None, verdict_valid=False,
+                    role=role,
+                    sweep_index=sweep_index,
+                    request_path=request_path,
+                    response_path=artifact_path,
+                    review_body="",
+                    verdict=None,
+                    verdict_valid=False,
                     returncode=result.returncode,
-                    # status field requires adding `status: str` to ReviewerResult dataclass
-                    # (add "rate-limited" | "ok" | "failed" to the dataclass in this task)
+                    status="rate-limited",  # CRITICAL — overrides the dataclass default "ok"
                 )
             else:
-                # Primary rate-limited: append chain.json round and raise (Task 2.4 path)
+                # Primary rate-limited: append chain.json round and raise (Task 2.4 path).
+                # F3 (r3 fix): chain.json is guaranteed by Task 2.0 eager-write; no None guard.
+                # F4 (r3 fix): Use verbatim Task 2.4 round shape; no ellipsis placeholders.
                 _manifest_path = chain_dir / "chain.json"
                 _manifest = read_manifest(_manifest_path)
-                if _manifest is not None:
-                    new_round = { ... }  # as in Task 2.4
-                    _manifest["rounds"].append(new_round)
-                    write_manifest(_manifest_path, _manifest)
-                raise ReviewerRateLimited(...)
+                new_round = {
+                    "round": round_num,
+                    "status": "rate-limited",
+                    "returncode": None,
+                    "verdict": None,
+                    "verdict_valid": False,
+                    "merged_verdict": None,
+                    "reset_at": reset_at_iso,
+                    "reviewer_cmd": key,
+                    "request": request_path.name,
+                    "response": artifact_path.name,
+                    "limited_at": _now_local().isoformat(timespec="seconds"),
+                }
+                _manifest["rounds"].append(new_round)
+                write_manifest(_manifest_path, _manifest)
+                raise ReviewerRateLimited(
+                    reviewer_cmd=key,
+                    reset_at=reset_at_iso,
+                    reset_source=f"regex:{pattern_name}" if pattern_name else "fallback",
+                    chain=chain_dir.name,
+                    round_num=round_num,
+                    request_path=str(request_path),
+                    raw_stderr_tail=result.stderr or "",
+                )
 ```
 
 **Also:** add a `status` field to the `ReviewerResult` dataclass so the round-entry builder can distinguish `"rate-limited"` from `"failed"`:
