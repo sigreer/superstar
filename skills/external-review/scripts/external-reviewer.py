@@ -1041,26 +1041,32 @@ def plan_sweeps(
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Send a document to the configured reviewer.")
-    parser.add_argument("command", choices=["review"])
-    parser.add_argument("--file", required=True, help="Target spec/plan/document to review.")
-    parser.add_argument(
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    sp_review = subparsers.add_parser(
+        "review",
+        help="Send a document to the configured reviewer.",
+        description="Send a document to the configured reviewer.",
+    )
+    sp_review.add_argument("--file", required=True, help="Target spec/plan/document to review.")
+    sp_review.add_argument(
         "--kind",
         required=True,
         choices=["spec", "plan", "design", "implementation", "post-slice", "post-phase", "other"],
         help="Review type, used in prompt and artifact name.",
     )
-    parser.add_argument(
+    sp_review.add_argument(
         "--context",
         action="append",
         default=[],
         help="Additional context file. May be supplied multiple times.",
     )
-    parser.add_argument(
+    sp_review.add_argument(
         "--reviewer-cmd",
         default=os.environ.get("AGENT_REVIEWER_CMD", "reviewer-agent"),
         help="Command or template. Supports {prompt_file}, {prompt_text}, {target_file}, {kind}, {chain_dir}, {round}, {previous_response}, {resolution_file}, {session_file}.",
     )
-    parser.add_argument(
+    sp_review.add_argument(
         "--prompt-transport",
         choices=["arg", "file", "stdin"],
         default=os.environ.get("AGENT_REVIEWER_TRANSPORT"),
@@ -1068,69 +1074,74 @@ def parse_args() -> argparse.Namespace:
              "If unset, defaults to 'arg' on round 1 / broad mode and 'stdin' on "
              "incremental rounds (round 2+) to avoid ARG_MAX overflow.",
     )
-    parser.add_argument(
+    sp_review.add_argument(
         "--output-dir",
         default="docs/reviewer",
         help="Root directory for review chain folders.",
     )
-    parser.add_argument(
+    sp_review.add_argument(
         "--work-id",
         default=None,
         help="Stable slice/phase ID (e.g. P2.S3 or P2). Required for post-slice/post-phase.",
     )
-    parser.add_argument(
+    sp_review.add_argument(
         "--allow-missing-resolution",
         action="store_true",
         help="Waive the resolution-required gate for post-slice/post-phase round 2+.",
     )
-    parser.add_argument(
+    sp_review.add_argument(
         "--mode",
         choices=["auto", "broad", "incremental"],
         default="auto",
         help="Override the round-1-vs-N prompt mode. Default 'auto'.",
     )
-    parser.add_argument("--review-depth", choices=["standard", "thorough", "exhaustive"],
+    sp_review.add_argument("--review-depth", choices=["standard", "thorough", "exhaustive"],
                         default="standard")
-    parser.add_argument("--independent-reviewers", type=int, default=None)
-    parser.add_argument("--sweep-policy",
+    sp_review.add_argument("--independent-reviewers", type=int, default=None)
+    sp_review.add_argument("--sweep-policy",
                         choices=["first-round", "final-ready", "both", "never"], default=None)
-    parser.add_argument("--timeout", type=int, default=900)
-    parser.add_argument("--max-lines", type=int, default=600)
-    parser.add_argument(
+    sp_review.add_argument("--timeout", type=int, default=900)
+    sp_review.add_argument("--max-lines", type=int, default=600)
+    sp_review.add_argument(
         "--base-ref",
         default=None,
         help="Override auto-computed diff base for this round.",
     )
-    parser.add_argument(
+    sp_review.add_argument(
         "--no-diff",
         action="store_true",
         help="Suppress diff embedding in incremental rounds.",
     )
-    parser.add_argument(
+    sp_review.add_argument(
         "--changed-files",
         nargs="+",
         default=None,
         help="Limit embedded diff to these paths (overrides auto discovery).",
     )
-    parser.add_argument(
+    sp_review.add_argument(
         "--max-diff-lines",
         type=int,
         default=2000,
         help="Cap diff size. Truncation marker is embedded if exceeded.",
     )
-    parser.add_argument(
+    sp_review.add_argument(
         "--emit",
         choices=["paths", "review", "json"],
         default="paths",
         help="What to print to stdout after the reviewer finishes.",
     )
-    parser.add_argument(
+    sp_review.add_argument(
         "--incremental-budget-chars",
         type=int, default=400_000,
         help="Target cap on assembled prompt size for incremental rounds. "
              "Trims low-priority sections first; the final size is the trimmed "
              "budget plus a small diagnostic note (`<!-- budget-applied: ... -->`, "
              "~150 bytes). Default 400000.",
+    )
+    sp_review.add_argument(
+        "--state-file",
+        default=None,
+        help="Override path to the reviewer state file (rate-limit tracking, etc.).",
     )
     return parser.parse_args()
 
@@ -1226,6 +1237,23 @@ def compute_diff_section(
 
 def main() -> int:
     args = parse_args()
+    # --state-file is global: hoist to env so load_state()/save_state() honour it.
+    if getattr(args, "state_file", None):
+        os.environ["AGENT_REVIEWER_STATE_FILE"] = args.state_file
+
+    # Dispatch non-review subcommands BEFORE accessing review-only args
+    # (kind, file, context, output_dir).  show-limit/clear-limit don't define
+    # those attrs; manual-approve/ingest-response don't define context/output_dir.
+    if args.command == "manual-approve":
+        return run_manual_approve(args)
+    if args.command == "ingest-response":
+        return run_ingest_response(args)
+    if args.command == "show-limit":
+        return run_show_limit(args)
+    if args.command == "clear-limit":
+        return run_clear_limit(args)
+
+    # From here on: args.command == "review"
     if args.kind in ("post-slice", "post-phase") and not args.work_id:
         print(
             f"ERROR: --work-id is required for --kind {args.kind}. "
@@ -1294,6 +1322,9 @@ def main() -> int:
             "rounds": [],
             "sweep_checkpoints": {"first-round": "pending", "final-ready": "pending"},
         }
+        # F3 (r3 fix): Eager-write so run_one_reviewer rate-limit paths can read
+        # chain.json on the first round (before the normal post-reviewer write).
+        write_manifest(manifest_path, manifest)
     else:
         # Existing manifest: refuse a work-id mismatch (someone trying to reuse a
         # chain folder for a different slice/phase). Stored work_id is the source
