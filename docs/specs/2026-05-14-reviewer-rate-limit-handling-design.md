@@ -308,7 +308,7 @@ Existing 142 tests must remain green.
 
 - Existing test suite green (142 → 142+11 with new tests).
 - `detect_rate_limit` correctly identifies the codex sample stderr captured in this session.
-- A faked rate-limit run produces: exit 8, JSON payload with parseable `reset_at`, state file written under `~/.config/superstar/`, rate-limited round artifact written to the chain.
+- A faked rate-limit run produces: exit 8, JSON payload with parseable `reset_at`, state file written to the configured state path (env-var or `--state-file` override in tests; the default `~/.config/superstar/` path in production), rate-limited round artifact written to the chain.
 - A subsequent run with the state file still active refuses without spawn (verified by counting subprocess calls in the test).
 - `manual-approve` writes a synthetic round whose verdict is `ready` and whose `chain.json` entry round status is `manual-approved`.
 - `ingest-response --from-paste` and `--from-link` both produce a chain-advancing response.md and a parseable verdict.

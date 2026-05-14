@@ -40,6 +40,41 @@
       "base_ref": null,
       "base_ref_source": null,
       "diff_included": false
+    },
+    {
+      "round": 2,
+      "reviewers": [
+        {
+          "role": "primary",
+          "sweep_group": null,
+          "parent_round": 2,
+          "request": "r2-2026-05-14T1908-request.md",
+          "response": "r2-2026-05-14T1908-response.md",
+          "verdict": "ready with small edits",
+          "verdict_valid": true,
+          "returncode": 0,
+          "status": "ok"
+        }
+      ],
+      "status": "ok",
+      "returncode": 0,
+      "merged_verdict": "ready with small edits",
+      "merged_findings": null,
+      "request": "r2-2026-05-14T1908-request.md",
+      "response": "r2-2026-05-14T1908-response.md",
+      "resolution": "r1-resolution.md",
+      "resolution_parse_status": "ok",
+      "resolution_waiver": false,
+      "head_sha_at_request": "dfad35a78366e9829664822beda1087eca1cc01b",
+      "head_sha_after_round": "dfad35a78366e9829664822beda1087eca1cc01b",
+      "worktree_dirty_at_request": false,
+      "verdict": "ready with small edits",
+      "verdict_valid": true,
+      "findings_count": 5,
+      "blocking_findings_count": 2,
+      "base_ref": "42c084b30e4294760c7b4d5ab2029d1e1adb65d5",
+      "base_ref_source": "auto",
+      "diff_included": true
     }
   ],
   "sweep_checkpoints": {
