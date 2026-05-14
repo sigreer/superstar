@@ -29,7 +29,17 @@ import re
 import shlex
 import subprocess
 import sys
+from dataclasses import dataclass
 from pathlib import Path
+
+# Self-register in sys.modules so @dataclass works when this script is loaded
+# via importlib.util.spec_from_file_location without prior registration
+# (Python 3.12+ dataclasses inspect sys.modules[cls.__module__]).
+if __name__ not in sys.modules:
+    import types as _types
+    _self_mod = _types.ModuleType(__name__)
+    _self_mod.__dict__.update(globals())
+    sys.modules[__name__] = _self_mod
 
 
 REVIEW_PROMPT = """You are acting as an independent senior engineering reviewer.
@@ -470,6 +480,51 @@ def resolve_mode(mode: str, *, round_num: int) -> str:
     return mode
 
 
+@dataclass
+class SweepPlan:
+    sweep_count: int
+    checkpoint: str | None  # "first-round" | "final-ready" | None
+
+
+DEPTH_DEFAULTS = {
+    "standard":   {"policy": "never",       "count_first": 0, "count_final": 0},
+    "thorough":   {"policy": "both",        "count_first": 1, "count_final": 1},
+    "exhaustive": {"policy": "both",        "count_first": 2, "count_final": 2},
+}
+
+
+def plan_sweeps(
+    *,
+    depth: str,
+    policy: str | None,
+    count: int | None,
+    round_num: int,
+    checkpoints: dict,
+    primary_verdict_pre_run: str | None,
+) -> SweepPlan:
+    cfg = DEPTH_DEFAULTS[depth]
+    effective_policy = policy or cfg["policy"]
+    if effective_policy == "never":
+        return SweepPlan(sweep_count=0, checkpoint=None)
+
+    if round_num == 1 and effective_policy in ("first-round", "both"):
+        if checkpoints.get("first-round") == "completed":
+            return SweepPlan(sweep_count=0, checkpoint=None)
+        n = count if count is not None else cfg["count_first"]
+        return SweepPlan(sweep_count=n, checkpoint="first-round")
+
+    if (
+        round_num > 1
+        and effective_policy in ("final-ready", "both")
+        and primary_verdict_pre_run in ("ready", "ready with small edits")
+        and checkpoints.get("final-ready") != "completed"
+    ):
+        n = count if count is not None else cfg["count_final"]
+        return SweepPlan(sweep_count=n, checkpoint="final-ready")
+
+    return SweepPlan(sweep_count=0, checkpoint=None)
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Send a document to the configured reviewer.")
     parser.add_argument("command", choices=["review"])
@@ -518,6 +573,11 @@ def parse_args() -> argparse.Namespace:
         default="auto",
         help="Override the round-1-vs-N prompt mode. Default 'auto'.",
     )
+    parser.add_argument("--review-depth", choices=["standard", "thorough", "exhaustive"],
+                        default="standard")
+    parser.add_argument("--independent-reviewers", type=int, default=None)
+    parser.add_argument("--sweep-policy",
+                        choices=["first-round", "final-ready", "both", "never"], default=None)
     parser.add_argument("--timeout", type=int, default=900)
     parser.add_argument("--max-lines", type=int, default=600)
     parser.add_argument(
