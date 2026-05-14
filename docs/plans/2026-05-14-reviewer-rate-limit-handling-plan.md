@@ -705,7 +705,7 @@ git commit -m "external-reviewer: reset-time parser (AM/PM, 24h, past-wrap, fall
 - Modify: `skills/external-review/scripts/external-reviewer.py`
 - Create: `skills/external-review/tests/test_argparse_review_subparser.py`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 # skills/external-review/tests/test_argparse_review_subparser.py
@@ -755,12 +755,12 @@ def test_unknown_command_exits_nonzero():
     assert proc.returncode != 0
 ```
 
-- [ ] **Step 2: Verify they fail**
+- [x] **Step 2: Verify they fail**
 
 Run: `python3 -m pytest skills/external-review/tests/test_argparse_review_subparser.py -v`
 Expected: `test_review_help_works` passes today (positional arg parser prints help), but `test_review_state_file_flag_accepted` fails (no `--state-file`). The other tests may pass. Record which fail.
 
-- [ ] **Step 3: Refactor `parse_args()` to use `add_subparsers()`**
+- [x] **Step 3: Refactor `parse_args()` to use `add_subparsers()`**
 
 In `external-reviewer.py`, replace the `parse_args()` function (lines ~893–986). Key changes:
 
@@ -835,7 +835,7 @@ This replaces the existing `if manifest is None: manifest = { ... }` block. The 
 
 **Note:** The argparse refactor for Slice 5's other subcommands (`manual-approve`, `ingest-response`, `show-limit`, `clear-limit`) is scaffolded here by having real `subparsers`. Those tasks add their `subparsers.add_parser(...)` calls when they arrive.
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 Run: `python3 -m pytest skills/external-review/tests/test_argparse_review_subparser.py -v`
 Expected: 4 passed.
@@ -843,7 +843,7 @@ Expected: 4 passed.
 Run full suite: `python3 -m pytest skills/external-review/tests/ -q`
 Expected: 161 baseline + 10 state-file + 4 detection + 5 parser + 4 argparse = 184 passed (adjust for actual slice-1 count).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add skills/external-review/scripts/external-reviewer.py \
@@ -859,7 +859,7 @@ git commit -m "external-reviewer: refactor parse_args to add_subparsers, add --s
 - Modify: `skills/external-review/scripts/external-reviewer.py`
 - Modify: `skills/external-review/tests/test_state_file.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `test_state_file.py`:
 
@@ -886,12 +886,12 @@ def test_reviewer_cmd_basename_default(monkeypatch):
     assert er.reviewer_cmd_basename() == "reviewer-agent"
 ```
 
-- [ ] **Step 2: Verify they fail**
+- [x] **Step 2: Verify they fail**
 
 Run: `python3 -m pytest skills/external-review/tests/test_state_file.py -v`
 Expected: 4 new tests fail.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `external-reviewer.py`, after the state primitives:
 
@@ -907,14 +907,14 @@ def reviewer_cmd_basename() -> str:
     return cmd.strip().split()[0] if cmd.strip() else "reviewer-agent"
 ```
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 Expected: 14 passed in `test_state_file.py`.
 
 Full suite: `python3 -m pytest skills/external-review/tests/ -q`
 Expected: ~188 passed (161 S1 + 4 T2.0 argparse + 14 state-file + 4 detection + 5 parser; adjust for actual S1 count).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add skills/external-review/scripts/external-reviewer.py \
@@ -930,7 +930,7 @@ git commit -m "external-reviewer: reviewer_cmd_basename for state keying"
 - Modify: `skills/external-review/scripts/external-reviewer.py`
 - Create: `skills/external-review/tests/test_rate_limited_artifact.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # skills/external-review/tests/test_rate_limited_artifact.py
@@ -974,12 +974,12 @@ def test_rate_limited_artifact_shape(tmp_path):
     assert "rerun after that or use the menu" in body
 ```
 
-- [ ] **Step 2: Verify it fails**
+- [x] **Step 2: Verify it fails**
 
 Run: `python3 -m pytest skills/external-review/tests/test_rate_limited_artifact.py -v`
 Expected: AttributeError.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `external-reviewer.py`, near the existing `write_review_artifact` function (which writes failed-round stubs), add:
 
@@ -1010,11 +1010,11 @@ def write_rate_limited_artifact(
     return out_path
 ```
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 Expected: 1 passed.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add skills/external-review/scripts/external-reviewer.py \
@@ -1030,7 +1030,7 @@ git commit -m "external-reviewer: rate-limited round artifact writer (≤8 KB)"
 - Modify: `skills/external-review/scripts/external-reviewer.py`
 - Create: `skills/external-review/tests/test_exit_code_8.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # skills/external-review/tests/test_exit_code_8.py
@@ -1082,11 +1082,11 @@ def test_rate_limit_payload_serialises_to_json():
     assert "rate_limited" in s
 ```
 
-- [ ] **Step 2: Verify failure**
+- [x] **Step 2: Verify failure**
 
 Run: expected AttributeError.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```python
 EXIT_CODE_RATE_LIMITED = 8
@@ -1115,11 +1115,11 @@ def make_rate_limit_payload(
     }
 ```
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 Expected: 2 passed.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add skills/external-review/scripts/external-reviewer.py \
@@ -1135,7 +1135,7 @@ git commit -m "external-reviewer: exit-8 rate-limit JSON payload helper"
 - Modify: `skills/external-review/scripts/external-reviewer.py`
 - Modify: `skills/external-review/tests/test_exit_code_8.py`
 
-- [ ] **Step 1: Write the failing test (end-to-end)**
+- [x] **Step 1: Write the failing test (end-to-end)**
 
 Append to `test_exit_code_8.py`:
 
@@ -1186,12 +1186,12 @@ def test_failed_reviewer_with_rate_limit_stderr_triggers_state_write(tmp_path, m
     assert state["limits"][key]["limited"] is True
 ```
 
-- [ ] **Step 2: Verify failure**
+- [x] **Step 2: Verify failure**
 
 Run: `python3 -m pytest skills/external-review/tests/test_exit_code_8.py -v`
 Expected: returncode is the reviewer's `1`, not `8` — script doesn't yet branch on rate-limit detection.
 
-- [ ] **Step 3: Wire detection into `run_one_reviewer`**
+- [x] **Step 3: Wire detection into `run_one_reviewer`**
 
 Find `run_one_reviewer` in `external-reviewer.py`. After the subprocess completes and before the existing failed-round artifact is written, add:
 
@@ -1288,7 +1288,7 @@ In `main()` (the `review` subcommand dispatch), wrap the call to `run_one_review
 
 **Note:** the existing failed-round path remains — it only fires when the rate-limit detection did NOT match. The `chain.json` round-append above is the ONLY append for the rate-limited case; `main()`'s normal append at line ~1443 is never reached when `ReviewerRateLimited` is raised.
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 Run: `python3 -m pytest skills/external-review/tests/test_exit_code_8.py -v`
 Expected: 3 passed.
@@ -1296,7 +1296,7 @@ Expected: 3 passed.
 Full suite: `python3 -m pytest skills/external-review/tests/ -q`
 Expected: 161 baseline + 4 (state) + 1 (artifact) + 3 (exit-8) = 169 passed.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add skills/external-review/scripts/external-reviewer.py \
@@ -1312,7 +1312,7 @@ git commit -m "external-reviewer: detect rate-limit on subprocess failure, exit 
 - Modify: `skills/external-review/scripts/external-reviewer.py`
 - Create: `skills/external-review/tests/test_subsequent_invocation_refused.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # skills/external-review/tests/test_subsequent_invocation_refused.py
@@ -1411,11 +1411,11 @@ def test_expired_limit_clears_and_proceeds(tmp_path):
     assert "fake-reviewer" not in state.get("limits", {})
 ```
 
-- [ ] **Step 2: Verify failure**
+- [x] **Step 2: Verify failure**
 
 Run: expected first test fails (spawn happens, exit code is 0 instead of 8).
 
-- [ ] **Step 3: Add pre-spawn check in `run_one_reviewer`**
+- [x] **Step 3: Add pre-spawn check in `run_one_reviewer`**
 
 In `run_one_reviewer`, BEFORE the subprocess is built (i.e., before `subprocess.run([...])`). Place AFTER the request file is written (so `request_path` is in scope) but BEFORE the subprocess call:
 
@@ -1463,7 +1463,7 @@ In `run_one_reviewer`, BEFORE the subprocess is built (i.e., before `subprocess.
 
 This first-refusal path (T2.5) appends a NEW round entry. When the coalescing logic (Slice 4, T4.1) is added, it will update this block so subsequent pre-spawn refusals coalesce onto the head rate-limited round instead of appending again. The spec §7.5 FIRST-refusal branch uses this new-round path; subsequent refusals use the update-in-place path.
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 Run: `python3 -m pytest skills/external-review/tests/test_subsequent_invocation_refused.py -v`
 Expected: 2 passed.
@@ -1472,7 +1472,7 @@ Full suite:
 `python3 -m pytest skills/external-review/tests/ -q`
 Expected: 171 passed.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add skills/external-review/scripts/external-reviewer.py \
