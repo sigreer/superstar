@@ -217,6 +217,29 @@ def save_state(state: dict) -> None:
     os.replace(tmp_path, path)
 
 
+def get_active_limit(reviewer_cmd_basename: str) -> dict | None:
+    """Return the limit entry for the given reviewer if it's still active.
+    Side effect: if the entry exists but `reset_at <= now()`, clear it from
+    the state file and return None.
+    """
+    state = load_state()
+    entry = state["limits"].get(reviewer_cmd_basename)
+    if not entry or not entry.get("limited"):
+        return None
+    try:
+        reset_at = dt.datetime.fromisoformat(entry["reset_at"])
+    except (KeyError, ValueError, TypeError):
+        # Treat malformed entries as expired, prune them.
+        state["limits"].pop(reviewer_cmd_basename, None)
+        save_state(state)
+        return None
+    if reset_at <= dt.datetime.now():
+        state["limits"].pop(reviewer_cmd_basename, None)
+        save_state(state)
+        return None
+    return entry
+
+
 _BUDGET_SECTIONS = [
     ("target_preview", r"\n## Target Preview\n", [80 * 80, 40 * 80, 0]),
     ("diff_body", r"\n## Changes since prior round\n", [50 * 1024, 12 * 1024, 0]),

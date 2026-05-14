@@ -1,3 +1,4 @@
+import datetime as dt
 import json
 import os
 from pathlib import Path
@@ -70,3 +71,30 @@ def test_save_state_atomic_via_tmp_rename(tmp_path, monkeypatch):
     # After save, no orphan .tmp file remains
     assert not (tmp_path / "state.json.tmp").exists()
     assert er.load_state()["limits"]["reviewer-agent"]["limited"] is True
+
+
+def test_get_active_limit_expires_past_reset(monkeypatch):
+    past = (dt.datetime.now() - dt.timedelta(hours=1)).isoformat(timespec="seconds")
+    er.save_state({"schema_version": 1, "limits": {"reviewer-agent": {
+        "limited": True, "reset_at": past, "limited_at": past, "reset_source": "test",
+        "raw_stderr_tail": "", "chain": "x", "round": 1
+    }}})
+    # get_active_limit clears expired entries in-place and returns None.
+    assert er.get_active_limit("reviewer-agent") is None
+    # The state file should now show limits={} for reviewer-agent (entry removed).
+    assert "reviewer-agent" not in er.load_state()["limits"]
+
+
+def test_get_active_limit_returns_live_entry():
+    future = (dt.datetime.now() + dt.timedelta(hours=1)).isoformat(timespec="seconds")
+    er.save_state({"schema_version": 1, "limits": {"reviewer-agent": {
+        "limited": True, "reset_at": future, "limited_at": "x", "reset_source": "t",
+        "raw_stderr_tail": "", "chain": "c", "round": 1
+    }}})
+    entry = er.get_active_limit("reviewer-agent")
+    assert entry is not None
+    assert entry["reset_at"] == future
+
+
+def test_get_active_limit_no_entry_returns_none():
+    assert er.get_active_limit("reviewer-agent") is None
