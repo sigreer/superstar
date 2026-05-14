@@ -500,20 +500,68 @@ def parse_verdict(text: str) -> tuple[str | None, bool]:
     return raw, True
 
 
-HEADING_FINDING_RE = re.compile(r"^##\s+F\d+\b", re.MULTILINE)
-BULLET_FINDING_RE = re.compile(r"^\s*[-*]?\s*\**F\d+\**[:\s\-]", re.MULTILINE)
-BLOCKING_MARKER_RE = re.compile(r"(?:^|\s)\(blocking\)|^severity\s*:\s*blocking", re.IGNORECASE | re.MULTILINE)
+HEADING_FINDING_RE = re.compile(r"^##\s+F(\d+)\b(.*)$", re.MULTILINE)
+PROSE_FINDING_RE = re.compile(
+    r"^F(\d+)\.\s+(Blocking|Important|Minor|Critical|Major|Nit)?\b(.*)$",
+    re.MULTILINE | re.IGNORECASE,
+)
+BULLET_FINDING_RE = re.compile(r"^\s*[-*]\s*\**F(\d+)\**[:\s\-](.*)$", re.MULTILINE)
+INLINE_BLOCKING_RE = re.compile(r"\(blocking\)", re.IGNORECASE)
+SEVERITY_BLOCKING_RE = re.compile(r"^severity\s*:\s*blocking", re.IGNORECASE | re.MULTILINE)
+CRASH_SENTINEL_RE = re.compile(
+    r"^(?:reviewer crashed|status\s*:\s*reviewer crashed)",
+    re.IGNORECASE | re.MULTILINE,
+)
+
+
+def _collect_findings(text: str) -> tuple[dict[str, bool], str]:
+    """Return ({id: blocking?}, style) for the first style that yields matches.
+
+    Style precedence: prose ('F1. Blocking: ...') > heading ('## F1') > bullet.
+    Prose wins when present because real reviewer output uses it and may also
+    incidentally contain heading/bullet shapes inside embedded previews.
+    """
+    findings: dict[str, bool] = {}
+    for m in PROSE_FINDING_RE.finditer(text):
+        fid = m.group(1)
+        severity = (m.group(2) or "").lower()
+        is_blocking = severity == "blocking"
+        # First occurrence wins; later duplicates from echoed/quoted content
+        # do not change the blocking flag.
+        if fid not in findings:
+            findings[fid] = is_blocking
+    if findings:
+        return findings, "prose"
+
+    for m in HEADING_FINDING_RE.finditer(text):
+        fid = m.group(1)
+        if fid not in findings:
+            findings[fid] = False
+    if findings:
+        return findings, "heading"
+
+    for m in BULLET_FINDING_RE.finditer(text):
+        fid = m.group(1)
+        rest = m.group(2) or ""
+        if fid not in findings:
+            findings[fid] = bool(INLINE_BLOCKING_RE.search(rest))
+    return findings, "bullet"
 
 
 def parse_findings(text: str) -> tuple[int | None, int | None]:
-    if not text or text.strip() == "" or "reviewer crashed" in text.lower():
+    if not text or text.strip() == "":
         return None, None
-    heading_count = len(HEADING_FINDING_RE.findall(text))
-    if heading_count > 0:
-        n = heading_count
-    else:
-        n = len(BULLET_FINDING_RE.findall(text))
-    blocking = len(BLOCKING_MARKER_RE.findall(text))
+    findings, style = _collect_findings(text)
+    # Crash sentinel only fires when no findings parsed AND the phrase appears
+    # at the start of a line (not buried in quoted/embedded content).
+    if not findings and CRASH_SENTINEL_RE.search(text):
+        return None, None
+    n = len(findings)
+    blocking = sum(1 for v in findings.values() if v)
+    if style == "heading":
+        # Heading style has no severity inline; fall back to severity-line
+        # markers within the body.
+        blocking = len(SEVERITY_BLOCKING_RE.findall(text))
     return n, blocking
 
 

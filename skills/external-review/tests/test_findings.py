@@ -32,3 +32,33 @@ def test_unparseable_returns_none():
     n, blocking = er.parse_findings(body)
     assert n is None
     assert blocking is None
+
+
+def test_prose_style_findings_counted():
+    body = (
+        "1. Findings\n\n"
+        "F1. Blocking: the live entrypoint is broken. See file.py:43.\n\n"
+        "F2. Blocking: the post-slice gate is not clean.\n\n"
+        "F3. Important: head_sha is captured at the wrong time.\n\n"
+        "Overall verdict: revise\n"
+    )
+    n, blocking = er.parse_findings(body)
+    assert n == 3
+    assert blocking == 2
+
+
+def test_crash_phrase_in_quoted_content_does_not_block_parse():
+    body = (
+        "1. Findings\n\n"
+        "F1. Blocking: the parser misbehaves when the body contains the\n"
+        "string `\"reviewer crashed\"` inside a fenced excerpt:\n\n"
+        "```python\n"
+        "if 'reviewer crashed' in text.lower():\n"
+        "    return None, None\n"
+        "```\n\n"
+        "F2. Important: cover this with a regression test.\n\n"
+        "Overall verdict: revise\n"
+    )
+    n, blocking = er.parse_findings(body)
+    assert n == 2
+    assert blocking == 1
