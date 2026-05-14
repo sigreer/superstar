@@ -174,6 +174,28 @@ def write_manifest(path: Path, data: dict) -> None:
     path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 
 
+def migrate_manifest_inplace(manifest: dict) -> None:
+    """Add `status` and `returncode` keys to legacy round/reviewer entries.
+
+    Legacy entries (pre-S1) lack these keys. We do not invent retroactive
+    truth from `verdict_valid`: every legacy entry becomes `status: "unknown"`,
+    `returncode: None`. Callers (preamble construction, resolution gate)
+    treat `"unknown"` as untrusted-by-default per spec §S1.6.
+    """
+    if not isinstance(manifest, dict):
+        return
+    for r in manifest.get("rounds", []) or []:
+        if "status" not in r:
+            r["status"] = "unknown"
+        if "returncode" not in r:
+            r["returncode"] = None
+        for rev in r.get("reviewers", []) or []:
+            if "status" not in rev:
+                rev["status"] = "unknown"
+            if "returncode" not in rev:
+                rev["returncode"] = None
+
+
 def repo_root() -> Path:
     result = subprocess.run(
         ["git", "rev-parse", "--show-toplevel"],
@@ -918,6 +940,8 @@ def main() -> int:
             file=sys.stderr,
         )
         return 4
+    if manifest is not None:
+        migrate_manifest_inplace(manifest)
     if manifest is None and any(chain_dir.glob("r*-*-request.md")):
         manifest = synthesize_legacy_manifest(
             chain_dir=chain_dir,
@@ -926,6 +950,7 @@ def main() -> int:
             target=rel_or_abs(target, root),
             work_id=args.work_id,
         )
+        migrate_manifest_inplace(manifest)
         write_manifest(manifest_path, manifest)
     if manifest is None:
         manifest = {
