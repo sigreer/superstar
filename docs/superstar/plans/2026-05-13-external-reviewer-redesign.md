@@ -3033,4 +3033,11 @@ Plus the post-review fix commits:
 
 **Slice 2 review round 1 (in the S2 chain):** verdict `revise` with 3 findings (2 blocking). Resolution at `docs/reviewer/external-reviewer-redesign-S2-post-slice/r1-resolution.md`.
 
+**Post-r2 fix commits:**
+- `50600d5` fix(external-reviewer): parse_findings accepts em-dash/hyphen/colon separators (+ tests + S2 chain.json round-2 re-emit)
+- `b5d6181` docs(external-reviewer): retrofit resolution docs to spec-compliant format
+- `a03ebab` docs(external-reviewer): backfill Slice 2 closeout note with doc commits (r1 chain artefacts `3aa3790` + `1df15e3`)
+- `f56c896` docs(external-reviewer): r2-resolution for S2 post-slice chain
+- `bb679ad` chore(external-reviewer): record r2-resolution.md in S2 chain manifest
+
 **Unrelated dirty files (out of Slice 2 scope, intentionally left untouched):** `CLAUDE.md`, `skills/executing-plans/SKILL.md`, `skills/finishing-a-development-branch/SKILL.md`, `skills/subagent-driven-development/SKILL.md`, `skills/tasklist-discipline/SKILL.md` (authorised by the human partner to remain across Slice 1 and Slice 2 closeouts).
