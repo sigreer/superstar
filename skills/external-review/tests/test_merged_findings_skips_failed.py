@@ -40,3 +40,22 @@ def test_all_failed_writes_no_merged_findings(tmp_path):
         chain_dir=tmp_path, round_num=1, primary=primary, sweeps=[sweep],
     )
     assert path is None
+
+
+def test_merged_verdict_ignores_failed_reviewers():
+    ok_primary = _r("primary", None, "x", 0)
+    ok_primary.verdict = "ready"
+    ok_primary.verdict_valid = True
+    failed_sweep = _r("sweep", 1, "x", 1)
+    # compute_merged_verdict should produce "ready" because the failed sweep
+    # is excluded from aggregation per spec §S1.7.
+    assert er.compute_merged_verdict([ok_primary, failed_sweep]) == "ready"
+
+
+def test_merged_verdict_revise_when_primary_failed():
+    failed_primary = _r("primary", None, "x", 1)
+    ok_sweep = _r("sweep", 1, "x", 0)
+    ok_sweep.verdict = "ready"
+    ok_sweep.verdict_valid = True
+    # Primary failed → no merged verdict (spec §S1.7 row 4/5).
+    assert er.compute_merged_verdict([failed_primary, ok_sweep]) is None
