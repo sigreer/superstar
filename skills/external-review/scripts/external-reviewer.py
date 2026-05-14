@@ -1008,6 +1008,9 @@ def compute_diff_section(
     paths: list[str] | None,
     max_lines: int,
 ) -> str:
+    UNTRACKED_FILE_LIMIT = 10
+    UNTRACKED_FILE_LINE_LIMIT = 200
+
     if base_ref is None:
         return "Changes since prior round: not available for this round (no base ref).\n"
 
@@ -1025,7 +1028,10 @@ def compute_diff_section(
     status = subprocess.run(status_args, text=True, capture_output=True).stdout
     dirty = bool(status.strip())
 
-    parts = [f"Worktree status: {'dirty' if dirty else 'clean'}", "", "## git diff base..HEAD", ""]
+    parts = [
+        f"Worktree status: {'dirty' if dirty else 'clean'}", "",
+        "## git diff base..HEAD", "",
+    ]
     parts.append(_cap_lines(diff_text, max_lines))
 
     if dirty:
@@ -1038,16 +1044,24 @@ def compute_diff_section(
     untracked = [line[3:] for line in status.splitlines() if line.startswith("?? ")]
     if untracked:
         parts += ["", "## Untracked files", ""]
-        for rel in untracked:
+        for i, rel in enumerate(untracked):
+            if i >= UNTRACKED_FILE_LIMIT:
+                parts.append(
+                    f"\n[… {len(untracked) - UNTRACKED_FILE_LIMIT} more untracked files "
+                    f"elided (cap={UNTRACKED_FILE_LIMIT}) …]\n"
+                )
+                break
             abs_path = root / rel
             try:
                 content = abs_path.read_text(encoding="utf-8")
-                preview = _cap_lines(content, max_lines)
+                per_file_cap = min(max_lines, UNTRACKED_FILE_LINE_LIMIT)
+                preview = _cap_lines(content, per_file_cap)
                 parts += [f"### {rel}", "", "```", preview, "```", ""]
             except (UnicodeDecodeError, OSError):
                 parts += [f"- {rel} (omitted: binary or unreadable)"]
 
-    return "\n".join(parts) + "\n"
+    full = "\n".join(parts) + "\n"
+    return cap_with_elision(full, max_bytes=max(max_lines * 80, 64 * 1024))
 
 
 def main() -> int:
