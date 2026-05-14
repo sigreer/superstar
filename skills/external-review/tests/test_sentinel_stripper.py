@@ -58,3 +58,18 @@ def test_strip_handles_multiple_blocks():
     assert "block1" not in out
     assert "block2" not in out
     assert "head" in out and "middle" in out and "tail" in out
+
+
+def test_make_prompt_wraps_body_in_sentinels(tmp_path, monkeypatch):
+    root = tmp_path
+    target = root / "plan.md"
+    target.write_text("# plan\nbody\n")
+    monkeypatch.chdir(root)
+    out = er.make_prompt(
+        root=root, target=target, kind="plan",
+        context=[], max_lines=10, mode="broad", incremental_preamble=None,
+    )
+    assert out.startswith(er.PROMPT_SENTINEL_START)
+    assert out.rstrip().endswith(er.PROMPT_SENTINEL_END)
+    # Round-trip: stripping should remove the entire prompt.
+    assert er.strip_prompt_echo(out).strip() == ""

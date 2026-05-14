@@ -388,7 +388,7 @@ def make_prompt(
         body += "\n## Context Previews\n\n"
         for ctx in context:
             body += numbered_preview(ctx, root, max_lines=max(80, max_lines // 3))
-    return body
+    return f"{PROMPT_SENTINEL_START}\n{body}\n{PROMPT_SENTINEL_END}"
 
 
 def expand_command_template(
