@@ -450,5 +450,56 @@ def parse_findings(text: str) -> tuple[int | None, int | None]:
     return n, blocking
 
 
+LEGACY_ROUND_FILE_RE = re.compile(r"^r(\d+)-([0-9T\-]+)-(request|response)\.md$")
+
+
+def synthesize_legacy_manifest(
+    *, chain_dir: Path, chain: str, kind: str, target: str, work_id: str | None
+) -> dict:
+    rounds_map: dict[int, dict] = {}
+    for path in sorted(chain_dir.iterdir()):
+        m = LEGACY_ROUND_FILE_RE.match(path.name)
+        if not m:
+            continue
+        round_num = int(m.group(1))
+        role = m.group(3)
+        entry = rounds_map.setdefault(
+            round_num,
+            {
+                "round": round_num,
+                "request": None,
+                "response": None,
+                "resolution": None,
+                "verdict": None,
+                "verdict_valid": False,
+                "findings_count": None,
+                "blocking_findings_count": None,
+                "head_sha_at_request": None,
+                "head_sha_after_round": None,
+                "worktree_dirty_at_request": None,
+                "legacy": True,
+            },
+        )
+        entry[role] = path.name
+        if role == "response":
+            body = path.read_text(encoding="utf-8", errors="replace")
+            v, valid = parse_verdict(body)
+            entry["verdict"], entry["verdict_valid"] = v, valid
+            n, blocking = parse_findings(body)
+            entry["findings_count"], entry["blocking_findings_count"] = n, blocking
+
+    return {
+        "schema_version": SUPPORTED_SCHEMA_VERSION,
+        "chain": chain,
+        "kind": kind,
+        "target": target,
+        "work_id": work_id,
+        "legacy_migrated": True,
+        "migrated_at": dt.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "rounds": [rounds_map[k] for k in sorted(rounds_map)],
+        "sweep_checkpoints": {"first-round": "pending", "final-ready": "pending"},
+    }
+
+
 if __name__ == "__main__":
     raise SystemExit(main())
