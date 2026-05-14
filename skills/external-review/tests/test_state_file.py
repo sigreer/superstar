@@ -98,3 +98,25 @@ def test_get_active_limit_returns_live_entry():
 
 def test_get_active_limit_no_entry_returns_none():
     assert er.get_active_limit("reviewer-agent") is None
+
+
+def test_reviewer_cmd_basename_simple(monkeypatch):
+    monkeypatch.setenv("AGENT_REVIEWER_CMD", "reviewer-agent")
+    assert er.reviewer_cmd_basename() == "reviewer-agent"
+
+
+def test_reviewer_cmd_basename_template(monkeypatch):
+    monkeypatch.setenv("AGENT_REVIEWER_CMD", "bash -c 'reviewer-agent {prompt_file}'")
+    assert er.reviewer_cmd_basename() == "bash"
+
+
+def test_reviewer_cmd_basename_state_key_override(monkeypatch):
+    monkeypatch.setenv("AGENT_REVIEWER_CMD", "bash -c 'foo'")
+    monkeypatch.setenv("AGENT_REVIEWER_STATE_KEY", "codex")
+    assert er.reviewer_cmd_basename() == "codex"
+
+
+def test_reviewer_cmd_basename_default(monkeypatch):
+    monkeypatch.delenv("AGENT_REVIEWER_CMD", raising=False)
+    monkeypatch.delenv("AGENT_REVIEWER_STATE_KEY", raising=False)
+    assert er.reviewer_cmd_basename() == "reviewer-agent"

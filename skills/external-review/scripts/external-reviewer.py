@@ -240,6 +240,17 @@ def get_active_limit(reviewer_cmd_basename: str) -> dict | None:
     return entry
 
 
+def reviewer_cmd_basename() -> str:
+    """Return the state-key for the configured reviewer command. Honours
+    AGENT_REVIEWER_STATE_KEY override; else uses the first whitespace token of
+    AGENT_REVIEWER_CMD; else the default 'reviewer-agent'."""
+    override = os.environ.get("AGENT_REVIEWER_STATE_KEY")
+    if override:
+        return override.strip()
+    cmd = os.environ.get("AGENT_REVIEWER_CMD", "reviewer-agent")
+    return cmd.strip().split()[0] if cmd.strip() else "reviewer-agent"
+
+
 RATE_LIMIT_BUILTIN_PATTERNS = [
     ("codex_usage_limit",
      re.compile(r"You've hit your usage limit.*?try again at (\d{1,2}:\d{2}\s*(?:AM|PM)?)", re.IGNORECASE | re.DOTALL)),
