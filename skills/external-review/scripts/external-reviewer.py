@@ -605,14 +605,19 @@ def build_incremental_preamble(
         )
 
     # Walk backward to the last round whose process status is "ok".
-    # Skip rounds with status "failed" (process error, body is stderr-echo)
-    # or "unknown" (legacy entries, untrusted by default).
+    # Skip rounds with status in BACKWARD_SKIP_STATUSES — "failed" (process error,
+    # body is stderr-echo), "unknown" (legacy entries, untrusted by default),
+    # or "rate-limited" (no reviewer output produced; not a real round).
+    BACKWARD_SKIP_STATUSES = {"failed", "unknown", "rate-limited"}
     skipped_rounds: list[int] = []
     trusted = None
     for r in reversed(prior_rounds):
         if r.get("status") == "ok":
             trusted = r
             break
+        if r.get("status") in BACKWARD_SKIP_STATUSES:
+            skipped_rounds.append(r["round"])
+            continue
         skipped_rounds.append(r["round"])
     skipped_rounds.reverse()
 
@@ -643,12 +648,13 @@ def build_incremental_preamble(
         skip_hi = skipped_rounds[-1]
         if skip_lo == skip_hi:
             skip_note = (
-                f"\nNote: round {skip_lo} was a process failure or pre-S1 entry; skipped.\n"
+                f"\nNote: round {skip_lo} was a process failure, rate-limited, "
+                f"or pre-S1 entry; skipped.\n"
             )
         else:
             skip_note = (
-                f"\nNote: rounds {skip_lo}..{skip_hi} were process failures or "
-                f"pre-S1 entries; skipped.\n"
+                f"\nNote: rounds {skip_lo}..{skip_hi} were process failures, "
+                f"rate-limited, or pre-S1 entries; skipped.\n"
             )
         prior_response_text = skip_note + prior_response_text
 

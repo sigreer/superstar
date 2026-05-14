@@ -51,3 +51,30 @@ def test_resolution_gate_bypasses_on_rate_limited_prior(tmp_path):
         cwd=repo, env=env, capture_output=True, text=True, timeout=15,
     )
     assert proc.returncode == 0, proc.stderr
+
+
+def test_preamble_walks_back_past_rate_limited(tmp_path):
+    """build_incremental_preamble should skip rate-limited rounds when finding
+    the last trusted round, just like it does for failed/unknown."""
+    chain_dir = tmp_path / "chain"; chain_dir.mkdir()
+    (chain_dir / "r1-merged-findings.md").write_text("trusted r1 findings F1: ...\n")
+    manifest = {
+        "schema_version": 1, "chain": "demo", "kind": "post-slice", "target": "x",
+        "work_id": None, "legacy_migrated": False,
+        "rounds": [
+            {"round": 1, "status": "ok", "verdict": "revise", "verdict_valid": True,
+             "merged_verdict": "revise", "findings_count": 1, "blocking_findings_count": 1,
+             "response": "r1-response.md", "merged_findings": "r1-merged-findings.md"},
+            {"round": 2, "status": "rate-limited", "verdict": None, "verdict_valid": False,
+             "merged_verdict": None, "returncode": None},
+        ],
+        "sweep_checkpoints": {"first-round": "done", "final-ready": "pending"},
+    }
+    out = er.build_incremental_preamble(
+        manifest=manifest, chain_dir=chain_dir, round_num=3,
+        resolution_waiver=True, legacy_first_round=False, diff_section="",
+    )
+    # Trusted round is r1 — its merged findings are embedded.
+    assert "trusted r1 findings" in out
+    # Annotation about skipped rounds mentions rate-limited
+    assert "rounds 2..2 were" in out or "rate-limited" in out.lower()
