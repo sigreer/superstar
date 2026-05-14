@@ -1167,22 +1167,24 @@ def write_merged_findings(
 ) -> Path | None:
     """Concatenate successful reviewer bodies into a merged-findings artifact.
 
-    Reviewers with non-zero returncode are excluded entirely — their bodies
-    are stderr tails / failure stubs and would poison downstream parsing.
-    If every reviewer in the round failed, return None and write no file.
+    Reviewers whose status is not "ok" (failed, rate-limited, etc.) are
+    excluded entirely — their bodies are stderr tails / failure stubs / empty
+    placeholders and would poison downstream parsing. If every reviewer in
+    the round is non-ok, return None and write no file.
     """
-    ok_reviewers = [r for r in [primary, *sweeps] if r.returncode == 0]
+    ok_reviewers = [r for r in [primary, *sweeps] if _rv_status(r) == "ok"]
     if not ok_reviewers:
         return None
     parts = [f"# Merged findings for r{round_num}\n"]
-    primary_ok = next((r for r in ok_reviewers if r.role == "primary"), None)
+    primary_ok = next((r for r in ok_reviewers if _rv_attr(r, "role") == "primary"), None)
     if primary_ok is not None:
-        parts += ["## Primary\n", primary_ok.review_body, ""]
+        parts += ["## Primary\n", _rv_attr(primary_ok, "review_body", ""), ""]
     for s in ok_reviewers:
-        if s.role == "sweep":
+        if _rv_attr(s, "role") == "sweep":
+            sweep_index = _rv_attr(s, "sweep_index")
             parts += [
-                f"## Sweep {s.sweep_index}\n",
-                _renamespace_finding_ids(s.review_body, s.sweep_index),
+                f"## Sweep {sweep_index}\n",
+                _renamespace_finding_ids(_rv_attr(s, "review_body", ""), sweep_index),
                 "",
             ]
     path = chain_dir / f"r{round_num}-merged-findings.md"

@@ -96,3 +96,43 @@ def test_merged_verdict_all_rate_limited_returns_none():
         {"role": "sweep",   "verdict": None, "verdict_valid": False, "returncode": None, "status": "rate-limited"},
     ]
     assert er.compute_merged_verdict(reviewers) is None
+
+
+def test_write_merged_findings_returns_none_when_all_rate_limited(tmp_path):
+    """If every reviewer in the round is rate-limited, no merged file is written."""
+    primary = {
+        "role": "primary", "sweep_index": None, "status": "rate-limited",
+        "returncode": None, "review_body": "", "verdict": None, "verdict_valid": False,
+    }
+    sweeps = [{
+        "role": "sweep", "sweep_index": 1, "status": "rate-limited",
+        "returncode": None, "review_body": "", "verdict": None, "verdict_valid": False,
+    }]
+    out_path = er.write_merged_findings(
+        chain_dir=tmp_path, round_num=1, primary=primary, sweeps=sweeps,
+    )
+    assert out_path is None
+    assert not (tmp_path / "r1-merged-findings.md").exists()
+
+
+def test_write_merged_findings_excludes_rate_limited_sweep(tmp_path):
+    """When primary is ok and a sweep is rate-limited, sweep is excluded from merge."""
+    primary = {
+        "role": "primary", "sweep_index": None, "status": "ok",
+        "returncode": 0, "review_body": "primary review body\n",
+        "verdict": "ready", "verdict_valid": True,
+    }
+    sweeps = [{
+        "role": "sweep", "sweep_index": 1, "status": "rate-limited",
+        "returncode": None, "review_body": "should-not-appear",
+        "verdict": None, "verdict_valid": False,
+    }]
+    out_path = er.write_merged_findings(
+        chain_dir=tmp_path, round_num=1, primary=primary, sweeps=sweeps,
+    )
+    assert out_path is not None
+    assert out_path.exists()
+    body = out_path.read_text()
+    assert "primary review body" in body
+    assert "should-not-appear" not in body
+    assert "Sweep 1" not in body
