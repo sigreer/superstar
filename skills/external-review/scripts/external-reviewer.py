@@ -1029,7 +1029,18 @@ def main() -> int:
         prior_round = prior["round"]
         prior_verdict = prior.get("merged_verdict") or prior.get("verdict")
         prior_valid = prior.get("verdict_valid", True)
-        needs_resolution = (prior_verdict == "revise") or (prior_valid is False)
+        prior_status = prior.get("status")  # "ok" | "failed" | "unknown" | None
+        prior_was_process_failure = prior_status == "failed"
+        needs_resolution = (
+            (prior_verdict == "revise") or (prior_valid is False)
+        ) and not prior_was_process_failure
+        if prior_was_process_failure:
+            print(
+                f"Note: prior round r{prior_round} was a process failure "
+                f"(returncode={prior.get('returncode')}); "
+                "resolution gate bypassed.",
+                file=sys.stderr,
+            )
         if needs_resolution:
             resolution_path = chain_dir / f"r{prior_round}-resolution.md"
             if not resolution_path.exists():
