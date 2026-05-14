@@ -815,7 +815,15 @@ def main() -> int:
     chain_dir = existing if existing else (reviewer_root / new_slug)
     chain_dir.mkdir(parents=True, exist_ok=True)
     manifest_path = chain_dir / "chain.json"
-    manifest = read_manifest(manifest_path)
+    try:
+        manifest = read_manifest(manifest_path)
+    except ManifestSchemaTooNew as exc:
+        print(
+            f"ERROR: {rel_or_abs(manifest_path, root)}: {exc} "
+            f"(supported schema_version: {SUPPORTED_SCHEMA_VERSION})",
+            file=sys.stderr,
+        )
+        return 4
     if manifest is None and any(chain_dir.glob("r*-*-request.md")):
         manifest = synthesize_legacy_manifest(
             chain_dir=chain_dir,

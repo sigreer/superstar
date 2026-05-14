@@ -80,6 +80,7 @@ Verdict values: `ready`, `ready with small edits`, `revise` (or `null` if unpars
 
 - **Round 1** is **broad**: the reviewer reads target and context from scratch and emits findings tagged with stable IDs (`F1`, `F2`, …).
 - **Round N+** is **incremental** by default: the prompt embeds the prior round's findings (or merged findings), the fixer's `r{N-1}-resolution.md`, and a diff. The reviewer verifies whether prior findings are resolved, reusing the same IDs.
+- `--mode` defaults to `auto` (broad on round 1, incremental on round N+).
 - `--mode broad` forces round-1-style on a later round (rare; only when fixes changed broad architecture).
 - `--mode incremental` on round 1 is rejected.
 
@@ -194,6 +195,7 @@ Round number is auto-incremented. Commit the entire chain folder alongside the w
 | 3 | Resolution-required gate violated. | Author the resolution doc and re-run, or pass `--allow-missing-resolution`. |
 | 4 | `chain.json` schema_version newer than supported. | Upgrade `external-reviewer.py`. |
 | 5 | Ambiguous legacy-chain match. | Migrate manually. |
+| 6 | `--work-id` mismatch with chain's stored work_id. | Use the correct `--work-id` or a fresh chain folder. |
 | 124 | Reviewer timed out. | Raise `--timeout`, or split the target. |
 | 127 | Reviewer command not found. | Set `AGENT_REVIEWER_CMD` or run `[[project-setup]]`. |
 | other | Reviewer's own non-zero exit. | A response file was still written. Read it and surface the issue. |
