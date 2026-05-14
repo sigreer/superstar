@@ -439,8 +439,9 @@ def make_prompt(
     )
     if mode == "incremental" and incremental_preamble:
         body = incremental_preamble + "\n---\n\n" + body
+    effective_target_max = min(max_lines, 150) if mode == "incremental" else max_lines
     body += "\n\n## Target Preview\n\n"
-    body += numbered_preview(target, root, max_lines=max_lines)
+    body += numbered_preview(target, root, max_lines=effective_target_max)
     if context and mode != "incremental":
         body += "\n## Context Previews\n\n"
         for ctx in context:
