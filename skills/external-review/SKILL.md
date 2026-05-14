@@ -39,6 +39,8 @@ The reviewer command is read from `AGENT_REVIEWER_CMD` (env) or `--reviewer-cmd`
 
 If `reviewer-agent` is missing, `[[project-setup]]` will offer to install/configure it. If the command emits no `Overall verdict`, treat the round as `revise` and ask the reviewer to honour the response contract on the next round.
 
+- `--incremental-budget-chars` (default `400000`) sets a target cap on assembled prompt size for incremental rounds. The prompt is pruned in priority order — target preview, diff body, resolution body, prior findings body — toward the target; sentinel markers, chain summary, and finding-ID lists are never trimmed. The final size may exceed the target by ~150 bytes due to the appended `<!-- budget-applied: ... -->` diagnostic note.
+
 ## How a round runs
 
 ```bash
@@ -48,6 +50,7 @@ python3 scripts/external-reviewer.py review \
     --work-id <P2.S3 | P2>   # required for post-slice / post-phase
     [--context <path>]... \
     [--review-depth thorough] \
+    [--incremental-budget-chars 400000] \
     --emit json
 ```
 
@@ -59,6 +62,30 @@ python3 scripts/external-reviewer.py review \
 The command **blocks** until the reviewer exits (default `--timeout 900`). Run it in the **foreground**. Do not background it, do not poll the chain folder, do not retry in a loop.
 
 **Prompt transport for incremental rounds.** Round 2+ prompts embed prior findings, the fixer's resolution doc, and a diff, and routinely exceed `ARG_MAX` for `--prompt-transport arg`. The script auto-selects `stdin` for any incremental round (round 2+ in `auto` mode, or explicit `--mode incremental`) and `arg` for round-1/broad prompts when `--prompt-transport` is not set explicitly. Override with `--prompt-transport {arg|file|stdin}` or `AGENT_REVIEWER_TRANSPORT` only when the reviewer backend cannot accept the default.
+
+## Failure handling
+
+When the configured reviewer command exits non-zero, the round is recorded as a **process failure**, not as a verdict:
+
+- The persisted response file is a short stub (≤ 8 KB total): header, status, and the sentinel-stripped tail of the reviewer's stderr capped at 4 KB. No stdout is written.
+- `chain.json` records `status: "failed"`, `returncode: <rc>`, `verdict: null`, `verdict_valid: false` on both the round entry and the per-reviewer entry.
+- For `post-slice` / `post-phase`, the next round's resolution-required gate is **bypassed silently** with a stderr notice. A process failure has no findings to resolve; the next round is a re-attempt of the same review, not a fix-and-re-review.
+- The next round's preamble walks backward past `status: "failed"` (and legacy `status: "unknown"`) rounds and embeds the merged-findings from the most recent `status: "ok"` round, prefixed with a `Note: rounds N..K were process failures...; skipped.` line. If no successful prior round exists, only the chain summary table is embedded.
+
+**Sentinel-wrapped prompts.** Every prompt is wrapped in `<!-- superstar-prompt:start -->` / `<!-- superstar-prompt:end -->` markers. If a reviewer echoes the prompt on stdout or stderr, the markers let the script strip the echo before persisting to disk, eliminating the recursive prompt-bloat class.
+
+### Multi-reviewer truth (sweeps)
+
+When `--review-depth thorough` or `exhaustive` runs sweeps alongside the primary:
+
+| Primary | Sweeps | Top-level `status` | `verdict_valid` | `merged_verdict` | Process exit |
+|---|---|---|---|---|---|
+| ok | all ok | `ok` | per merged | computed | `0` |
+| ok | some failed | `ok` | per merged (ok reviewers only) | computed from ok | `0` |
+| ok | all failed | `ok` | per primary | primary's verdict | `0` |
+| failed | any/all | `failed` | `false` | `null` | primary's returncode |
+
+Failed sweeps are excluded from merged-findings and do not flip the top-level status.
 
 ## Reading the response
 
@@ -187,6 +214,8 @@ docs/reviewer/
 ```
 
 Round number is auto-incremented. Commit the entire chain folder alongside the work; `git log -- docs/reviewer/<chain>/` then surfaces the full audit trail.
+
+*No new exit codes are introduced by failure handling — a failed reviewer exits with the reviewer's own non-zero code (typically `1`), exactly as it did before. The resolution-required gate (exit `3`) is bypassed on process failures.*
 
 ## Exit codes
 
