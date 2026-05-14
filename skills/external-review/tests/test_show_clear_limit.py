@@ -75,3 +75,22 @@ def test_clear_limit_idempotent_on_missing(tmp_path):
     env = os.environ.copy(); env["AGENT_REVIEWER_STATE_FILE"] = str(tmp_path / "absent.json")
     proc = _run(["clear-limit", "--reviewer-cmd", "codex"], env)
     assert proc.returncode == 0
+
+
+def test_show_limit_prunes_expired(tmp_path):
+    """S1.F3: show-limit must not display expired entries; reading should
+    prune them so subsequent state is clean."""
+    state_file = tmp_path / "rs.json"
+    past = (dt.datetime.now() - dt.timedelta(hours=1)).isoformat(timespec="seconds")
+    state_file.write_text(json.dumps({"schema_version": 1, "limits": {
+        "expired-reviewer": {
+            "limited": True, "limited_at": "x", "reset_at": past,
+            "reset_source": "test", "raw_stderr_tail": "", "chain": "c", "round": 1,
+        }
+    }}))
+    env = os.environ.copy(); env["AGENT_REVIEWER_STATE_FILE"] = str(state_file)
+    proc = _run(["show-limit"], env)
+    assert proc.returncode == 0, proc.stderr
+    assert "no active limits" in proc.stdout.lower()
+    # Confirm the expired entry was pruned from the file.
+    assert "expired-reviewer" not in json.loads(state_file.read_text())["limits"]

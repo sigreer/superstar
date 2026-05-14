@@ -38,6 +38,18 @@ def test_unmatched_stderr_returns_falsey():
     assert name is None
 
 
+def test_claude_pattern_extracts_reset_time(monkeypatch):
+    """F2: the claude_cli_rate_limit pattern must capture the reset clock,
+    not the (rate limit|rate-limited) alternation. Group 1 should be the
+    time text, parseable by _parse_reset_time."""
+    monkeypatch.setattr(er, "_now_local", lambda: dt.datetime(2026, 5, 14, 17, 0, 0))
+    stderr = "Error: rate limit exceeded. Reset at 18:30"
+    matched, reset_at, name = er.detect_rate_limit(stderr)
+    assert matched is True
+    assert name == "claude_cli_rate_limit"
+    assert reset_at == dt.datetime(2026, 5, 14, 18, 30, 0)
+
+
 def test_user_pattern_via_env(monkeypatch):
     monkeypatch.setenv(
         "AGENT_REVIEWER_RATE_LIMIT_PATTERNS",

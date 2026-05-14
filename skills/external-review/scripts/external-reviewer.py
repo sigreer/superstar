@@ -182,8 +182,81 @@ def state_file_path() -> Path:
     return DEFAULT_STATE_FILE
 
 
+def _state_lock_path() -> Path:
+    """Companion lock-file path for the state file. Using a separate companion
+    avoids any chicken-and-egg issue when the state file itself is absent."""
+    p = state_file_path()
+    return p.with_suffix(p.suffix + ".lock")
+
+
+def _ensure_state_parent_dir() -> None:
+    path = state_file_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        path.parent.chmod(0o700)
+    except OSError:
+        pass  # best-effort; some filesystems disallow chmod
+
+
+class _StateLock:
+    """Context manager acquiring fcntl.LOCK_EX on the state-file lock companion.
+    Both readers and writers acquire this lock so writes serialize across
+    processes (spec line 79)."""
+
+    def __init__(self) -> None:
+        self._fd: int | None = None
+
+    def __enter__(self) -> "_StateLock":
+        _ensure_state_parent_dir()
+        lock_path = _state_lock_path()
+        # O_RDWR | O_CREAT, mode 0o600 — owner-only lock companion.
+        self._fd = os.open(str(lock_path), os.O_RDWR | os.O_CREAT, 0o600)
+        fcntl.flock(self._fd, fcntl.LOCK_EX)
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        if self._fd is not None:
+            try:
+                fcntl.flock(self._fd, fcntl.LOCK_UN)
+            finally:
+                os.close(self._fd)
+                self._fd = None
+
+
 def load_state() -> dict:
-    """Read the reviewer state file. Fails open: missing/corrupt → empty state."""
+    """Read the reviewer state file. Fails open: missing/corrupt → empty state.
+    Acquires fcntl.flock(LOCK_EX) on the lock companion so reads see a
+    consistent snapshot relative to in-flight writers."""
+    path = state_file_path()
+    with _StateLock():
+        if not path.exists():
+            return {"schema_version": 1, "limits": {}}
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            if not isinstance(data, dict) or data.get("schema_version") != 1 or not isinstance(data.get("limits"), dict):
+                raise ValueError("schema mismatch")
+            return data
+        except (json.JSONDecodeError, ValueError, OSError) as e:
+            print(f"WARNING: reviewer-state.json at {path} unreadable ({e}); treating as empty", file=sys.stderr)
+            return {"schema_version": 1, "limits": {}}
+
+
+def save_state(state: dict) -> None:
+    """Atomically write the reviewer state file. Uses flock on a lock companion
+    + tmp-then-rename. Creates parent dir with mode 0o700 on first write."""
+    path = state_file_path()
+    tmp_path = path.with_suffix(path.suffix + ".tmp")
+    payload = json.dumps(state, indent=2, sort_keys=True)
+    with _StateLock():
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            f.write(payload)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp_path, path)
+
+
+def _load_state_locked() -> dict:
+    """Internal: read state assuming the caller already holds _StateLock."""
     path = state_file_path()
     if not path.exists():
         return {"schema_version": 1, "limits": {}}
@@ -197,24 +270,31 @@ def load_state() -> dict:
         return {"schema_version": 1, "limits": {}}
 
 
-def save_state(state: dict) -> None:
-    """Atomically write the reviewer state file. Uses flock + tmp-then-rename.
-    Creates parent dir with mode 0o700 on first write."""
+def _save_state_locked(state: dict) -> None:
+    """Internal: write state assuming the caller already holds _StateLock."""
     path = state_file_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        path.parent.chmod(0o700)
-    except OSError:
-        pass  # best-effort; some filesystems disallow chmod
     tmp_path = path.with_suffix(path.suffix + ".tmp")
     payload = json.dumps(state, indent=2, sort_keys=True)
     with open(tmp_path, "w", encoding="utf-8") as f:
-        fcntl.flock(f.fileno(), fcntl.LOCK_EX)
         f.write(payload)
         f.flush()
         os.fsync(f.fileno())
-        fcntl.flock(f.fileno(), fcntl.LOCK_UN)
     os.replace(tmp_path, path)
+
+
+def update_state(mutator) -> dict:
+    """Atomic read-modify-write under the state lock. `mutator(state)` may
+    mutate the dict in place or return a new dict. Returns the final state.
+    This is the recommended path for any caller that does a read followed by
+    a dependent write, since plain load_state + save_state pairs are not
+    atomic across processes."""
+    with _StateLock():
+        state = _load_state_locked()
+        result = mutator(state)
+        if result is not None and isinstance(result, dict):
+            state = result
+        _save_state_locked(state)
+        return state
 
 
 def get_active_limit(reviewer_cmd_basename: str) -> dict | None:
@@ -1567,6 +1647,12 @@ def run_ingest_response(args) -> int:
 
 
 def run_show_limit(args) -> int:
+    # Prune expired entries first so we never display stale data (S1.F3).
+    # get_active_limit has the side-effect of removing expired/malformed
+    # entries from the state file.
+    state = load_state()
+    for key in list(state["limits"].keys()):
+        get_active_limit(key)
     state = load_state()
     if not state["limits"]:
         print("(no active limits)")
@@ -1679,6 +1765,13 @@ def main() -> int:
     # --state-file is global: hoist to env so load_state()/save_state() honour it.
     if getattr(args, "state_file", None):
         os.environ["AGENT_REVIEWER_STATE_FILE"] = args.state_file
+    # --reviewer-cmd is review-only: hoist so reviewer_cmd_basename() picks it
+    # up as the single source of truth for the state key (S1.F2). Only do this
+    # when the value differs from the existing env (i.e. user actually passed
+    # --reviewer-cmd on the CLI vs. argparse just echoing the env default).
+    cli_reviewer_cmd = getattr(args, "reviewer_cmd", None)
+    if cli_reviewer_cmd and cli_reviewer_cmd != os.environ.get("AGENT_REVIEWER_CMD"):
+        os.environ["AGENT_REVIEWER_CMD"] = cli_reviewer_cmd
 
     # Dispatch non-review subcommands BEFORE accessing review-only args
     # (kind, file, context, output_dir).  show-limit/clear-limit don't define
