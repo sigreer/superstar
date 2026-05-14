@@ -112,6 +112,43 @@ and tailor findings to the supplied target and context.""",
 }
 
 
+PROMPT_SENTINEL_START = "<!-- superstar-prompt:start -->"
+PROMPT_SENTINEL_END = "<!-- superstar-prompt:end -->"
+
+
+def strip_prompt_echo(text: str) -> str:
+    """Remove any superstar-prompt-sentinel-delimited region from `text`.
+
+    Handles three cases beyond the simple full-block case:
+    - End marker present but no start marker → delete from start of stream
+      through (and including) the end marker. Models a tail-truncated echo
+      where the beginning was capped off but the end marker survived.
+    - Start marker present but no end marker → delete from the start marker
+      to end of stream. Models a head-truncated echo.
+    - Multiple full blocks → all removed.
+    """
+    if not text:
+        return text
+    out = text
+    # Repeatedly strip full blocks first (greedy non-overlapping).
+    while True:
+        s = out.find(PROMPT_SENTINEL_START)
+        e = out.find(PROMPT_SENTINEL_END)
+        if s != -1 and e != -1 and e > s:
+            out = out[:s] + out[e + len(PROMPT_SENTINEL_END):]
+            continue
+        break
+    # Truncated-end case: end marker without a preceding start marker.
+    e = out.find(PROMPT_SENTINEL_END)
+    if e != -1 and out.find(PROMPT_SENTINEL_START) == -1:
+        out = out[e + len(PROMPT_SENTINEL_END):]
+    # Truncated-start case: start marker without a following end marker.
+    s = out.find(PROMPT_SENTINEL_START)
+    if s != -1 and out.find(PROMPT_SENTINEL_END) == -1:
+        out = out[:s]
+    return out
+
+
 SUPPORTED_SCHEMA_VERSION = 1
 
 
@@ -640,8 +677,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--prompt-transport",
         choices=["arg", "file", "stdin"],
-        default=os.environ.get("AGENT_REVIEWER_TRANSPORT", "arg"),
-        help="How to pass the prompt when reviewer-cmd has no placeholders.",
+        default=os.environ.get("AGENT_REVIEWER_TRANSPORT"),
+        help="How to pass the prompt when reviewer-cmd has no placeholders. "
+             "If unset, defaults to 'arg' on round 1 / broad mode and 'stdin' on "
+             "incremental rounds (round 2+) to avoid ARG_MAX overflow.",
     )
     parser.add_argument(
         "--output-dir",
@@ -907,6 +946,8 @@ def main() -> int:
     )
 
     mode = resolve_mode(args.mode, round_num=round_num)
+    if args.prompt_transport is None:
+        args.prompt_transport = "stdin" if mode == "incremental" else "arg"
     diff_section = ""
     base_ref: str | None = None
     base_source: str | None = None
