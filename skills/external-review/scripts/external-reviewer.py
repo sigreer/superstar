@@ -1170,9 +1170,8 @@ def run_one_reviewer(
         matched, reset_at, pattern_name = detect_rate_limit(result.stderr or "")
         if matched:
             reset_at_iso = (reset_at or _fallback_reset_time()).isoformat(timespec="seconds")
-            state = load_state()
             key = reviewer_cmd_basename()
-            state["limits"][key] = {
+            entry = {
                 "limited": True,
                 "limited_at": _now_local().isoformat(timespec="seconds"),
                 "reset_at": reset_at_iso,
@@ -1181,7 +1180,11 @@ def run_one_reviewer(
                 "chain": chain_dir.name,
                 "round": round_num,
             }
-            save_state(state)
+
+            def _record_limit(state, _entry=entry, _key=key):
+                state["limits"][_key] = _entry
+
+            update_state(_record_limit)
             artifact_path = write_rate_limited_artifact(
                 chain_dir=chain_dir, round_num=round_num, timestamp=timestamp,
                 reviewer_cmd=key, reset_at=reset_at_iso,
