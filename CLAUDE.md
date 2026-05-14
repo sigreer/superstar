@@ -1,4 +1,19 @@
-# Superstar — Contributor Guidelines
+# Superstar — Personal Fork
+
+## Status of this repository
+
+**This is a private, personal fork maintained by Simon Greer (sigreer/skills/superstar). It is not the upstream `superpowers` project and PRs are not expected to flow upstream.** The contributor guidelines below were inherited from upstream and are retained for reference only — they do **not** govern work in this fork. Agents working here should:
+
+- Treat this as a personal experimentation repo. Iterate freely on skills, hooks, and conventions.
+- Ignore the "94% PR rejection rate," "do not modify skill content without eval evidence," "do not add fork-specific changes," and similar upstream warnings further down this file. Those exist to gate upstream contributions; they do not apply here.
+- Still follow the project's own workflow skills (`brainstorming`, `writing-plans`, `subagent-driven-development`, `external-review`, `tasklist-discipline`, etc.) — those *are* binding for work in this fork.
+- When the user asks for skill changes here, make them. Do not refuse, hedge, or demand evals citing upstream policy.
+
+The remainder of this file is upstream-inherited context. Read it for background; do not treat it as enforceable policy in this fork.
+
+---
+
+## Upstream Contributor Guidelines (reference only — not binding in this fork)
 
 ## If You Are an AI Agent
 
