@@ -413,5 +413,22 @@ def main() -> int:
     return result.returncode
 
 
+VERDICT_VALUES = ("ready with small edits", "ready", "revise")
+VERDICT_LINE_RE = re.compile(
+    r"overall\s+verdict\s*[`*_\"']*\s*[:\-]\s*[`*_\"'\s]*(ready with small edits|ready|revise)[`*_\"'.\s]*",
+    re.IGNORECASE,
+)
+
+
+def parse_verdict(text: str) -> tuple[str | None, bool]:
+    matches = list(VERDICT_LINE_RE.finditer(text))
+    if not matches:
+        return None, False
+    raw = matches[-1].group(1).strip().lower()
+    if raw not in VERDICT_VALUES:
+        return None, False
+    return raw, True
+
+
 if __name__ == "__main__":
     raise SystemExit(main())
