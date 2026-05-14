@@ -1,0 +1,849 @@
+<!-- superstar-prompt:start -->
+You are acting as an independent senior engineering reviewer.
+
+Review stance:
+- Lead with findings, ordered by severity.
+- Focus on correctness, consistency, implementation risk, missing acceptance
+  gates, vague handoffs, ungrounded assumptions, unverified claims, and drift
+  from the codebase.
+- Give exact file/line references when possible.
+- If the document is sound, say that clearly and list residual risks.
+- Keep the review actionable. Avoid broad rewrites unless the current structure
+  creates concrete risk.
+
+Repository root:
+/home/simon/Dev/sigreer/skills/superstar
+
+Target kind:
+post-slice
+
+Review mode:
+Post-slice review. Treat this as a completion gate for one
+slice of work. Compare the completed changes and stated evidence against the
+slice acceptance criteria. Prioritize: incomplete tasks, uncommitted or
+untracked artifacts, missing tests, failing or skipped verification, broken
+cross-site behavior, and claims not supported by the repo state.
+
+Target document:
+docs/plans/2026-05-14-external-reviewer-context-optimisation-plan.md
+
+Additional context files:
+- docs/specs/2026-05-14-external-reviewer-context-optimisation-spec.md
+
+Review output contract:
+1. Findings
+   - Tag each finding with a stable ID: `F1`, `F2`, `F3`, …. IDs must remain
+     stable if this review is iterated in subsequent rounds.
+   - Mark severity inline: `Severity: blocking | important | minor | nit`.
+2. Open questions / assumptions
+3. Suggested document edits
+4. Verification gaps / commands that should be run, if any
+5. Overall verdict: one of "ready", "ready with small edits", or "revise"
+
+Read the files from disk. Do not rely only on the snippets in this prompt.
+
+
+## Target Preview
+
+### docs/plans/2026-05-14-external-reviewer-context-optimisation-plan.md
+
+    1	# external-reviewer context optimisation Implementation Plan
+    2	
+    3	> **For agentic workers:** REQUIRED SUB-SKILL: Use superstar:subagent-driven-development (recommended) or superstar:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+    4	
+    5	**Goal:** Eliminate the recursive prompt-echo loop in external-reviewer chains and bound incremental-round prompt size, while preserving the JSON output contract and exit codes.
+    6	
+    7	**Architecture:** Three slices: (S1) make failure truthful — failed reviewer turns can never produce a fake verdict, prompt echoes never reach disk, preambles walk past failed rounds; (S2) put incremental-mode prompts on a diet — drop context previews, trim target preview, cap prior-text reads, add a single budget knob with deterministic preservation priority; (S3) update `skills/external-review/SKILL.md` with the new behaviour. All changes target a single file (`skills/external-review/scripts/external-reviewer.py`) and its test suite (`skills/external-review/tests/`).
+    8	
+    9	**Tech Stack:** Python 3 standard library only (no new deps). Test framework: pytest. Module loaded via importlib because the script has a hyphen in its filename.
+   10	
+   11	**Source spec:** `docs/specs/2026-05-14-external-reviewer-context-optimisation-spec.md` (status: `ready`).
+   12	
+   13	**Spec → Plan mapping for the test items.** The spec's S3 lists 15 tests plus a docs item; this plan pairs each test with its implementation under TDD discipline. The mapping is:
+   14	
+   15	| Spec S3 item | Plan task |
+   16	|---|---|
+   17	| 1. failed-process verdict suppression | Task 1.5 |
+   18	| 2. failed sweep can't poison merged findings | Task 1.6 |
+   19	| 3. sentinel-stripping happy path | Task 1.1 |
+   20	| 4. sentinel-stripping truncated echo | Task 1.1 |
+   21	| 5. success-stderr dropped or capped | Task 1.3 |
+   22	| 6. failed-stderr cap after sentinel-stripping | Task 1.4 |
+   23	| 7. preamble walks back past failed rounds | Task 1.10 |
+   24	| 8. preamble treats `status: "unknown"` as untrusted | Task 1.10 |
+   25	| 9. process-failed prior round bypasses resolution gate | Task 1.11 |
+   26	| 10. incremental drops context previews | Task 2.1 |
+   27	| 11. target preview trimmed on incremental | Task 2.2 |
+   28	| 12. prior-text caps applied | Task 2.3 |
+   29	| 13. budget cap preserves priority order | Task 2.4 |
+   30	| 14. r3-request bounded after simulated failed r2 | Task 1.12 |
+   31	| 15. chain.json soft-migration | Task 1.9 |
+   32	| 16. SKILL.md docs update | Task 3.1 |
+   33	
+   34	---
+   35	
+   36	## Files at a glance
+   37	
+   38	- **Modified:** `skills/external-review/scripts/external-reviewer.py` — all code changes live here.
+   39	- **Modified:** `skills/external-review/SKILL.md` — docs update in S3.
+   40	- **Created (tests):** `skills/external-review/tests/test_sentinel_stripper.py`, `test_response_artifact.py`, `test_failed_round_truth.py`, `test_merged_findings_skips_failed.py`, `test_returncode_status_persisted.py`, `test_preamble_skips_failed.py`, `test_resolution_gate_bypass.py`, `test_failed_r2_bounded_r3.py`, `test_chain_soft_migration.py`, `test_incremental_drops_context.py`, `test_target_preview_trim.py`, `test_prior_text_caps.py`, `test_incremental_budget.py`, `test_diff_caps.py`.
+   41	- **Untouched:** every other file in the repo.
+   42	
+   43	## Test-file boilerplate
+   44	
+   45	Every new test file in this plan starts with the same import block as the existing tests in `skills/external-review/tests/`:
+   46	
+   47	```python
+   48	from pathlib import Path
+   49	import sys
+   50	import importlib.util
+   51	
+   52	SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
+   53	sys.path.insert(0, str(SCRIPTS))
+   54	spec = importlib.util.spec_from_file_location("external_reviewer", SCRIPTS / "external-reviewer.py")
+   55	er = importlib.util.module_from_spec(spec)
+   56	spec.loader.exec_module(er)
+   57	```
+   58	
+   59	Reference: `skills/external-review/tests/test_manifest.py:1-13`. Re-paste this block at the top of every new test file in the steps below — do not abbreviate it.
+   60	
+   61	## Conventions used throughout the plan
+   62	
+   63	- All file paths are relative to the repo root `/home/simon/Dev/sigreer/skills/superstar/`.
+   64	- All `python3 -m pytest` invocations should be run from the repo root.
+   65	- Each task ends in a commit. Commit messages follow `<scope>: <change>`; `<scope>` is `external-reviewer`.
+   66	- Line-number anchors (e.g. `external-reviewer.py:451`) reflect the script *before* this plan's edits. As the plan proceeds, line numbers will drift; the surrounding context strings in each step's `Edit` blocks are what makes the edit unambiguous, not the anchors.
+   67	
+   68	---
+   69	
+   70	## Slice 1 — Failure-truth + echo containment
+   71	
+   72	This is the keystone slice. Without it, any size optimisation only delays the corruption. Do not begin Slice 2 until every task in Slice 1 is committed and the test suite is green.
+   73	
+   74	### Task 1.1: Sentinel stripper
+   75	
+   76	**Files:**
+   77	- Modify: `skills/external-review/scripts/external-reviewer.py` (add module-level constants near the top, add helper near `parse_verdict`)
+   78	- Create: `skills/external-review/tests/test_sentinel_stripper.py`
+   79	
+   80	- [x] **Step 1: Write the failing tests**
+   81	
+   82	Create `skills/external-review/tests/test_sentinel_stripper.py`:
+   83	
+   84	```python
+   85	from pathlib import Path
+   86	import sys
+   87	import importlib.util
+   88	
+   89	SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
+   90	sys.path.insert(0, str(SCRIPTS))
+   91	spec = importlib.util.spec_from_file_location("external_reviewer", SCRIPTS / "external-reviewer.py")
+   92	er = importlib.util.module_from_spec(spec)
+   93	spec.loader.exec_module(er)
+   94	
+   95	
+   96	def test_strip_removes_full_marker_block():
+   97	    text = (
+   98	        "preamble\n"
+   99	        f"{er.PROMPT_SENTINEL_START}\nechoed prompt body\n{er.PROMPT_SENTINEL_END}\n"
+  100	        "actual review\n"
+  101	    )
+  102	    out = er.strip_prompt_echo(text)
+  103	    assert "echoed prompt body" not in out
+  104	    assert er.PROMPT_SENTINEL_START not in out
+  105	    assert er.PROMPT_SENTINEL_END not in out
+  106	    assert "preamble" in out
+  107	    assert "actual review" in out
+  108	
+  109	
+  110	def test_strip_end_only_deletes_from_start_of_stream():
+  111	    text = f"truncated echo tail here\n{er.PROMPT_SENTINEL_END}\nactual review\n"
+  112	    out = er.strip_prompt_echo(text)
+  113	    assert "truncated echo tail here" not in out
+  114	    assert er.PROMPT_SENTINEL_END not in out
+  115	    assert out.strip().startswith("actual review")
+  116	
+  117	
+  118	def test_strip_start_only_deletes_to_end_of_stream():
+  119	    text = f"preamble\n{er.PROMPT_SENTINEL_START}\nprompt body leaks to end\n"
+  120	    out = er.strip_prompt_echo(text)
+  121	    assert "prompt body leaks to end" not in out
+  122	    assert er.PROMPT_SENTINEL_START not in out
+  123	    assert out.strip() == "preamble"
+  124	
+  125	
+  126	def test_strip_no_markers_passes_text_through():
+  127	    text = "a clean review with no echo at all"
+  128	    assert er.strip_prompt_echo(text) == text
+  129	
+  130	
+  131	def test_strip_handles_empty_string():
+  132	    assert er.strip_prompt_echo("") == ""
+  133	
+  134	
+  135	def test_strip_handles_multiple_blocks():
+  136	    text = (
+  137	        f"head\n{er.PROMPT_SENTINEL_START}\nblock1\n{er.PROMPT_SENTINEL_END}\n"
+  138	        f"middle\n{er.PROMPT_SENTINEL_START}\nblock2\n{er.PROMPT_SENTINEL_END}\n"
+  139	        "tail"
+  140	    )
+  141	    out = er.strip_prompt_echo(text)
+  142	    assert "block1" not in out
+  143	    assert "block2" not in out
+  144	    assert "head" in out and "middle" in out and "tail" in out
+  145	```
+  146	
+  147	- [x] **Step 2: Run tests to verify they fail**
+  148	
+  149	Run: `python3 -m pytest skills/external-review/tests/test_sentinel_stripper.py -v`
+  150	Expected: all six tests fail with `AttributeError: module 'external_reviewer' has no attribute 'PROMPT_SENTINEL_START'`.
+  151	
+  152	- [x] **Step 3: Add constants and helper to the script**
+  153	
+  154	In `skills/external-review/scripts/external-reviewer.py`, immediately before the line `SUPPORTED_SCHEMA_VERSION = 1`, insert:
+  155	
+  156	```python
+  157	PROMPT_SENTINEL_START = "<!-- superstar-prompt:start -->"
+  158	PROMPT_SENTINEL_END = "<!-- superstar-prompt:end -->"
+  159	
+  160	
+  161	def strip_prompt_echo(text: str) -> str:
+  162	    """Remove any superstar-prompt-sentinel-delimited region from `text`.
+  163	
+  164	    Handles three cases beyond the simple full-block case:
+  165	    - End marker present but no start marker → delete from start of stream
+  166	      through (and including) the end marker. Models a tail-truncated echo
+  167	      where the beginning was capped off but the end marker survived.
+  168	    - Start marker present but no end marker → delete from the start marker
+  169	      to end of stream. Models a head-truncated echo.
+  170	    - Multiple full blocks → all removed.
+  171	    """
+  172	    if not text:
+  173	        return text
+  174	    out = text
+  175	    # Repeatedly strip full blocks first (greedy non-overlapping).
+  176	    while True:
+  177	        s = out.find(PROMPT_SENTINEL_START)
+  178	        e = out.find(PROMPT_SENTINEL_END)
+  179	        if s != -1 and e != -1 and e > s:
+  180	            out = out[:s] + out[e + len(PROMPT_SENTINEL_END):]
+  181	            continue
+  182	        break
+  183	    # Truncated-end case: end marker without a preceding start marker.
+  184	    e = out.find(PROMPT_SENTINEL_END)
+  185	    if e != -1 and out.find(PROMPT_SENTINEL_START) == -1:
+  186	        out = out[e + len(PROMPT_SENTINEL_END):]
+  187	    # Truncated-start case: start marker without a following end marker.
+  188	    s = out.find(PROMPT_SENTINEL_START)
+  189	    if s != -1 and out.find(PROMPT_SENTINEL_END) == -1:
+  190	        out = out[:s]
+  191	    return out
+  192	```
+  193	
+  194	- [x] **Step 4: Run tests to verify they pass**
+  195	
+  196	Run: `python3 -m pytest skills/external-review/tests/test_sentinel_stripper.py -v`
+  197	Expected: all six tests pass.
+  198	
+  199	- [x] **Step 5: Commit**
+  200	
+  201	```bash
+  202	git add skills/external-review/scripts/external-reviewer.py \
+  203	        skills/external-review/tests/test_sentinel_stripper.py
+  204	git commit -m "external-reviewer: add prompt-echo sentinel stripper"
+  205	```
+  206	
+  207	### Task 1.2: Wire sentinel markers into make_prompt
+  208	
+  209	**Files:**
+  210	- Modify: `skills/external-review/scripts/external-reviewer.py` (`make_prompt`, around lines 328-354)
+  211	
+  212	- [x] **Step 1: Write the failing test**
+  213	
+  214	Append to `skills/external-review/tests/test_sentinel_stripper.py`:
+  215	
+  216	```python
+  217	def test_make_prompt_wraps_body_in_sentinels(tmp_path, monkeypatch):
+  218	    root = tmp_path
+  219	    target = root / "plan.md"
+  220	    target.write_text("# plan\nbody\n")
+  221	    monkeypatch.chdir(root)
+  222	    out = er.make_prompt(
+  223	        root=root, target=target, kind="plan",
+  224	        context=[], max_lines=10, mode="broad", incremental_preamble=None,
+  225	    )
+  226	    assert out.startswith(er.PROMPT_SENTINEL_START)
+  227	    assert out.rstrip().endswith(er.PROMPT_SENTINEL_END)
+  228	    # Round-trip: stripping should remove the entire prompt.
+  229	    assert er.strip_prompt_echo(out).strip() == ""
+  230	```
+  231	
+  232	- [x] **Step 2: Run test to verify it fails**
+  233	
+  234	Run: `python3 -m pytest skills/external-review/tests/test_sentinel_stripper.py::test_make_prompt_wraps_body_in_sentinels -v`
+  235	Expected: AssertionError — the prompt does not start with the sentinel.
+  236	
+  237	- [x] **Step 3: Wrap the prompt body**
+  238	
+  239	In `skills/external-review/scripts/external-reviewer.py`, edit `make_prompt`. Find:
+  240	
+  241	```python
+  242	    if mode == "incremental" and incremental_preamble:
+  243	        body = incremental_preamble + "\n---\n\n" + body
+  244	    body += "\n\n## Target Preview\n\n"
+  245	    body += numbered_preview(target, root, max_lines=max_lines)
+  246	    if context:
+  247	        body += "\n## Context Previews\n\n"
+  248	        for ctx in context:
+  249	            body += numbered_preview(ctx, root, max_lines=max(80, max_lines // 3))
+  250	    return body
+  251	```
+  252	
+  253	Replace with:
+  254	
+  255	```python
+  256	    if mode == "incremental" and incremental_preamble:
+  257	        body = incremental_preamble + "\n---\n\n" + body
+  258	    body += "\n\n## Target Preview\n\n"
+  259	    body += numbered_preview(target, root, max_lines=max_lines)
+  260	    if context:
+  261	        body += "\n## Context Previews\n\n"
+  262	        for ctx in context:
+  263	            body += numbered_preview(ctx, root, max_lines=max(80, max_lines // 3))
+  264	    return f"{PROMPT_SENTINEL_START}\n{body}\n{PROMPT_SENTINEL_END}"
+  265	```
+  266	
+  267	- [x] **Step 4: Run the full test suite**
+  268	
+  269	Run: `python3 -m pytest skills/external-review/tests/ -v`
+  270	Expected: the new test passes. Other tests may break if they inspect the raw prompt body — fix any breakages by stripping the markers in the assertion (using `er.strip_prompt_echo`) before comparing. Common likely failure: `test_incremental_prompt.py` and `test_prompt_contract.py`.
+  271	
+  272	If a pre-existing test breaks because it asserts the prompt starts with something other than the sentinel, change that assertion to: `assert er.strip_prompt_echo(out).startswith(...)`. Do not weaken the assertion in any other way.
+  273	
+  274	- [x] **Step 5: Commit**
+  275	
+  276	```bash
+  277	git add skills/external-review/scripts/external-reviewer.py \
+  278	        skills/external-review/tests/test_sentinel_stripper.py \
+  279	        skills/external-review/tests/test_incremental_prompt.py \
+  280	        skills/external-review/tests/test_prompt_contract.py
+  281	git commit -m "external-reviewer: wrap make_prompt body in echo-strip sentinels"
+  282	```
+  283	
+  284	(Only stage test files that you actually had to change in Step 4. Do not stage files you did not touch.)
+  285	
+  286	### Task 1.3: write_review_artifact — success path drops/caps stderr
+  287	
+  288	**Files:**
+  289	- Modify: `skills/external-review/scripts/external-reviewer.py` (`write_review_artifact`, around lines 440-473)
+  290	- Create: `skills/external-review/tests/test_response_artifact.py`
+  291	
+  292	- [x] **Step 1: Write the failing test**
+  293	
+  294	Create `skills/external-review/tests/test_response_artifact.py`:
+  295	
+  296	```python
+  297	from pathlib import Path
+  298	import subprocess
+  299	import sys
+  300	import importlib.util
+  301	
+  302	SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
+  303	sys.path.insert(0, str(SCRIPTS))
+  304	spec = importlib.util.spec_from_file_location("external_reviewer", SCRIPTS / "external-reviewer.py")
+  305	er = importlib.util.module_from_spec(spec)
+  306	spec.loader.exec_module(er)
+  307	
+  308	
+  309	def _fake_result(returncode: int, stdout: str, stderr: str):
+  310	    return subprocess.CompletedProcess(
+  311	        args=["fake"], returncode=returncode, stdout=stdout, stderr=stderr,
+  312	    )
+  313	
+  314	
+  315	def test_success_stderr_with_full_prompt_echo_does_not_persist_prompt(tmp_path):
+  316	    """Success path: stderr containing the entire echoed prompt must not be written."""
+  317	    prompt_text = f"{er.PROMPT_SENTINEL_START}\n" + ("X" * 50_000) + f"\n{er.PROMPT_SENTINEL_END}"
+  318	    result = _fake_result(
+  319	        returncode=0,
+  320	        stdout="# Review\nactual review body\nOverall verdict: ready",
+  321	        stderr=f"banner line\n{prompt_text}\nmore banner",
+  322	    )
+  323	    response_path = tmp_path / "r1-response.md"
+  324	    prompt_path = tmp_path / "r1-request.md"
+  325	    prompt_path.write_text("ignored")
+  326	    target = tmp_path / "plan.md"
+  327	    target.write_text("ignored")
+  328	    er.write_review_artifact(
+  329	        root=tmp_path, target=target, kind="plan",
+  330	        command_template="fake", prompt_file=prompt_path,
+  331	        response_file=response_path, round_num=1, result=result,
+  332	    )
+  333	    body = response_path.read_text()
+  334	    assert er.PROMPT_SENTINEL_START not in body
+  335	    assert er.PROMPT_SENTINEL_END not in body
+  336	    assert "X" * 1000 not in body  # the 50 KB of echoed payload must not appear
+  337	    assert "actual review body" in body
+  338	    assert response_path.stat().st_size < 8 * 1024  # under 8 KB
+  339	
+  340	
+  341	def test_success_with_short_clean_stderr_keeps_tail_capped(tmp_path):
+  342	    """Success path: short stderr (no echo) may be retained but capped to 2 KB."""
+  343	    result = _fake_result(
+  344	        returncode=0,
+  345	        stdout="# Review\nbody\nOverall verdict: ready",
+  346	        stderr="harmless banner\nsession info\n",
+  347	    )
+  348	    response_path = tmp_path / "r1-response.md"
+  349	    prompt_path = tmp_path / "r1-request.md"
+  350	    prompt_path.write_text("ignored")
+  351	    target = tmp_path / "plan.md"
+  352	    target.write_text("ignored")
+  353	    er.write_review_artifact(
+  354	        root=tmp_path, target=target, kind="plan",
+  355	        command_template="fake", prompt_file=prompt_path,
+  356	        response_file=response_path, round_num=1, result=result,
+  357	    )
+  358	    body = response_path.read_text()
+  359	    assert "body" in body
+  360	    # The stderr-tail section, if present, must not exceed 2 KB
+  361	    if "## Reviewer stderr (tail)" in body:
+  362	        tail = body.split("## Reviewer stderr (tail)", 1)[1]
+  363	        assert len(tail) <= 2 * 1024 + 200  # 200 bytes of fenced-block scaffolding
+  364	```
+  365	
+  366	- [x] **Step 2: Run tests to verify they fail**
+  367	
+  368	Run: `python3 -m pytest skills/external-review/tests/test_response_artifact.py -v`
+  369	Expected: `test_success_stderr_with_full_prompt_echo_does_not_persist_prompt` fails (the full stderr currently leaks); the short-clean test may pass or fail depending on current behaviour.
+  370	
+  371	- [x] **Step 3: Implement the success path**
+  372	
+  373	In `skills/external-review/scripts/external-reviewer.py`, replace the body of `write_review_artifact` (currently lines ~440-473):
+  374	
+  375	```python
+  376	def write_review_artifact(
+  377	    *,
+  378	    root: Path,
+  379	    target: Path,
+  380	    kind: str,
+  381	    command_template: str,
+  382	    prompt_file: Path,
+  383	    response_file: Path,
+  384	    round_num: int,
+  385	    result: subprocess.CompletedProcess[str],
+  386	) -> Path:
+  387	    # Sentinel-strip both streams in full BEFORE any size cap or tail operation.
+  388	    stdout = strip_prompt_echo(result.stdout or "").strip()
+  389	    stderr = strip_prompt_echo(result.stderr or "").strip()
+  390	    ok = result.returncode == 0
+  391	    status = "ok" if ok else f"failed ({result.returncode})"
+  392	
+  393	    content = [
+  394	        f"# Review — {target.name} ({kind}, round {round_num})",
+  395	        "",
+  396	        f"- Target: `{rel_or_abs(target, root)}`",
+  397	        f"- Request: `{rel_or_abs(prompt_file, root)}`",
+  398	        f"- Reviewer command: `{command_template}`",
+  399	        f"- Status: `{status}`",
+  400	        "",
+  401	        "---",
+  402	        "",
+  403	    ]
+  404	
+  405	    if ok:
+  406	        content.append(stdout or "_Reviewer produced no stdout._")
+  407	        content.append("")
+  408	        if stderr:
+  409	            # Capped tail of sanitised stderr — diagnostic only.
+  410	            tail = stderr[-2048:]
+  411	            content.extend([
+  412	                "---", "", "## Reviewer stderr (tail)", "",
+  413	                "```text", tail, "```", "",
+  414	            ])
+  415	    else:
+  416	        # Failed: no stdout body, only a short sanitised stderr tail.
+  417	        tail = stderr[-4096:] if stderr else ""
+  418	        content.extend([
+  419	            "_Reviewer process failed; no stdout persisted._",
+  420	            "",
+  421	            "---", "", "## Reviewer stderr (tail, sanitised)", "",
+  422	            "```text", tail or "(no stderr captured)", "```", "",
+  423	        ])
+  424	
+  425	    response_file.write_text("\n".join(content), encoding="utf-8")
+  426	    return response_file
+  427	```
+  428	
+  429	- [x] **Step 4: Run tests to verify success path passes**
+  430	
+  431	Run: `python3 -m pytest skills/external-review/tests/test_response_artifact.py -v`
+  432	Expected: both tests pass. Run the full suite once: `python3 -m pytest skills/external-review/tests/`. Other tests may break if they parse the response body assuming the old format. Fix any breakages by updating the assertion to look for the new headings (`## Reviewer stderr (tail)`).
+  433	
+  434	- [x] **Step 5: Commit**
+  435	
+  436	```bash
+  437	git add skills/external-review/scripts/external-reviewer.py \
+  438	        skills/external-review/tests/test_response_artifact.py
+  439	git commit -m "external-reviewer: drop/cap success stderr after sentinel strip"
+  440	```
+  441	
+  442	### Task 1.4: write_review_artifact — failed path, 4 KB stderr tail, no stdout
+  443	
+  444	The previous task already wrote the failed-path branch. This task adds the dedicated test for "strip-before-cap ordering with 20 KB echo input."
+  445	
+  446	**Files:**
+  447	- Modify: `skills/external-review/tests/test_response_artifact.py`
+  448	
+  449	- [x] **Step 1: Append the failing test**
+  450	
+  451	Append to `skills/external-review/tests/test_response_artifact.py`:
+  452	
+  453	```python
+  454	def test_failed_stderr_strip_then_cap_ordering(tmp_path):
+  455	    """Failed path: 20 KB of echoed prompt on stderr → tail ≤ 4 KB and no markers leak."""
+  456	    huge_echo = f"{er.PROMPT_SENTINEL_START}\n" + ("Y" * 20_000) + f"\n{er.PROMPT_SENTINEL_END}"
+  457	    result = _fake_result(
+  458	        returncode=1, stdout="",
+  459	        stderr=f"banner\n{huge_echo}\nerror: turn/start failed",
+  460	    )
+  461	    response_path = tmp_path / "r2-response.md"
+  462	    prompt_path = tmp_path / "r2-request.md"
+  463	    prompt_path.write_text("ignored")
+  464	    target = tmp_path / "plan.md"
+  465	    target.write_text("ignored")
+  466	    er.write_review_artifact(
+  467	        root=tmp_path, target=target, kind="plan",
+  468	        command_template="fake", prompt_file=prompt_path,
+  469	        response_file=response_path, round_num=2, result=result,
+  470	    )
+  471	    body = response_path.read_text()
+  472	    assert er.PROMPT_SENTINEL_START not in body
+  473	    assert er.PROMPT_SENTINEL_END not in body
+  474	    assert "Y" * 1000 not in body
+  475	    # Total file ≤ 8 KB (headers + ≤ 4 KB tail)
+  476	    assert response_path.stat().st_size < 8 * 1024
+  477	    # Diagnostic substring survives the tail cap
+  478	    assert "error: turn/start failed" in body
+  479	
+  480	
+  481	def test_failed_path_does_not_persist_stdout(tmp_path):
+  482	    """Failed path: stdout (if any) is dropped — only stderr tail is persisted."""
+  483	    result = _fake_result(
+  484	        returncode=1,
+  485	        stdout="this should not appear",
+  486	        stderr="short stderr",
+  487	    )
+  488	    response_path = tmp_path / "r1-response.md"
+  489	    prompt_path = tmp_path / "r1-request.md"
+  490	    prompt_path.write_text("ignored")
+  491	    target = tmp_path / "plan.md"
+  492	    target.write_text("ignored")
+  493	    er.write_review_artifact(
+  494	        root=tmp_path, target=target, kind="plan",
+  495	        command_template="fake", prompt_file=prompt_path,
+  496	        response_file=response_path, round_num=1, result=result,
+  497	    )
+  498	    body = response_path.read_text()
+  499	    assert "this should not appear" not in body
+  500	    assert "short stderr" in body
+  501	```
+  502	
+  503	- [x] **Step 2: Run tests**
+  504	
+  505	Run: `python3 -m pytest skills/external-review/tests/test_response_artifact.py -v`
+  506	Expected: both new tests pass (implementation was already done in Task 1.3).
+  507	
+  508	- [x] **Step 3: Commit**
+  509	
+  510	```bash
+  511	git add skills/external-review/tests/test_response_artifact.py
+  512	git commit -m "external-reviewer: test strip-before-cap and stdout-drop on failed turns"
+  513	```
+  514	
+  515	### Task 1.5: Failed reviewers force verdict=None / verdict_valid=False
+  516	
+  517	**Files:**
+  518	- Modify: `skills/external-review/scripts/external-reviewer.py` (`run_one_reviewer`, around line 542)
+  519	- Create: `skills/external-review/tests/test_failed_round_truth.py`
+  520	
+  521	- [x] **Step 1: Write the failing test**
+  522	
+  523	Create `skills/external-review/tests/test_failed_round_truth.py`:
+  524	
+  525	```python
+  526	from pathlib import Path
+  527	import os
+  528	import subprocess
+  529	import sys
+  530	import json
+  531	import importlib.util
+  532	
+  533	SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
+  534	sys.path.insert(0, str(SCRIPTS))
+  535	spec = importlib.util.spec_from_file_location("external_reviewer", SCRIPTS / "external-reviewer.py")
+  536	er = importlib.util.module_from_spec(spec)
+  537	spec.loader.exec_module(er)
+  538	
+  539	
+  540	FAKE_FAILED_WITH_ECHOED_VERDICT = """#!/usr/bin/env bash
+  541	# Echo a prompt-looking blob on stderr that contains plausible verdict text,
+  542	# then exit non-zero. This is the multistore failure mode.
+  543	cat 1>&2 <<'EOF'
+  544	Reading prompt from stdin...
+  545	OpenAI Codex v0.130.0
+  546	user
+  547	You are continuing an existing review chain.
+  548	... (echoed) ...
+  549	Overall verdict: revise
+  550	EOF
+  551	exit 1
+  552	"""
+  553	
+  554	
+  555	def _init_repo(tmp_path):
+  556	    repo = tmp_path / "repo"
+  557	    repo.mkdir()
+  558	    subprocess.run(["git", "-C", str(repo), "init", "-q"], check=True)
+  559	    subprocess.run(["git", "-C", str(repo), "config", "user.email", "t@t"], check=True)
+  560	    subprocess.run(["git", "-C", str(repo), "config", "user.name", "T"], check=True)
+  561	    (repo / "plan.md").write_text("# plan\n")
+  562	    subprocess.run(["git", "-C", str(repo), "add", "plan.md"], check=True)
+  563	    subprocess.run(["git", "-C", str(repo), "commit", "-q", "-m", "init"], check=True)
+  564	    return repo
+  565	
+  566	
+  567	def test_failed_reviewer_with_echoed_verdict_is_not_trusted(tmp_path):
+  568	    repo = _init_repo(tmp_path)
+  569	    reviewer = repo / "fake.sh"
+  570	    reviewer.write_text(FAKE_FAILED_WITH_ECHOED_VERDICT)
+  571	    reviewer.chmod(0o755)
+  572	    env = os.environ.copy()
+  573	    env["AGENT_REVIEWER_CMD"] = str(reviewer)
+  574	    result = subprocess.run(
+  575	        [sys.executable, str(SCRIPTS / "external-reviewer.py"),
+  576	         "review", "--kind", "plan", "--file", "plan.md", "--emit", "json"],
+  577	        cwd=repo, env=env, capture_output=True, text=True, timeout=30,
+  578	    )
+  579	    # Process should exit with the reviewer's non-zero code, not 0.
+  580	    assert result.returncode != 0, result.stdout
+  581	    payload = json.loads(result.stdout)
+  582	    assert payload["verdict_valid"] is False
+  583	    assert payload["verdict"] is None
+  584	    assert payload["status"] == "failed"
+  585	    assert payload["returncode"] != 0
+  586	```
+  587	
+  588	- [x] **Step 2: Run test to verify it fails**
+  589	
+  590	Run: `python3 -m pytest skills/external-review/tests/test_failed_round_truth.py -v`
+  591	Expected: failure. Today, the script parses the echoed `Overall verdict: revise` and records `verdict_valid: True`.
+  592	
+  593	- [x] **Step 3: Force the verdict in `run_one_reviewer`**
+  594	
+  595	In `skills/external-review/scripts/external-reviewer.py`, find the end of `run_one_reviewer` where the `ReviewerResult` is constructed (around line 542-549):
+  596	
+  597	```python
+  598	    body = response_path.read_text(encoding="utf-8")
+  599	    verdict, valid = parse_verdict(body)
+  600	    return ReviewerResult(
+
+[truncated: 2218 additional lines]
+
+## Context Previews
+
+### docs/specs/2026-05-14-external-reviewer-context-optimisation-spec.md
+
+    1	# Spec — external-reviewer context optimisation & chain integrity
+    2	
+    3	- **Status:** ready (incorporates `--kind spec` r1 + r2 review findings; r2 verdict `ready with small edits` applied)
+    4	- **Created:** 2026-05-14
+    5	- **Owner:** sigreer
+    6	- **Target component:** `skills/external-review/scripts/external-reviewer.py` (+ `skills/external-review/SKILL.md`, `skills/external-review/tests/`)
+    7	- **Related artefacts:**
+    8	  - Draft brief: `docs/_drafts/context-optimisation-brief.md`
+    9	  - Brief review chain: `docs/reviewer/context-optimisation-brief-design/`
+   10	  - Smoking-gun chain: `/home/simon/Dev/sigreer/multistore/docs/reviewer/p10-s3-x39-tailwind-screen-aliases-P10-S3-post-slice/`
+   11	
+   12	## 1. Problem
+   13	
+   14	Incremental rounds in an external-review chain currently fail in two compounding ways:
+   15	
+   16	### 1.1 Chain semantic corruption (primary defect)
+   17	
+   18	When the configured reviewer command exits non-zero, `write_review_artifact` (`external-reviewer.py:440-473`) writes `result.stdout` and the full `result.stderr` verbatim into the round's response file. The OpenAI Codex–backed `reviewer-agent` emits its session banner and the **entire echoed input prompt** on stderr. The next stage of the script then:
+   19	
+   20	1. Parses the response body for a verdict (`run_one_reviewer` → `parse_verdict`).
+   21	2. Records the parsed verdict, `verdict_valid`, and `merged_verdict` into `chain.json` with no awareness that the process exited non-zero.
+   22	3. Persists no `returncode` or `status` field on the round entry.
+   23	
+   24	The downstream effect, observed empirically on the multistore chain `p10-s3-x39-tailwind-screen-aliases-P10-S3-post-slice`:
+   25	
+   26	```
+   27	round=2  verdict=revise  valid=True  ← reviewer process FAILED (exit 1)
+   28	round=3  verdict=revise  valid=True  ← reviewer process FAILED
+   29	round=4  verdict=revise  valid=True  ← reviewer process FAILED
+   30	```
+   31	
+   32	Every "verdict" past r1 was extracted from echoed prompt text. The chain looks healthy to any consumer of `chain.json` while being entirely fabricated.
+   33	
+   34	### 1.2 Recursive prompt bloat (secondary defect)
+   35	
+   36	The corrupted response files are then slurped whole into the next round's preamble:
+   37	
+   38	- `build_incremental_preamble` (`external-reviewer.py:277-285`) reads `r{N-1}-merged-findings.md` (preferred) or `r{N-1}-response` (fallback) with no size cap.
+   39	- `make_prompt` (`external-reviewer.py:348-353`) re-embeds the full target preview and every `--context` file preview on every incremental round, on top of the preamble.
+   40	- `compute_diff_section` caps each subsection independently — no global cap on the diff block, no cap on number of untracked files.
+   41	
+   42	Observed size progression on the same chain (one failed r2 was enough to poison the whole chain):
+   43	
+   44	| File | Bytes |
+   45	|---|---|
+   46	| `r1-merged-findings.md` | 594,637 |
+   47	| `r1-resolution.md` | 4,155 |
+   48	| `r2-…-request.md` | 886,686 |
+   49	| `r2-…-response.md` (failed, stderr-echoed) | 887,637 |
+   50	| `r3-…-request.md` | 1,293,203 (exceeds OpenAI's 1,048,576 limit) |
+   51	| `r4-…-request.md` | 1,938,265 |
+   52	
+   53	The literal prompt phrase `"You are continuing an existing review chain"` (one occurrence in the template) appears 0 / 0 / 2 / 6 / **14** times across r1-primary / r1-sweep1 / r2 / r3 / r4 response files — confirming 2× compounding per round.
+   54	
+   55	### 1.3 Self-demonstration
+   56	
+   57	The very `--kind design` review that vetted the precursor brief for this spec produced a **1.22 MB response file** for a successful (returncode 0) round. Codex echoed the entire stdin on stderr; `write_review_artifact` dumped it whole. This bug fires even on the happy path — only the prompt-size symptom is gated by a non-zero exit.
+   58	
+   59	## 2. Goals
+   60	
+   61	1. **Chain integrity:** a failed reviewer process can never produce a recorded verdict, valid finding, or trusted merged_verdict in `chain.json`. Failed bodies never enter merged findings or downstream parsing.
+   62	2. **Prompt size:** typical incremental round (round 2+) on a 3-context chain stays under 250 KB regardless of chain depth. Failed-round artefacts contribute O(KB), not O(MB).
+   63	3. **Backwards compatibility:** JSON output contract and exit codes unchanged. Existing chain folders continue to work (soft-migration where needed). No new env vars; one new flag (`--incremental-budget-chars`) with auto default.
+   64	4. **Self-evidencing tests:** the failure modes from §1 are reproduced and asserted against in unit tests.
+   65	
+   66	## 3. Non-goals
+   67	
+   68	- Changes to broad-round (r1) prompt structure or `--max-lines` defaults. Round 1 is not broken.
+   69	- New env vars (`AGENT_REVIEWER_TRANSPORT` already exists; no more).
+   70	- Changes to JSON output keys or exit-code values. New keys may be added under `reviewers[]` and `rounds[]` but existing keys keep their semantics.
+   71	- New third-party dependencies.
+   72	- Changes to `reviewer-agent` itself — the bridge must remain backend-agnostic.
+   73	
+   74	## 4. Scope (3 slices)
+   75	
+   76	### S1 — Failure-truth + echo containment (root-cause fix)
+   77	
+   78	The keystone slice. Without this, any size optimisation only delays the corruption.
+   79	
+   80	**Operation order for response persistence (applies to every reviewer invocation, success or failure):**
+   81	
+   82	1. Capture raw `result.stdout` and `result.stderr` from `subprocess.CompletedProcess`.
+   83	2. Apply sentinel-stripping (item S1.5) to **both** streams in full — *before* any size cap, tail, or truncation. This ensures a tail-cap operation cannot leave the end of an echoed prompt without its `:start -->` marker.
+   84	3. Apply size caps per the rules below.
+   85	4. Write the assembled response file.
+   86	
+   87	Now the specific items:
+   88	
+   89	1. **Persist process status in `chain.json`.** Extend each `reviewers[]` entry and each `rounds[]` entry with three new keys: `returncode: int | null`, `status: "ok" | "failed" | "unknown"`. The `"unknown"` value is reserved for legacy entries migrated from pre-S1 manifests. New entries always record `"ok"` or `"failed"` based on `result.returncode`. Soft-migrate older entries on first touch: missing `returncode` becomes `null` and `status` becomes `"unknown"`; do not infer retroactive truth from existing `verdict_valid` flags.
+   90	2. **Failed rounds force `verdict_valid: false`.** In `run_one_reviewer`, if `result.returncode != 0`: set the reviewer's `verdict = null`, `verdict_valid = false`, `findings_count = 0`, regardless of what `parse_verdict` extracts from the body. The same applies to `merged_verdict` aggregation per the truth table below. (This is stricter than the current `verdict_valid: false → treat as revise` policy, which assumes the reviewer at least produced a real response.)
+   91	3. **Sanitise stdout and stderr on every round, success or failure.** In `write_review_artifact`:
+   92	   - **Success (`returncode == 0`):** persist sentinel-stripped stdout as the review body. Stderr is dropped entirely *unless* it remains non-empty after sentinel-stripping, in which case its **tail is capped at 2 KB** and appended under `## Reviewer stderr (tail)`. Rationale: the self-demonstration in §1.3 shows even successful runs echo the prompt on stderr; storing the full stderr serves no diagnostic purpose once sentinels are stripped.
+   93	   - **Failure (`returncode != 0`):** persist a short failure stub — header, returncode, `## Reviewer stderr (tail, sanitised)` with the **sentinel-stripped stderr tail capped at 4 KB**, and no stdout body. Successful reviewers attach their review under their own heading; failed reviewers attach only the stderr tail.
+   94	4. **Skip failed bodies in merged-findings construction.** `write_merged_findings` (`external-reviewer.py:572`-ish) only concatenates bodies from reviewers with `status == "ok"`. If every reviewer in the round failed, no merged-findings file is written and `chain.json` records `merged_findings: null`.
+   95	5. **Sentinel-wrap the prompt.** `make_prompt` emits `<!-- superstar-prompt:start -->` and `<!-- superstar-prompt:end -->` markers at the very top and very bottom of the assembled prompt body. The stripper removes any range of text bounded by those markers (inclusive of the markers themselves) from a reviewer output stream. If only an end marker is found with no start marker (e.g. tail-truncated echo) the stripper deletes from the beginning of the stream up to and including the end marker. If only a start marker is found, it deletes from the start marker to the end of the stream. This makes the stripper robust against arbitrary truncation.
+   96	6. **Skip parsing failed artefacts in preamble construction.** `build_incremental_preamble` consults `chain.json` for the prior round's `status`. If `status` is `"failed"` or `"unknown"`, walk backward to the last `status: "ok"` round and embed *that* round's merged-findings instead, prefixed with a short note: `Note: rounds {N-1}...{K+1} were process failures or pre-S1 entries; skipped.`. If no successful prior round exists, fall back to the chain summary table only. `"unknown"` is treated as untrusted by default to prevent legacy poisoned manifests from leaking through.
+   97	
+   98	#### S1.7 — Multi-reviewer truth table
+   99	
+  100	When `--review-depth thorough` or `exhaustive` runs sweeps alongside the primary, top-level JSON aggregation and process exit are governed by this table:
+  101	
+  102	| Primary status | Sweep status(es) | Top-level `status` | Top-level `returncode` | `verdict_valid` | `merged_verdict` | Process exit |
+  103	|---|---|---|---|---|---|---|
+  104	| ok | all ok | `ok` | 0 | per merged verdict | computed | 0 |
+  105	| ok | some failed | `ok` | 0 | per merged verdict computed over ok reviewers only | computed (ok reviewers only) | 0 |
+  106	| ok | all failed | `ok` | 0 | per primary verdict | primary's verdict | 0 |
+  107	| failed | any | `failed` | primary's returncode | `false` | `null` | primary's returncode |
+  108	| failed | all | `failed` | primary's returncode | `false` | `null` | primary's returncode |
+  109	
+  110	Rule of thumb: **primary failure is the only condition that flips top-level status to `failed`.** A sweep failure is recorded per-reviewer and excluded from merged-findings, but the round as a whole remains valid if the primary succeeded. This preserves the current `main()` behaviour at `external-reviewer.py:1155` (return `primary.returncode`) while adding correct per-reviewer truth.
+  111	
+  112	#### S1.8 — Process-failed prior round gate behaviour
+  113	
+  114	The existing resolution-required gate at `external-reviewer.py:871` blocks round N+1 on `post-slice` / `post-phase` chains when the prior round has `verdict_valid: false`, unless `r{N-1}-resolution.md` exists or `--allow-missing-resolution` is passed. A process failure has no findings to resolve, so without specific handling the chain would deadlock.
+  115	
+  116	**Rule:** when the prior round's `status` is `"failed"` (i.e. the reviewer process failed, not "the reviewer returned `revise`"), the resolution-required gate is **bypassed** for the next round. The script emits a one-line stderr notice: `Note: prior round r{N-1} was a process failure (returncode={rc}); resolution gate bypassed.`. The next round proceeds as a re-attempt at the same review, not as a fix-and-re-review. No new exit code, no new flag.
+  117	
+  118	Distinction from `"unknown"`: legacy entries with `status: "unknown"` do **not** bypass the gate — the operator must inspect the legacy state explicitly and pass `--allow-missing-resolution` if appropriate. Only fresh `"failed"` entries (with a recorded `returncode != 0`) earn the bypass.
+  119	
+  120	**Acceptance:** the tests added in S3 items 1, 9, and 14 pass — item 1 asserts `chain.json` records `verdict_valid: false`, `returncode != 0`, `status: "failed"` after a failed reviewer turn; item 9 asserts r3 submission proceeds without `--allow-missing-resolution` after a `status: "failed"` r2; item 14 asserts r3-request bytes < 250 KB and contains no echoed-prompt phrase. Items 3, 4, 5, 6 cover sentinel-stripping under success, failure, and truncation. Item 2 covers multi-reviewer truth-table behaviour for sweeps.
+  121	
+  122	### S2 — Incremental prompt diet
+  123	
+  124	Independent of S1's correctness fixes; reduces typical size further. Ship after S1 lands.
+  125	
+  126	1. **Drop context previews on incremental.** In `make_prompt`, when `mode == "incremental"`, skip the `## Context Previews` block (`external-reviewer.py:350-353`) entirely. The preamble already names context files by path and the REVIEW_PROMPT body tells the reviewer to read from disk.
+  127	2. **Trim target preview on incremental.** Cap the target preview to `min(max_lines, 150)` lines when `mode == "incremental"`. Broad-round behaviour unchanged.
+  128	3. **Cap prior-text reads.** In `build_incremental_preamble`, cap `prior_response_text`, `merged_findings_text`, and `resolution_text` reads to 80 KB each (head + tail with a `[…N bytes elided…]` marker in between). Apply caps *after* §S1.6's failed-round skipping.
+  129	4. **Global cap with deterministic preservation priority.** Add `--incremental-budget-chars` (default 400_000). Applied as the final step in `make_prompt` on incremental rounds. If the assembled prompt exceeds budget, sections are dropped/truncated in this order (lowest-priority dropped first):
+  130	   1. Target preview (cut to 80 lines, then 40, then 0)
+  131	   2. Diff body (cut to half, quarter, then 0; preserve the diff header note)
+  132	   3. Resolution body (cut to 20 KB, then 8 KB)
+  133	   4. Prior findings body (cut to 40 KB, then 16 KB)
+  134	   5. **Never dropped:** review-mode preamble, chain summary table, finding-ID list, sentinel markers, REVIEW_PROMPT contract.
+  135	   The result includes a trailing `<!-- budget-applied: ... -->` note describing what got trimmed. Tested by S3 item 13.
+  136	5. **Tighten diff caps.** `compute_diff_section` enforces a single global cap on the whole diff block (already `--max-diff-lines`, default 2000) rather than per-subsection. Add a cap on untracked-file count (default 10) and per-untracked-file line cap (default 200).
+  137	
+  138	**Acceptance:** on a synthetic chain with spec + plan + TASKLIST as context, a 50 KB merged-findings file, a 4 KB resolution, and a 500-line diff, the round-2 prompt is under 200 KB. Tested by S3 item 13 (budget cap), item 12 (prior-text caps), item 10 (context-preview drop on incremental), and item 11 (target-preview trim on incremental).
+  139	
+  140	### S3 — Tests, docs, and skill update
+  141	
+  142	**Numbering note:** items here are referenced from S1/S2 acceptance gates by their item number. Renumbering during implementation requires a corresponding spec edit; do not silently re-order.
+  143	
+  144	1. **Test: failed-process verdict suppression** — simulate `reviewer-agent` returncode=1 with stderr containing the full prompt; assert `chain.json` round entry has `verdict_valid: false`, `returncode: 1`, `status: "failed"`, `merged_verdict: null`, and that the persisted response file is under 8 KB.
+  145	2. **Test: failed sweep can't poison merged findings** — `--review-depth thorough` run where the sweep returncode=1 (stderr contains echoed prompt); assert `merged_findings` is built from the primary only, the sweep's body is not concatenated, and per the S1.7 truth table the top-level `status` remains `"ok"`.
+  146	3. **Test: sentinel-stripping happy path** — feed reviewer stdout that begins with `<!-- superstar-prompt:start -->...<!-- superstar-prompt:end -->actual review here`; assert the persisted response body contains only `actual review here` (no markers, no echoed prompt).
+  147	4. **Test: sentinel-stripping truncated echo** — feed reviewer stderr containing only the **end** marker followed by trailing text (simulating a tail-truncated echo); assert the stripper deletes everything from the start of the stream up to and including the end marker. Symmetric case: stream contains only the start marker followed by content; assert deletion from start marker to end of stream.
+  148	5. **Test: success-stderr is dropped or capped** — simulate a successful (returncode=0) reviewer run whose stderr contains the full prompt; assert the persisted response file does **not** contain the full prompt and the `## Reviewer stderr (tail)` section, if present, is ≤ 2 KB and has been sentinel-stripped first.
+  149	6. **Test: failed-stderr cap is applied after sentinel-stripping** — simulate a failed reviewer run whose stderr is 20 KB of echoed prompt; assert the persisted stub's stderr-tail section is ≤ 4 KB **and** contains no `<!-- superstar-prompt:start -->` / `:end -->` markers (proves strip-before-cap ordering).
+  150	7. **Test: preamble walks back past failed rounds** — chain with r1 ok, r2 failed (returncode=1), r3 building; assert r3 preamble cites r1's merged-findings with the "skipped failures" note, not r2's response.
+  151	8. **Test: preamble treats `status: "unknown"` as untrusted** — chain.json with a legacy entry (no `returncode`, no `status` → migrated to `status: "unknown"`); assert the preamble does **not** embed that round's response body and emits the same skip note.
+  152	9. **Test: process-failed prior round bypasses resolution gate** — post-slice chain where r2 has `status: "failed"`; submit r3 without `--allow-missing-resolution` and without `r2-resolution.md`; assert exit code is not 3 and the gate-bypass notice appears on stderr.
+  153	10. **Test: incremental prompt drops context previews** — assert `## Context Previews` heading absent in `mode=="incremental"` prompts; assert it is still present in `mode=="broad"`.
+  154	11. **Test: target preview trimmed on incremental** — assert preview ≤ 150 lines on incremental; broad round preview ≤ default `max_lines`.
+  155	12. **Test: prior-text caps applied** — feed a 1 MB merged-findings file; assert embedded segment ≤ 80 KB with the elision marker present.
+  156	13. **Test: budget cap preserves priority order** — assemble a prompt that exceeds `--incremental-budget-chars`; assert REVIEW_PROMPT contract, chain summary table, sentinel markers, and finding-ID list are intact; assert the lowest-priority sections are the ones trimmed in the documented order.
+  157	14. **Test: r3-request size bounded after simulated failed r2** — end-to-end fixture with r1 ok (large merged-findings, ~600 KB) and a forced failed r2; assert r3-request bytes < 250 KB and contains no echoed-prompt phrase.
+  158	15. **Test: chain.json soft-migration** — load a pre-S1 chain.json with no `returncode` / `status` keys; assert the script does not error, treats existing rounds as `status: "unknown"`, and writes new rounds with the new keys.
+  159	16. **Docs: `skills/external-review/SKILL.md`** — document `--incremental-budget-chars`, the new failure handling (failed rounds → `verdict_valid: false`, response file is a stub, resolution gate bypassed, preamble walks back), the sentinel-stripping behaviour, and the multi-reviewer truth table from S1.7. Update the "Exit codes" table only if a new exit code is added (preferred: do not add one; preserve existing semantics).
+  160	
+  161	## 5. Open design questions
+  162	
+  163	These were initially open at draft and have been resolved in §4. Captured here for traceability.
+  164	
+  165	1. ~~**Hard error on chain with any prior failure?**~~ **Resolved (§S1.8):** failed prior rounds bypass the resolution-required gate silently and emit a stderr notice. No new exit code, no new flag. Rationale: hard error adds a knob to every consumer and the bypass behaviour is observable in `chain.json` (`status: "failed"`, `returncode != 0`), so operators retain visibility without forced acknowledgement.
+  166	2. ~~**Sentinel stripping placement.**~~ **Resolved (§S1, operation order):** write-time stripping is the primary mechanism. Belt-and-braces read-path stripping in `build_incremental_preamble` is not required because S1.6 walks past failed/unknown rounds entirely rather than embedding their bodies. Successful prior-round bodies that pre-date this fix will retain echoed prompt text on disk; they are not modified, but their re-embed is capped by S2.3.
+  167	3. ~~**`AGENT_REVIEWER_BUDGET_CHARS` env var?**~~ **Resolved (§3 non-goal):** flag only. If demand emerges, a follow-up can revisit.
+  168	4. **Round entries — do we want a stable `attempt` counter alongside `round`?** Out of scope for this spec, flagged for follow-up. The script's existing invariant (`next_round_number()` returns `len(rounds)+1`; rounds are never overwritten) is preserved by this spec: a failed reviewer turn occupies its own round number, and the "re-attempt" after a process failure advances to the next round number within the same review chain. Today consumers distinguish attempts via the round number sequence in `chain.json`; an explicit `attempt` field on each round could later make "this was a retry of the previous failed round" semantically explicit, but is not required for the goals in §2.
+  169	
+  170	## 6. Acceptance gate
+  171	
+  172	The spec is considered complete and ready for plan-writing when:
+  173	
+  174	- `python3 -m pytest skills/external-review/tests/` passes with all S3 tests added.
+  175	- A live re-run of the failing chain at `/home/simon/Dev/sigreer/multistore/docs/reviewer/p10-s3-x39-tailwind-screen-aliases-P10-S3-post-slice/` (with the patched script) completes a next-round invocation either successfully or as a clearly-failed round (`returncode != 0`, `verdict_valid: false`, `status: "failed"`, persisted response file ≤ 8 KB total with the stderr-tail section itself ≤ 4 KB), and the following round runs against a prompt < 250 KB.
+  176	- `skills/external-review/SKILL.md` documents the new behaviour and the new flag.
+  177	- `--kind spec` external review on this document returns `ready` or `ready with small edits`.
+  178	
+  179	## 7. Rollout
+  180	
+  181	- S1 and S2 land in separate commits in this repo.
+  182	- After landing, downstream consumers re-vendor `external-reviewer.py` via the `[[project-setup]]` skill. Existing chain folders are soft-migrated (missing `returncode` treated as `null`); no destructive rewrite.
+  183	- The poisoned `multistore` chain is left intact for forensic value; a fresh chain or `--mode broad` reset is the operator's call.
+  184	
+  185	## 8. References
+  186	
+  187	- Empirical chain: `/home/simon/Dev/sigreer/multistore/docs/reviewer/p10-s3-x39-tailwind-screen-aliases-P10-S3-post-slice/`
+  188	- Draft brief (precursor to this spec): `docs/_drafts/context-optimisation-brief.md`
+  189	- Brief review (4 findings, verdict `revise`): `docs/reviewer/context-optimisation-brief-design/r1-2026-05-14T1411-response.md`
+  190	- Script under modification: `skills/external-review/scripts/external-reviewer.py`
+  191	- Skill doc to update: `skills/external-review/SKILL.md`
+
+<!-- superstar-prompt:end -->

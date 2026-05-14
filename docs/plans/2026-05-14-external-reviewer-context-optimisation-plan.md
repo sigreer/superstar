@@ -2693,7 +2693,7 @@ Slice 2 acceptance is met when:
 In `skills/external-review/SKILL.md`, after the existing `--prompt-transport` documentation (around line 35-39 of the current SKILL.md), append:
 
 ```markdown
-- A global `--incremental-budget-chars` cap (default `400000`) applies on incremental rounds. The assembled prompt is pruned in priority order — target preview, diff body, resolution body, prior findings body — to fit the cap. Sentinel markers, chain summary, and finding-ID lists are never trimmed. The resulting prompt carries a trailing `<!-- budget-applied: ... -->` note summarising trims.
+- `--incremental-budget-chars` (default `400000`) sets a target cap on assembled prompt size for incremental rounds. The prompt is pruned in priority order — target preview, diff body, resolution body, prior findings body — toward the target; sentinel markers, chain summary, and finding-ID lists are never trimmed. The final size may exceed the target by ~150 bytes due to the appended `<!-- budget-applied: ... -->` diagnostic note.
 ```
 
 - [ ] **Step 2: Add a "Failure handling" section**
