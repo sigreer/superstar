@@ -158,6 +158,9 @@ def chain_folder_name(target: Path, kind: str) -> str:
 def next_round_number(chain_dir: Path) -> int:
     if not chain_dir.exists():
         return 1
+    manifest = read_manifest(chain_dir / "chain.json")
+    if manifest and isinstance(manifest.get("rounds"), list):
+        return len(manifest["rounds"]) + 1
     return len(list(chain_dir.glob("r*-*-request.md"))) + 1
 
 
