@@ -595,7 +595,12 @@ def run_one_reviewer(
         round_num=round_num, result=result,
     )
     body = response_path.read_text(encoding="utf-8")
-    verdict, valid = parse_verdict(body)
+    if result.returncode != 0:
+        # Process failures cannot produce a valid verdict, regardless of what
+        # parse_verdict extracts from echoed prompt text. See spec §S1.2.
+        verdict, valid = None, False
+    else:
+        verdict, valid = parse_verdict(body)
     return ReviewerResult(
         role=role, sweep_index=sweep_index,
         request_path=request_path, response_path=response_path,
