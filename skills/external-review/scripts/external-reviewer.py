@@ -180,7 +180,11 @@ def discover_legacy_chain(
         if not entry.is_dir():
             continue
         if entry.name == legacy_old_name:
-            candidates.append(entry)
+            # Only treat as legacy candidate if there is no chain.json — a chain.json
+            # marks a new-regime chain (potentially for a different work-id) and must
+            # never be silently reused.
+            if not (entry / "chain.json").exists():
+                candidates.append(entry)
         elif entry.name.startswith(f"{slugify(target_stem)}-") and entry.name.endswith(f"-{kind}"):
             # Legacy with embedded suffix (e.g. an interim variant). Treat as candidate.
             if entry.name != new_slug and not (entry / "chain.json").exists():
@@ -449,11 +453,32 @@ def main() -> int:
             "chain": new_slug,
             "kind": args.kind,
             "target": rel_or_abs(target, root),
-            "work_id": None,
+            "work_id": args.work_id,
             "legacy_migrated": False,
             "rounds": [],
             "sweep_checkpoints": {"first-round": "pending", "final-ready": "pending"},
         }
+    else:
+        # Existing manifest: refuse a work-id mismatch (someone trying to reuse a
+        # chain folder for a different slice/phase). Stored work_id is the source
+        # of truth; do not mutate it. Allow when stored work_id is None (legacy
+        # synthesis path may have set it, or older manifests had None).
+        stored_work_id = manifest.get("work_id")
+        if (
+            args.work_id is not None
+            and stored_work_id is not None
+            and stored_work_id != args.work_id
+        ):
+            print(
+                f"ERROR: --work-id {args.work_id!r} does not match the stored "
+                f"work_id {stored_work_id!r} in {rel_or_abs(manifest_path, root)}. "
+                "Refusing to reuse this chain folder for a different slice/phase.",
+                file=sys.stderr,
+            )
+            return 6
+        # If the stored value is None and a CLI value was provided, backfill it.
+        if stored_work_id is None and args.work_id is not None:
+            manifest["work_id"] = args.work_id
     round_num = next_round_number(chain_dir)
     timestamp = dt.datetime.now().strftime("%Y-%m-%dT%H%M")
     basename = f"r{round_num}-{timestamp}"
