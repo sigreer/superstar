@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import fcntl
 import json
 import os
 import re
@@ -194,6 +195,26 @@ def load_state() -> dict:
     except (json.JSONDecodeError, ValueError, OSError) as e:
         print(f"WARNING: reviewer-state.json at {path} unreadable ({e}); treating as empty", file=sys.stderr)
         return {"schema_version": 1, "limits": {}}
+
+
+def save_state(state: dict) -> None:
+    """Atomically write the reviewer state file. Uses flock + tmp-then-rename.
+    Creates parent dir with mode 0o700 on first write."""
+    path = state_file_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        path.parent.chmod(0o700)
+    except OSError:
+        pass  # best-effort; some filesystems disallow chmod
+    tmp_path = path.with_suffix(path.suffix + ".tmp")
+    payload = json.dumps(state, indent=2, sort_keys=True)
+    with open(tmp_path, "w", encoding="utf-8") as f:
+        fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+        f.write(payload)
+        f.flush()
+        os.fsync(f.fileno())
+        fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+    os.replace(tmp_path, path)
 
 
 _BUDGET_SECTIONS = [

@@ -42,3 +42,31 @@ def test_load_state_corrupt_file_fails_open(capsys, tmp_path):
     assert state == {"schema_version": 1, "limits": {}}
     captured = capsys.readouterr()
     assert "reviewer-state.json" in captured.err  # warning surfaced
+
+
+def test_save_state_creates_parent_dir_0700(tmp_path, monkeypatch):
+    target = tmp_path / "nested" / "deep" / "state.json"
+    monkeypatch.setenv("AGENT_REVIEWER_STATE_FILE", str(target))
+    er.save_state({"schema_version": 1, "limits": {"reviewer-agent": {"limited": True}}})
+    assert target.exists()
+    # Parent dir permissions: 0o700 (owner rwx, nothing else)
+    parent_mode = oct(target.parent.stat().st_mode & 0o777)
+    assert parent_mode == "0o700"
+
+
+def test_save_state_round_trip():
+    er.save_state({"schema_version": 1, "limits": {"reviewer-agent": {"limited": True, "reset_at": "2026-05-14T18:48:00"}}})
+    out = er.load_state()
+    assert out["limits"]["reviewer-agent"]["reset_at"] == "2026-05-14T18:48:00"
+
+
+def test_save_state_atomic_via_tmp_rename(tmp_path, monkeypatch):
+    """Writing should go through a .tmp file then rename, so a crash mid-write
+    can never corrupt the on-disk state."""
+    target = tmp_path / "state.json"
+    monkeypatch.setenv("AGENT_REVIEWER_STATE_FILE", str(target))
+    target.write_text('{"schema_version": 1, "limits": {"reviewer-agent": {"limited": false}}}')
+    er.save_state({"schema_version": 1, "limits": {"reviewer-agent": {"limited": True}}})
+    # After save, no orphan .tmp file remains
+    assert not (tmp_path / "state.json.tmp").exists()
+    assert er.load_state()["limits"]["reviewer-agent"]["limited"] is True
