@@ -1372,6 +1372,15 @@ def parse_args() -> argparse.Namespace:
     sp_manual.add_argument("--note", required=True)
     sp_manual.add_argument("--state-file", default=None)
 
+    sp_ingest = subparsers.add_parser("ingest-response", help="Ingest an externally-obtained reviewer response")
+    sp_ingest.add_argument("--kind", required=True)
+    sp_ingest.add_argument("--file", required=True)
+    sp_ingest.add_argument("--work-id", required=False, default=None)
+    src_group = sp_ingest.add_mutually_exclusive_group(required=True)
+    src_group.add_argument("--from-paste", dest="from_paste", default=None)
+    src_group.add_argument("--from-link", dest="from_link", default=None)
+    sp_ingest.add_argument("--state-file", default=None)
+
     return parser.parse_args()
 
 
@@ -1440,6 +1449,80 @@ def run_manual_approve(args) -> int:
     manifest["rounds"].append(new_round)
     write_manifest(manifest_path, manifest)
     print(f"Manual approval recorded for {chain_dir.name} r{next_round}")
+    return 0
+
+
+_OUTER_FENCE_RE = re.compile(r"^\s*```[a-zA-Z0-9_-]*\s*\n(.*?)\n```\s*$", re.DOTALL)
+_VERDICT_HEADING_STYLE = re.compile(
+    r"((?:\d+\.\s+)?Overall verdict)\s*\n+\s*(ready(?: with small edits)?|revise|ready)",
+    re.IGNORECASE,
+)
+
+
+def _reformat_response(raw: str) -> str:
+    m = _OUTER_FENCE_RE.match(raw)
+    if m:
+        raw = m.group(1)
+    raw = _VERDICT_HEADING_STYLE.sub(lambda m: f"{m.group(1)}: {m.group(2)}", raw)
+    return raw
+
+
+def run_ingest_response(args) -> int:
+    src = args.from_paste or args.from_link
+    raw = Path(src).read_text(encoding="utf-8")
+    reformatted = _reformat_response(raw)
+
+    root = repo_root()
+    target = (root / args.file).resolve() if not Path(args.file).is_absolute() else Path(args.file).resolve()
+    reviewer_root = (root / "docs/reviewer").resolve()
+    new_slug = chain_folder_name(target, args.kind, args.work_id)
+    try:
+        existing = discover_legacy_chain(
+            reviewer_root=reviewer_root,
+            target_stem=DATE_PREFIX_RE.sub("", target.stem),
+            kind=args.kind,
+            new_slug=new_slug,
+        )
+    except AmbiguousLegacyChain as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 5
+    chain_dir = existing if existing else (reviewer_root / new_slug)
+    if not chain_dir.exists():
+        print(f"ERROR: chain dir not found: {chain_dir}", file=sys.stderr)
+        return 2
+
+    manifest_path = chain_dir / "chain.json"
+    manifest = read_manifest(manifest_path)
+    if manifest is None:
+        print(f"ERROR: chain.json not found: {manifest_path}", file=sys.stderr)
+        return 2
+
+    head = manifest["rounds"][-1] if manifest["rounds"] else None
+    next_round = (head["round"] + 1) if head else 1
+    timestamp = _now_local().strftime("%Y-%m-%dT%H%M")
+    response_path = chain_dir / f"r{next_round}-{timestamp}-response.md"
+    response_path.write_text(reformatted, encoding="utf-8")
+
+    verdict, valid = parse_verdict(reformatted)
+    bridger = _git_identity()
+    now_iso = _now_local().isoformat(timespec="seconds")
+    new_round = {
+        "round": next_round,
+        "status": "human-bridged",
+        "verdict": verdict,
+        "verdict_valid": valid,
+        "merged_verdict": verdict,
+        "response": response_path.name,
+        "bridged_by": bridger,
+        "bridged_at": now_iso,
+    }
+    manifest["rounds"].append(new_round)
+    write_manifest(manifest_path, manifest)
+
+    if not valid:
+        print(f"WARNING: response ingested but verdict unparseable; {response_path}", file=sys.stderr)
+        return 2
+    print(f"Human-bridged response recorded: {chain_dir.name} r{next_round} verdict={verdict}")
     return 0
 
 
