@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "chain": "reviewer-rate-limit-handling-plan-plan",
+  "kind": "plan",
+  "target": "docs/plans/2026-05-14-reviewer-rate-limit-handling-plan.md",
+  "work_id": null,
+  "legacy_migrated": true,
+  "migrated_at": "2026-05-14T18:41:15Z",
+  "rounds": [
+    {
+      "round": 1,
+      "request": "r1-2026-05-14T1939-request.md",
+      "response": null,
+      "resolution": null,
+      "verdict": null,
+      "verdict_valid": false,
+      "findings_count": null,
+      "blocking_findings_count": null,
+      "head_sha_at_request": null,
+      "head_sha_after_round": null,
+      "worktree_dirty_at_request": null,
+      "legacy": true,
+      "status": "unknown",
+      "returncode": null
+    },
+    {
+      "round": 2,
+      "reviewers": [
+        {
+          "role": "primary",
+          "sweep_group": null,
+          "parent_round": 2,
+          "request": "r2-2026-05-14T1941-request.md",
+          "response": "r2-2026-05-14T1941-response.md",
+          "verdict": "revise",
+          "verdict_valid": true,
+          "returncode": 0,
+          "status": "ok"
+        }
+      ],
+      "status": "ok",
+      "returncode": 0,
+      "merged_verdict": "revise",
+      "merged_findings": null,
+      "request": "r2-2026-05-14T1941-request.md",
+      "response": "r2-2026-05-14T1941-response.md",
+      "resolution": null,
+      "resolution_parse_status": null,
+      "resolution_waiver": false,
+      "head_sha_at_request": "23607ef675dce5b57f42205bf5b73189732467ee",
+      "head_sha_after_round": "23607ef675dce5b57f42205bf5b73189732467ee",
+      "worktree_dirty_at_request": true,
+      "verdict": "revise",
+      "verdict_valid": true,
+      "findings_count": 4,
+      "blocking_findings_count": 3,
+      "base_ref": null,
+      "base_ref_source": "unavailable",
+      "diff_included": false
+    }
+  ],
+  "sweep_checkpoints": {
+    "first-round": "pending",
+    "final-ready": "pending"
+  }
+}
