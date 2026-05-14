@@ -75,3 +75,28 @@ def test_cli_budget_trims_actual_request(tmp_path):
     body = request_file.read_text()
     assert "<!-- budget-applied:" in body
     assert len(body) <= 20_000 + 500
+
+
+def test_apply_budget_trims_diff_with_nested_subheadings():
+    """apply_budget must trim the diff body even when compute_diff_section
+    emits nested ### sub-headings inside the 'Changes since prior round'
+    section.  The old _find_section_end (scanning for any \\n## heading)
+    would stop at the first nested heading and leave the section untouched."""
+    big_diff = "X" * 150_000
+    body = (
+        f"{er.PROMPT_SENTINEL_START}\n"
+        "## Changes since prior round\n\n"
+        "### git diff base..HEAD\n\n"
+        + big_diff + "\n"
+        "## Target Preview\n\n"
+        "some preview\n"
+        f"{er.PROMPT_SENTINEL_END}\n"
+    )
+    out = er.apply_budget(body, budget_chars=80_000)
+    # Must have been trimmed
+    assert len(out) <= 80_000 + 500
+    # The section header must still be present
+    assert "## Changes since prior round" in out
+    # The diff body must actually have been cut
+    assert ("bytes elided" in out or "diff_body dropped to fit budget" in out
+            or "[diff_body" in out)

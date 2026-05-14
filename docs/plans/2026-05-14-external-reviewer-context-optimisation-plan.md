@@ -2811,8 +2811,12 @@ python3 /home/simon/Dev/sigreer/skills/superstar/skills/external-review/scripts/
 
 Note in the close-out: the actual r5-request size, the verdict (should be a real verdict not a fabricated one), and whether the gate-bypass note appeared on stderr.
 
+**Observed at phase close:**
+- Full external-review test suite: 141 passed (1 warning, pre-existing utcnow deprecation).
+- Multistore dry-run r5 request: 147,839 bytes; verdict `ready`; `verdict_valid: true`; no gate-bypass note on stderr (clean run).
+
 - [ ] **Step 3: Invoke external-review for post-phase**
 
-`superstar:external-review --kind post-phase --file docs/plans/2026-05-14-external-reviewer-context-optimisation-plan.md --context docs/specs/2026-05-14-external-reviewer-context-optimisation-spec.md --review-depth thorough`
+`superstar:external-review --kind post-phase --file docs/plans/2026-05-14-external-reviewer-context-optimisation-plan.md --context docs/specs/2026-05-14-external-reviewer-context-optimisation-spec.md --review-depth thorough --work-id P1`
 
 Iterate until `ready` or `ready with small edits`.

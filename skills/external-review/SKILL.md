@@ -121,7 +121,7 @@ Verdict values: `ready`, `ready with small edits`, `revise` (or `null` if unpars
 - `thorough` (**recommended for `post-slice` and `post-phase`**). One sweep on round 1; one fresh sweep when the primary first returns `ready` / `ready with small edits`.
 - `exhaustive`. Two sweeps at each checkpoint. Use for risky phases.
 
-Sweep reviewers do not see the primary reviewer's findings on their first pass (anti-anchoring). Findings are merged into `r{N}-merged-findings.md` and a `merged_verdict` is computed: `revise` if any reviewer (or `verdict_valid: false`) says so; `ready with small edits` if any does and the rest are `ready`; `ready` only if every reviewer is `ready`.
+Sweep reviewers do not see the primary reviewer's findings on their first pass (anti-anchoring). Findings are merged into `r{N}-merged-findings.md`, and `merged_verdict` is computed over reviewers whose `status` is `"ok"` (failed sweeps are excluded — see the truth table above): `revise` if any ok reviewer is `revise` or has `verdict_valid: false`; `ready with small edits` if any ok reviewer is `ready with small edits` and the rest are `ready`; `ready` only if every ok reviewer is `ready`. If the primary reviewer fails, the round is recorded as a process failure (`merged_verdict: null`) regardless of sweeps.
 
 Checkpoint state (`first-round`, `final-ready`) is persisted in `chain.json` so sweeps fire once per chain.
 

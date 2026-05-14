@@ -180,13 +180,21 @@ _BUDGET_SECTIONS = [
 
 
 def _find_section_end(text: str, section_start: int) -> int:
-    """Return the offset where a section ends: next `\\n## ` heading, the
-    sentinel end marker, or end-of-text. Whichever comes first."""
+    """Return the offset where a section ends: the start of the next known
+    budget-section anchor, the sentinel end marker, or end-of-text —
+    whichever comes first.
+
+    Uses only the four known ``_BUDGET_SECTIONS`` patterns as boundaries
+    (not any ``\\n## `` heading) so that nested sub-headings inside a
+    section (e.g. ``### git diff base..HEAD`` inside "Changes since prior
+    round") do not prematurely terminate the section.
+    """
     import re
     candidates = []
-    m = re.search(r"\n## ", text[section_start:])
-    if m:
-        candidates.append(section_start + m.start())
+    for _, pattern, _ in _BUDGET_SECTIONS:
+        m = re.search(pattern, text[section_start:])
+        if m:
+            candidates.append(section_start + m.start())
     e = text.find(PROMPT_SENTINEL_END, section_start)
     if e != -1:
         candidates.append(e)
@@ -1033,7 +1041,7 @@ def compute_diff_section(
 
     parts = [
         f"Worktree status: {'dirty' if dirty else 'clean'}", "",
-        "## git diff base..HEAD", "",
+        "### git diff base..HEAD", "",
     ]
     parts.append(_cap_lines(diff_text, max_lines))
 
@@ -1042,11 +1050,11 @@ def compute_diff_section(
             ["git", "-C", str(root), "diff", "HEAD"] + (["--"] + paths if paths else []),
             text=True, capture_output=True,
         ).stdout
-        parts += ["", "## git diff HEAD (uncommitted)", "", _cap_lines(head_diff, max_lines)]
+        parts += ["", "### git diff HEAD (uncommitted)", "", _cap_lines(head_diff, max_lines)]
 
     untracked = [line[3:] for line in status.splitlines() if line.startswith("?? ")]
     if untracked:
-        parts += ["", "## Untracked files", ""]
+        parts += ["", "### Untracked files", ""]
         for i, rel in enumerate(untracked):
             if i >= UNTRACKED_FILE_LIMIT:
                 parts.append(
