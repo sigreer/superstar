@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "chain": "external-reviewer-redesign-external-reviewer-redesign-post-phase",
+  "kind": "post-phase",
+  "target": "docs/superstar/plans/2026-05-13-external-reviewer-redesign.md",
+  "work_id": "external-reviewer-redesign",
+  "legacy_migrated": false,
+  "rounds": [
+    {
+      "round": 1,
+      "reviewers": [
+        {
+          "role": "primary",
+          "sweep_group": null,
+          "parent_round": 1,
+          "request": "r1-2026-05-14T0426-request.md",
+          "response": "r1-2026-05-14T0426-response.md",
+          "verdict": "ready",
+          "verdict_valid": true
+        }
+      ],
+      "merged_verdict": "ready",
+      "merged_findings": null,
+      "request": "r1-2026-05-14T0426-request.md",
+      "response": "r1-2026-05-14T0426-response.md",
+      "resolution": null,
+      "resolution_parse_status": null,
+      "resolution_waiver": false,
+      "head_sha_at_request": "d86c23c68dd51b4cb39c9cd98d26a85998f4fb57",
+      "head_sha_after_round": "d86c23c68dd51b4cb39c9cd98d26a85998f4fb57",
+      "worktree_dirty_at_request": true,
+      "verdict": "ready",
+      "verdict_valid": true,
+      "findings_count": null,
+      "blocking_findings_count": null,
+      "base_ref": null,
+      "base_ref_source": null,
+      "diff_included": false
+    }
+  ],
+  "sweep_checkpoints": {
+    "first-round": "pending",
+    "final-ready": "pending"
+  }
+}

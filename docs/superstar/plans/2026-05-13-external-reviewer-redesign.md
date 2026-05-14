@@ -3156,3 +3156,21 @@ Both commits passed in-loop spec compliance and code-quality reviews via subagen
 **Post-slice review (round 1, S8 chain):** verdict `ready` with **no findings** — Slice 8 closes at round 1. Resolution stub at `docs/reviewer/external-reviewer-redesign-S8-post-slice/r1-resolution.md` (no fixes required). r1 chain artefacts (request, response, chain.json, resolution stub) committed as part of this commit.
 
 **Unrelated dirty files (out of Slice 8 scope, intentionally left untouched):** `CLAUDE.md`, `skills/executing-plans/SKILL.md`, `skills/finishing-a-development-branch/SKILL.md`, `skills/tasklist-discipline/SKILL.md` (authorised by the human partner to remain across Slice 1–8 closeouts).
+
+## Phase complete (2026-05-14)
+
+All 8 slices are closed. The phase post-review (`superstar:external-review --kind post-phase`) returned `ready` at round 1 with **no findings** — the phase gate closes at round 1.
+
+**Final test count:** `python3 -m pytest skills/external-review/tests/` → `97 passed`.
+
+**Slice closeout SHAs:**
+- Slice 1: `a90f7dd` external-review: S1 closeout edits + commit r4 chain artefacts
+- Slice 2: `f42f509` external-review: S2 close-out (judgment after r4)
+- Slice 3: `0327907` external-review: S3 close-out (judgment, no external review)
+- Slice 4: `d67f84b` external-review: S4 close-out (r2 ready with small edits)
+- Slice 5: `c512e8c` external-review: S5 close-out (r2 ready with small edits)
+- Slice 6: `e969bb5` external-review: S6 close-out (r2 ready)
+- Slice 7: `57cbb35` external-review: S7 close-out (r2 ready)
+- Slice 8: `d86c23c` external-review: S8 close-out (r1 ready)
+
+Phase post-review chain artefacts (request, response, `chain.json`, `r1-resolution.md`) committed alongside this note in the phase close-out commit. The external-reviewer-redesign phase is complete.
