@@ -51,6 +51,41 @@
       "base_ref": null,
       "base_ref_source": null,
       "diff_included": false
+    },
+    {
+      "round": 2,
+      "reviewers": [
+        {
+          "role": "primary",
+          "sweep_group": null,
+          "parent_round": 2,
+          "request": "r2-2026-05-14T1658-request.md",
+          "response": "r2-2026-05-14T1658-response.md",
+          "verdict": null,
+          "verdict_valid": false,
+          "returncode": 1,
+          "status": "failed"
+        }
+      ],
+      "status": "failed",
+      "returncode": 1,
+      "merged_verdict": null,
+      "merged_findings": null,
+      "request": "r2-2026-05-14T1658-request.md",
+      "response": "r2-2026-05-14T1658-response.md",
+      "resolution": "r1-resolution.md",
+      "resolution_parse_status": "ok",
+      "resolution_waiver": false,
+      "head_sha_at_request": "418feddad2e74c5bbb756656ed26e7ee3a01ead1",
+      "head_sha_after_round": "418feddad2e74c5bbb756656ed26e7ee3a01ead1",
+      "worktree_dirty_at_request": false,
+      "verdict": null,
+      "verdict_valid": false,
+      "findings_count": 0,
+      "blocking_findings_count": 0,
+      "base_ref": "b767c106af785b0cf8a6205e84af9c47fa9d3702",
+      "base_ref_source": "auto",
+      "diff_included": true
     }
   ],
   "sweep_checkpoints": {
