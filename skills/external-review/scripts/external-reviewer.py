@@ -1176,9 +1176,13 @@ def main() -> int:
                 "response": r.response_path.name,
                 "verdict": r.verdict,
                 "verdict_valid": r.verdict_valid,
+                "returncode": r.returncode,
+                "status": "ok" if r.returncode == 0 else "failed",
             }
             for r in reviewer_results
         ],
+        "status": "ok" if primary.returncode == 0 else "failed",
+        "returncode": primary.returncode,
         "merged_verdict": merged_verdict,
         "merged_findings": merged_path.name if merged_path else None,
         "request": primary.request_path.name,
@@ -1237,6 +1241,8 @@ def main() -> int:
                     "verdict_valid": r.verdict_valid,
                     "review_path": rel_or_abs(r.response_path, root),
                     "review": r.review_body,
+                    "returncode": r.returncode,
+                    "status": "ok" if r.returncode == 0 else "failed",
                 }
                 for r in reviewer_results
             ],
