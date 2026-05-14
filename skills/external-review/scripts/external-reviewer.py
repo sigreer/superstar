@@ -211,6 +211,9 @@ def apply_budget(text: str, budget_chars: int) -> str:
 
     Appends a `<!-- budget-applied: ... -->` HTML comment immediately before
     the end sentinel summarising trims.
+
+    Note: the final string may exceed `budget_chars` by up to ~200 bytes — the
+    trim loop fits content to the budget, then appends a diagnostic note.
     """
     import re
     if len(text) <= budget_chars:
@@ -967,10 +970,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--incremental-budget-chars",
         type=int, default=400_000,
-        help="Global cap on assembled prompt size for incremental rounds. "
-             "When exceeded, low-priority sections are trimmed first "
-             "(target preview, diff body, resolution body, prior findings) "
-             "before any user-required content. Default 400000.",
+        help="Target cap on assembled prompt size for incremental rounds. "
+             "Trims low-priority sections first; the final size is the trimmed "
+             "budget plus a small diagnostic note (`<!-- budget-applied: ... -->`, "
+             "~150 bytes). Default 400000.",
     )
     return parser.parse_args()
 

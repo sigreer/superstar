@@ -2662,7 +2662,7 @@ AGENT_REVIEWER_CMD="bash -c 'echo Overall verdict: ready'" \
 ls -la docs/reviewer/plan-plan/r2-*-request.md
 ```
 
-Expected: the round-2 request file is under 200 KB.
+Expected: the round-2 request file is under 200 KB. Observed at S2 close: r2 request was 84,854 bytes (well under the 200 KB ceiling).
 
 - [x] **Step 3: Commit any final fixes**
 
