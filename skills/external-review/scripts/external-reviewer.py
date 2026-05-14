@@ -150,9 +150,13 @@ def slugify(value: str) -> str:
 DATE_PREFIX_RE = re.compile(r"^\d{4}-\d{2}-\d{2}-")
 
 
-def chain_folder_name(target: Path, kind: str) -> str:
+def chain_folder_name(target: Path, kind: str, work_id: str | None = None) -> str:
     stem = DATE_PREFIX_RE.sub("", target.stem)
-    return f"{slugify(stem)}-{kind}"
+    base = slugify(stem)
+    if kind in ("post-slice", "post-phase") and work_id:
+        work_id_slug = work_id.replace(".", "-")
+        return f"{base}-{work_id_slug}-{kind}"
+    return f"{base}-{kind}"
 
 
 def next_round_number(chain_dir: Path) -> int:
@@ -377,14 +381,14 @@ def main() -> int:
             return 2
         context.append(path)
 
-    chain_dir = (root / args.output_dir / chain_folder_name(target, args.kind)).resolve()
+    chain_dir = (root / args.output_dir / chain_folder_name(target, args.kind, args.work_id)).resolve()
     chain_dir.mkdir(parents=True, exist_ok=True)
     manifest_path = chain_dir / "chain.json"
     manifest = read_manifest(manifest_path)
     if manifest is None and any(chain_dir.glob("r*-*-request.md")):
         manifest = synthesize_legacy_manifest(
             chain_dir=chain_dir,
-            chain=chain_folder_name(target, args.kind),
+            chain=chain_folder_name(target, args.kind, args.work_id),
             kind=args.kind,
             target=rel_or_abs(target, root),
             work_id=None,
@@ -393,7 +397,7 @@ def main() -> int:
     if manifest is None:
         manifest = {
             "schema_version": SUPPORTED_SCHEMA_VERSION,
-            "chain": chain_folder_name(target, args.kind),
+            "chain": chain_folder_name(target, args.kind, args.work_id),
             "kind": args.kind,
             "target": rel_or_abs(target, root),
             "work_id": None,
