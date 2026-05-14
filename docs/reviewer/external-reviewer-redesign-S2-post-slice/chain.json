@@ -24,7 +24,7 @@
       "round": 2,
       "request": "r2-2026-05-14T0228-request.md",
       "response": "r2-2026-05-14T0228-response.md",
-      "resolution": null,
+      "resolution": "r2-resolution.md",
       "head_sha_at_request": "1df15e3d0f4fb8c927b7b5cc00135e0e68c9fb2f",
       "head_sha_after_round": "1df15e3d0f4fb8c927b7b5cc00135e0e68c9fb2f",
       "worktree_dirty_at_request": true,
