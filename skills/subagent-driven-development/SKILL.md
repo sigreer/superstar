@@ -28,12 +28,21 @@ Execute plan by dispatching fresh subagent per task, with two-stage in-loop revi
 
 ## Slice and phase boundaries
 
-Plans are organised into **slices** (and slices into **tasks**) per `[[tasklist-discipline]]`. The coordinator tracks slice and phase boundaries explicitly:
+Plans are organised into **slices** (and slices into **tasks**) per `[[tasklist-discipline]]`. The coordinator tracks slice and phase boundaries explicitly.
 
-- **At the end of each slice** (all the slice's tasks closed, in-loop reviews passed):
+**Two reviews, two scopes — do not conflate them:**
+
+| Review | Scope | Reviewer | When | Gate? |
+|---|---|---|---|---|
+| Internal (`[[requesting-internal-review]]`) | Per task | In-session subagent (spec compliance, then code quality) | After each task | Gates task close |
+| External (`[[external-review]]`) | Per slice and per phase | Out-of-loop third-party CLI | At slice and phase boundaries | Gates slice/phase close |
+
+The per-task internal reviews approving every task in a slice **does not** satisfy the slice-boundary external review. They have different scopes (one task vs. the whole slice) and different reviewers. Both are required.
+
+- **At the end of each slice** (all the slice's tasks closed, in-loop internal reviews passed):
   1. Invoke `[[external-review]]` with `--kind post-slice`, passing the plan as `--file` and the spec + TASKLIST.md as `--context`.
   2. Read the verdict. On `ready` / `ready with small edits`, proceed.
-  3. On `revise`, **dispatch a fix subagent** with the response file as input. Wait for completion. Re-submit. Iterate.
+  3. On `merged_verdict: revise` (or `verdict_valid: false`), **dispatch a fix subagent** with the previous response file as input. The fix subagent MUST write `docs/reviewer/<chain>/r{N}-resolution.md` per the contract in `[[external-review]]` before signaling completion. Wait for completion. Re-submit. Iterate.
   4. Once the verdict gates pass, flip the slice's status in TASKLIST.md per `[[tasklist-discipline]]`.
 
 - **At the end of the phase** (the last slice in the phase closes):
@@ -89,6 +98,16 @@ digraph process {
     }
 
     "Read plan, extract all tasks with full text, note context, create TodoWrite" [shape=box];
+    "Last task in slice?" [shape=diamond];
+    "Invoke external-review --kind post-slice" [shape=box style=filled fillcolor=lightyellow];
+    "post-slice verdict ready?" [shape=diamond];
+    "Dispatch fix subagent with reviewer response" [shape=box];
+    "Flip slice status per tasklist-discipline" [shape=box];
+    "Last slice in phase?" [shape=diamond];
+    "Invoke external-review --kind post-phase" [shape=box style=filled fillcolor=lightyellow];
+    "post-phase verdict ready?" [shape=diamond];
+    "Dispatch fix subagent (post-phase findings)" [shape=box];
+    "Archive phase per tasklist-discipline" [shape=box];
     "More tasks remain?" [shape=diamond];
     "Dispatch final code reviewer subagent for entire implementation" [shape=box];
     "Use superstar:finishing-a-development-branch" [shape=box style=filled fillcolor=lightgreen];
@@ -107,7 +126,21 @@ digraph process {
     "Code quality reviewer subagent approves?" -> "Implementer subagent fixes quality issues" [label="no"];
     "Implementer subagent fixes quality issues" -> "Dispatch code quality reviewer subagent (./code-quality-reviewer-prompt.md)" [label="re-review"];
     "Code quality reviewer subagent approves?" -> "Mark task complete in TodoWrite" [label="yes"];
-    "Mark task complete in TodoWrite" -> "More tasks remain?";
+    "Mark task complete in TodoWrite" -> "Last task in slice?";
+    "Last task in slice?" -> "More tasks remain?" [label="no"];
+    "Last task in slice?" -> "Invoke external-review --kind post-slice" [label="yes"];
+    "Invoke external-review --kind post-slice" -> "post-slice verdict ready?";
+    "post-slice verdict ready?" -> "Dispatch fix subagent with reviewer response" [label="revise"];
+    "Dispatch fix subagent with reviewer response" -> "Invoke external-review --kind post-slice" [label="re-submit"];
+    "post-slice verdict ready?" -> "Flip slice status per tasklist-discipline" [label="ready"];
+    "Flip slice status per tasklist-discipline" -> "Last slice in phase?";
+    "Last slice in phase?" -> "More tasks remain?" [label="no"];
+    "Last slice in phase?" -> "Invoke external-review --kind post-phase" [label="yes"];
+    "Invoke external-review --kind post-phase" -> "post-phase verdict ready?";
+    "post-phase verdict ready?" -> "Dispatch fix subagent (post-phase findings)" [label="revise"];
+    "Dispatch fix subagent (post-phase findings)" -> "Invoke external-review --kind post-phase" [label="re-submit"];
+    "post-phase verdict ready?" -> "Archive phase per tasklist-discipline" [label="ready"];
+    "Archive phase per tasklist-discipline" -> "More tasks remain?";
     "More tasks remain?" -> "Dispatch implementer subagent (./implementer-prompt.md)" [label="yes"];
     "More tasks remain?" -> "Dispatch final code reviewer subagent for entire implementation" [label="no"];
     "Dispatch final code reviewer subagent for entire implementation" -> "Use superstar:finishing-a-development-branch";
@@ -272,6 +305,7 @@ Done!
 | "I'll read the file to figure out what's wrong before delegating"         | No. Dispatch an investigator subagent and wait for the summary.        |
 | "It's just a one-line change, no need to delegate"                        | Bar is *strictly cheaper than delegating*. When in doubt, delegate.    |
 | "I'll skip post-slice review on this one, it's a small slice"             | No. Slice boundary is a gate. Run `[[external-review]] --kind post-slice`.|
+| "I'll resubmit without the resolution file, the reviewer will figure it out" | No. Post-slice/post-phase round N+1 exits 3 without `r{N-1}-resolution.md` or `--allow-missing-resolution`. |
 
 **Process reds (also never):**
 - Start implementation on main/master branch without explicit user consent
