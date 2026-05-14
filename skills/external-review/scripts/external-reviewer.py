@@ -228,6 +228,22 @@ def numbered_preview(path: Path, root: Path, max_lines: int) -> str:
     return "\n".join(rendered)
 
 
+def default_diff_paths(
+    kind: str, target: Path, context: list, root: Path
+) -> list | None:
+    """Default scope for embedded diffs.
+
+    Broad (all tracked changes) for post-slice/post-phase; for everything
+    else, restrict to the target document plus any context files.
+    """
+    if kind in ("post-slice", "post-phase"):
+        return None
+    paths = [rel_or_abs(target, root)]
+    for c in context:
+        paths.append(rel_or_abs(c, root))
+    return paths
+
+
 def build_incremental_preamble(
     *,
     manifest: dict,
@@ -235,6 +251,7 @@ def build_incremental_preamble(
     round_num: int,
     resolution_waiver: bool,
     legacy_first_round: bool,
+    diff_section: str = "",
 ) -> str:
     chain = manifest.get("chain", "<unknown chain>")
     prior_rounds = manifest.get("rounds", [])
@@ -291,6 +308,10 @@ Prior-round findings ({prior_source}):
 Resolution report for prior round:
 
 {resolution_text}
+
+Changes since prior round:
+
+{diff_section or 'Changes since prior round: not available for this round.'}
 """
 
 
@@ -463,6 +484,28 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--timeout", type=int, default=900)
     parser.add_argument("--max-lines", type=int, default=600)
+    parser.add_argument(
+        "--base-ref",
+        default=None,
+        help="Override auto-computed diff base for this round.",
+    )
+    parser.add_argument(
+        "--no-diff",
+        action="store_true",
+        help="Suppress diff embedding in incremental rounds.",
+    )
+    parser.add_argument(
+        "--changed-files",
+        nargs="+",
+        default=None,
+        help="Limit embedded diff to these paths (overrides auto discovery).",
+    )
+    parser.add_argument(
+        "--max-diff-lines",
+        type=int,
+        default=2000,
+        help="Cap diff size. Truncation marker is embedded if exceeded.",
+    )
     parser.add_argument(
         "--emit",
         choices=["paths", "review", "json"],
@@ -670,6 +713,30 @@ def main() -> int:
     )
 
     mode = resolve_mode(args.mode, round_num=round_num)
+    diff_section = ""
+    base_ref: str | None = None
+    base_source: str | None = None
+    if mode == "incremental":
+        if args.no_diff:
+            diff_section = "Changes since prior round: diff suppressed via --no-diff.\n"
+            base_ref = None
+            base_source = "suppressed"
+        else:
+            if args.base_ref:
+                base_ref = args.base_ref
+                base_source = "explicit"
+            else:
+                prior_with_sha = next(
+                    (r for r in reversed(manifest["rounds"]) if r.get("head_sha_after_round")),
+                    None,
+                )
+                base_ref = prior_with_sha["head_sha_after_round"] if prior_with_sha else None
+                base_source = "auto" if base_ref else "unavailable"
+            paths = args.changed_files or default_diff_paths(args.kind, target, context, root)
+            diff_section = compute_diff_section(
+                root, base_ref=base_ref, paths=paths, max_lines=args.max_diff_lines,
+            )
+
     incremental_preamble = None
     if mode == "incremental":
         incremental_preamble = build_incremental_preamble(
@@ -681,6 +748,7 @@ def main() -> int:
                 manifest.get("legacy_migrated", False)
                 and not any(r.get("head_sha_after_round") for r in manifest["rounds"])
             ),
+            diff_section=diff_section,
         )
 
     prompt_text = make_prompt(
@@ -737,6 +805,9 @@ def main() -> int:
         "verdict_valid": verdict_valid,
         "findings_count": findings_count,
         "blocking_findings_count": blocking_count,
+        "base_ref": base_ref,
+        "base_ref_source": base_source,
+        "diff_included": bool(diff_section) and not args.no_diff,
     }
     manifest["rounds"].append(round_entry)
     write_manifest(manifest_path, manifest)
@@ -765,6 +836,8 @@ def main() -> int:
             "blocking_findings_count": blocking_count,
             "resolution_parse_status": resolution_parse,
             "resolution_waiver": resolution_waiver,
+            "diff_included": round_entry["diff_included"],
+            "base_ref": base_ref,
             "review_depth": "standard",
             "reviewers": [{
                 "role": "primary",
