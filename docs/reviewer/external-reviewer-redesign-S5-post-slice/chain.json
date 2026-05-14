@@ -23,6 +23,24 @@
       "base_ref": null,
       "base_ref_source": null,
       "diff_included": false
+    },
+    {
+      "round": 2,
+      "request": "r2-2026-05-14T0340-request.md",
+      "response": "r2-2026-05-14T0340-response.md",
+      "resolution": "r1-resolution.md",
+      "resolution_parse_status": "ok",
+      "resolution_waiver": false,
+      "head_sha_at_request": "1d0cad89721466f219a22a80e263e0ec9fb1bfe4",
+      "head_sha_after_round": "1d0cad89721466f219a22a80e263e0ec9fb1bfe4",
+      "worktree_dirty_at_request": true,
+      "verdict": "ready with small edits",
+      "verdict_valid": true,
+      "findings_count": 3,
+      "blocking_findings_count": 1,
+      "base_ref": "1934627cb9b0c6760dcb695b7e925ad781f43005",
+      "base_ref_source": "auto",
+      "diff_included": true
     }
   ],
   "sweep_checkpoints": {
