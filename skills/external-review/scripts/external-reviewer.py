@@ -512,6 +512,14 @@ CRASH_SENTINEL_RE = re.compile(
     r"^(?:reviewer crashed|status\s*:\s*reviewer crashed)",
     re.IGNORECASE | re.MULTILINE,
 )
+# Recognised "explicit empty findings" markers. A reviewer that clearly
+# declares zero findings (e.g. "## Findings\nnone" or "Findings: none") is
+# parseable as (0, 0); anything else with no F-IDs is unparseable -> (None, None).
+EMPTY_FINDINGS_RE = re.compile(
+    r"(?:^##\s*Findings\s*\n+\s*(?:none|no findings|n/?a)\b"
+    r"|^findings\s*:\s*(?:none|no findings|n/?a|0|zero)\b)",
+    re.IGNORECASE | re.MULTILINE,
+)
 
 
 def _collect_findings(text: str) -> tuple[dict[str, bool], str]:
@@ -549,20 +557,32 @@ def _collect_findings(text: str) -> tuple[dict[str, bool], str]:
 
 
 def parse_findings(text: str) -> tuple[int | None, int | None]:
+    """Return (findings_count, blocking_findings_count) per spec.
+
+    Per docs/superstar/specs/2026-05-13-external-reviewer-redesign-design.md
+    (Finding-count parsing): if no accepted finding form matches AND no
+    explicit-empty marker is present, both counts are ``None`` and the
+    coordinator inspects prose. A crash sentinel also yields ``(None, None)``.
+    """
     if not text or text.strip() == "":
         return None, None
-    findings, style = _collect_findings(text)
-    # Crash sentinel only fires when no findings parsed AND the phrase appears
-    # at the start of a line (not buried in quoted/embedded content).
-    if not findings and CRASH_SENTINEL_RE.search(text):
+    # Crash sentinel short-circuits before everything else.
+    if CRASH_SENTINEL_RE.search(text):
         return None, None
-    n = len(findings)
-    blocking = sum(1 for v in findings.values() if v)
-    if style == "heading":
-        # Heading style has no severity inline; fall back to severity-line
-        # markers within the body.
-        blocking = len(SEVERITY_BLOCKING_RE.findall(text))
-    return n, blocking
+    findings, style = _collect_findings(text)
+    if findings:
+        n = len(findings)
+        blocking = sum(1 for v in findings.values() if v)
+        if style == "heading":
+            # Heading style has no severity inline; fall back to severity-line
+            # markers within the body.
+            blocking = len(SEVERITY_BLOCKING_RE.findall(text))
+        return n, blocking
+    # No finding form matched. Honor explicit "no findings" declarations as
+    # (0, 0); otherwise the response is unparseable for finding-count purposes.
+    if EMPTY_FINDINGS_RE.search(text):
+        return 0, 0
+    return None, None
 
 
 LEGACY_ROUND_FILE_RE = re.compile(r"^r(\d+)-([0-9T\-]+)-(request|response)\.md$")

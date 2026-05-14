@@ -20,14 +20,30 @@ def test_bullet_findings_counted():
     assert blocking == 1
 
 
-def test_no_findings_returns_zero():
-    body = "Overall verdict: ready\n\nNo findings."
+def test_explicit_empty_findings_heading_returns_zero():
+    body = "## Findings\nnone\n\nOverall verdict: ready"
     n, blocking = er.parse_findings(body)
     assert n == 0
     assert blocking == 0
 
 
-def test_unparseable_returns_none():
+def test_explicit_findings_none_inline_returns_zero():
+    body = "Findings: none\n\nOverall verdict: ready"
+    n, blocking = er.parse_findings(body)
+    assert n == 0
+    assert blocking == 0
+
+
+def test_prose_without_finding_ids_returns_none():
+    # Per spec: body present, no crash sentinel, no recognised finding form,
+    # no explicit-empty marker -> unparseable -> coordinator inspects prose.
+    body = "This response has prose but no F IDs. Overall verdict: revise"
+    n, blocking = er.parse_findings(body)
+    assert n is None
+    assert blocking is None
+
+
+def test_crash_sentinel_returns_none():
     body = "Reviewer crashed: connection reset"
     n, blocking = er.parse_findings(body)
     assert n is None
