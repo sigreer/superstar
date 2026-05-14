@@ -898,6 +898,18 @@ def write_rate_limited_artifact(
 EXIT_CODE_RATE_LIMITED = 8
 
 
+class ReviewerRateLimited(Exception):
+    def __init__(self, *, reviewer_cmd, reset_at, reset_source, chain, round_num, request_path, raw_stderr_tail):
+        super().__init__(f"Reviewer {reviewer_cmd} rate-limited until {reset_at}")
+        self.reviewer_cmd = reviewer_cmd
+        self.reset_at = reset_at
+        self.reset_source = reset_source
+        self.chain = chain
+        self.round_num = round_num
+        self.request_path = request_path
+        self.raw_stderr_tail = raw_stderr_tail
+
+
 def make_rate_limit_payload(
     *,
     reviewer_cmd: str,
@@ -982,6 +994,53 @@ def run_one_reviewer(
         previous_response=previous_response, resolution_file=resolution_file,
         session_file=session_file,
     )
+    # Rate-limit detection — runs only on non-zero exit
+    if result.returncode != 0:
+        matched, reset_at, pattern_name = detect_rate_limit(result.stderr or "")
+        if matched:
+            reset_at_iso = (reset_at or _fallback_reset_time()).isoformat(timespec="seconds")
+            state = load_state()
+            key = reviewer_cmd_basename()
+            state["limits"][key] = {
+                "limited": True,
+                "limited_at": _now_local().isoformat(timespec="seconds"),
+                "reset_at": reset_at_iso,
+                "reset_source": f"regex:{pattern_name}" if pattern_name else "fallback",
+                "raw_stderr_tail": (result.stderr or "")[-2048:],
+                "chain": chain_dir.name,
+                "round": round_num,
+            }
+            save_state(state)
+            artifact_path = write_rate_limited_artifact(
+                chain_dir=chain_dir, round_num=round_num, timestamp=timestamp,
+                reviewer_cmd=key, reset_at=reset_at_iso,
+                raw_stderr_tail=result.stderr or "",
+            )
+            # F3: chain.json is guaranteed to exist (Task 2.0 eager-write).
+            _manifest_path = chain_dir / "chain.json"
+            _manifest = read_manifest(_manifest_path)
+            new_round = {
+                "round": round_num,
+                "status": "rate-limited",
+                "returncode": None,
+                "verdict": None,
+                "verdict_valid": False,
+                "merged_verdict": None,
+                "reset_at": reset_at_iso,
+                "reviewer_cmd": key,
+                "request": request_path.name,
+                "response": artifact_path.name,
+                "limited_at": _now_local().isoformat(timespec="seconds"),
+            }
+            _manifest["rounds"].append(new_round)
+            write_manifest(_manifest_path, _manifest)
+            raise ReviewerRateLimited(
+                reviewer_cmd=key, reset_at=reset_at_iso,
+                reset_source=f"regex:{pattern_name}" if pattern_name else "fallback",
+                chain=chain_dir.name, round_num=round_num,
+                request_path=str(request_path),
+                raw_stderr_tail=result.stderr or "",
+            )
     write_review_artifact(
         root=root, target=target, kind=args.kind,
         command_template=args.reviewer_cmd,
@@ -1616,6 +1675,17 @@ def main() -> int:
     except subprocess.TimeoutExpired:
         print(f"ERROR: reviewer command timed out after {args.timeout}s", file=sys.stderr)
         return 124
+    except ReviewerRateLimited as exc:
+        payload = make_rate_limit_payload(
+            reviewer_cmd=exc.reviewer_cmd, reset_at=exc.reset_at,
+            reset_source=exc.reset_source, chain=exc.chain, round_num=exc.round_num,
+            request_path=exc.request_path, raw_stderr_tail=exc.raw_stderr_tail,
+        )
+        if args.emit == "json":
+            print(json.dumps(payload, indent=2))
+        else:
+            print(f"Reviewer rate-limited until {exc.reset_at}. See {exc.request_path}.")
+        return EXIT_CODE_RATE_LIMITED
 
     reviewer_results = [primary] + sweeps
     if sweeps:

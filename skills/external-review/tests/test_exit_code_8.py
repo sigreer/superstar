@@ -1,4 +1,6 @@
 import json
+import os
+import subprocess
 from pathlib import Path
 import sys, importlib.util
 import pytest
@@ -44,3 +46,46 @@ def test_rate_limit_payload_serialises_to_json():
     )
     s = json.dumps(payload)
     assert "rate_limited" in s
+
+
+def test_failed_reviewer_with_rate_limit_stderr_triggers_state_write(tmp_path, monkeypatch):
+    """A reviewer subprocess that exits non-zero with rate-limit stderr must:
+       - cause the script to exit 8
+       - write a state entry
+       - emit the rate-limit JSON payload on stdout
+    """
+    repo = tmp_path / "repo"; repo.mkdir()
+    subprocess.run(["git", "-C", str(repo), "init", "-q"], check=True)
+    subprocess.run(["git", "-C", str(repo), "config", "user.email", "t@t"], check=True)
+    subprocess.run(["git", "-C", str(repo), "config", "user.name", "T"], check=True)
+    (repo / "plan.md").write_text("# plan\nbody\n")
+    subprocess.run(["git", "-C", str(repo), "add", "plan.md"], check=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-q", "-m", "init"], check=True)
+
+    # Reviewer simulator: prints rate-limit error to stderr, exits 1.
+    reviewer = repo / "fake.sh"
+    reviewer.write_text(
+        "#!/usr/bin/env bash\n"
+        "echo \"ERROR: You've hit your usage limit. Try again at 6:48 PM.\" >&2\n"
+        "exit 1\n"
+    )
+    reviewer.chmod(0o755)
+
+    state_file = tmp_path / "state.json"
+    env = os.environ.copy()
+    env["AGENT_REVIEWER_CMD"] = str(reviewer)
+    env["AGENT_REVIEWER_STATE_FILE"] = str(state_file)
+
+    proc = subprocess.run(
+        [sys.executable, str(SCRIPTS / "external-reviewer.py"),
+         "review", "--kind", "plan", "--file", "plan.md", "--emit", "json"],
+        cwd=repo, env=env, capture_output=True, text=True, timeout=30,
+    )
+    assert proc.returncode == er.EXIT_CODE_RATE_LIMITED, proc.stderr
+    payload = json.loads(proc.stdout)
+    assert payload["rate_limited"] is True
+    assert "reset_at" in payload
+    # State file written
+    state = json.loads(state_file.read_text())
+    key = str(reviewer)
+    assert state["limits"][key]["limited"] is True
