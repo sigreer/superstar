@@ -2752,7 +2752,7 @@ git commit -m "test(external-reviewer): gate fires on merged_verdict=revise from
 **Files:**
 - Modify: `skills/external-review/SKILL.md`
 
-- [ ] **Step 1: Update the "How a round runs" block**
+- [x] **Step 1: Update the "How a round runs" block**
 
 Replace the existing example with:
 
@@ -2775,7 +2775,7 @@ python3 scripts/external-reviewer.py review \
 - `--emit json` returns the structured payload described in "Reading the response". Always use `--emit json` from this skill — agents consume the JSON, not paths or human prose.
 ````
 
-- [ ] **Step 2: Replace the "Reading the response" section**
+- [x] **Step 2: Replace the "Reading the response" section**
 
 ````markdown
 ## Reading the response
@@ -2791,7 +2791,7 @@ The JSON output (always use `--emit json`) is the source of truth. Agents MUST c
 Verdict values: `ready`, `ready with small edits`, `revise` (or `null` if unparseable).
 ````
 
-- [ ] **Step 3: Add a "Round mode" section**
+- [x] **Step 3: Add a "Round mode" section**
 
 ````markdown
 ## Round mode
@@ -2802,7 +2802,7 @@ Verdict values: `ready`, `ready with small edits`, `revise` (or `null` if unpars
 - `--mode incremental` on round 1 is rejected.
 ````
 
-- [ ] **Step 4: Add a "Review depth" section**
+- [x] **Step 4: Add a "Review depth" section**
 
 ````markdown
 ## Review depth
@@ -2818,7 +2818,7 @@ Sweep reviewers do not see the primary reviewer's findings on their first pass (
 Checkpoint state (`first-round`, `final-ready`) is persisted in `chain.json` so sweeps fire once per chain.
 ````
 
-- [ ] **Step 5: Add the "Resolution artifact" section**
+- [x] **Step 5: Add the "Resolution artifact" section**
 
 ````markdown
 ## Resolution artifact
@@ -2851,7 +2851,7 @@ Status: ...
 Parse failures soft-fail: `resolution_parse_status: partial` or `unparseable` is reported in the JSON, but the reviewer still receives the prose verbatim in the next round's prompt.
 ````
 
-- [ ] **Step 6: Update the "Exit codes" table**
+- [x] **Step 6: Update the "Exit codes" table**
 
 ````markdown
 ## Exit codes
@@ -2868,7 +2868,7 @@ Parse failures soft-fail: `resolution_parse_status: partial` or `unparseable` is
 | other | Reviewer's own non-zero exit. | A response file was still written. Read it and surface the issue. |
 ````
 
-- [ ] **Step 7: Add a "Chain manifest" section**
+- [x] **Step 7: Add a "Chain manifest" section**
 
 ````markdown
 ## Chain manifest
@@ -2878,7 +2878,7 @@ Each chain folder contains a `chain.json` manifest that records every round's me
 **Invariant:** a review chain is single-writer. Do not run two rounds concurrently against the same chain — `chain.json` is not locked and may be corrupted.
 ````
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add skills/external-review/SKILL.md
@@ -2890,7 +2890,7 @@ git commit -m "docs(external-review): SKILL.md for work-id/manifest/depth/resolu
 **Files:**
 - Modify: `skills/subagent-driven-development/SKILL.md`
 
-- [ ] **Step 1: Strengthen the fix-subagent contract**
+- [x] **Step 1: Strengthen the fix-subagent contract**
 
 Find the "Slice and phase boundaries" section. Replace the bullet describing the fix-subagent dispatch with:
 
@@ -2898,13 +2898,13 @@ Find the "Slice and phase boundaries" section. Replace the bullet describing the
 3. On `merged_verdict: revise` (or `verdict_valid: false`), **dispatch a fix subagent** with the previous response file as input. The fix subagent MUST write `docs/reviewer/<chain>/r{N}-resolution.md` per the contract in `[[external-review]]` before signaling completion. Wait for completion. Re-submit. Iterate.
 ```
 
-- [ ] **Step 2: Add a row to the Red Flags table**
+- [x] **Step 2: Add a row to the Red Flags table**
 
 ```markdown
 | "I'll resubmit without the resolution file, the reviewer will figure it out" | No. Post-slice/post-phase round N+1 exits 3 without `r{N-1}-resolution.md` or `--allow-missing-resolution`. |
 ```
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add skills/subagent-driven-development/SKILL.md
@@ -3141,3 +3141,18 @@ Both commits passed in-loop spec compliance and code-quality reviews via subagen
 **Unrelated dirty files (out of Slice 7 scope, intentionally left untouched):** `CLAUDE.md`, `skills/executing-plans/SKILL.md`, `skills/finishing-a-development-branch/SKILL.md`, `skills/subagent-driven-development/SKILL.md`, `skills/tasklist-discipline/SKILL.md` (authorised by the human partner to remain across Slice 1–7 closeouts).
 
 **Post-slice review (round 2, S7 chain) — final close-out:** verdict `ready` with **no required edits**. All four round-1 findings (F1 sweep planning ordering, F2 placeholder plumbing regression, F3 plan checkboxes, F4 dirty tree + `main` branch) confirmed RESOLVED by the reviewer. Resolution at `docs/reviewer/external-reviewer-redesign-S7-post-slice/r2-resolution.md`. The Slice 7 post-slice gate passes at round 2 and Slice 7 is closed.
+
+## Slice 8 closeout note (2026-05-14)
+
+**Commits comprising Slice 8:**
+- `e2369de` Task 8.1 — `external-review/SKILL.md` updates for work-id, manifest, depth, resolution, incremental flow.
+- `466505b` Task 8.2 — `subagent-driven-development/SKILL.md` fix-subagent contract + Red Flags row for the `rN-resolution.md` requirement.
+- `2429201` Task 8.1 follow-up — exit-code table correction.
+
+**Final test result:** `python3 -m pytest skills/external-review/tests/` → `97 passed`.
+
+**Pre-flight branch check:** standing override applies — Slice 8 was developed on `main` per the human-partner authorisation recorded at the Slice 4 closeout.
+
+**Post-slice review (round 1, S8 chain):** verdict `ready` with **no findings** — Slice 8 closes at round 1. Resolution stub at `docs/reviewer/external-reviewer-redesign-S8-post-slice/r1-resolution.md` (no fixes required). r1 chain artefacts (request, response, chain.json, resolution stub) committed as part of this commit.
+
+**Unrelated dirty files (out of Slice 8 scope, intentionally left untouched):** `CLAUDE.md`, `skills/executing-plans/SKILL.md`, `skills/finishing-a-development-branch/SKILL.md`, `skills/tasklist-discipline/SKILL.md` (authorised by the human partner to remain across Slice 1–8 closeouts).
