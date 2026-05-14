@@ -1833,7 +1833,7 @@ Independent correctness of S1 must hold before this slice begins. The diet is pu
 - Modify: `skills/external-review/scripts/external-reviewer.py` (`make_prompt`)
 - Create: `skills/external-review/tests/test_incremental_drops_context.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `skills/external-review/tests/test_incremental_drops_context.py`:
 
@@ -1881,12 +1881,12 @@ def test_incremental_mode_excludes_context_previews(tmp_path, monkeypatch):
     assert "TASKLIST.md" in out
 ```
 
-- [ ] **Step 2: Run tests to verify the incremental one fails**
+- [x] **Step 2: Run tests to verify the incremental one fails**
 
 Run: `python3 -m pytest skills/external-review/tests/test_incremental_drops_context.py -v`
 Expected: `test_broad_mode_includes_context_previews` passes; `test_incremental_mode_excludes_context_previews` fails.
 
-- [ ] **Step 3: Skip the block on incremental**
+- [x] **Step 3: Skip the block on incremental**
 
 In `skills/external-review/scripts/external-reviewer.py`, find in `make_prompt`:
 
@@ -1906,12 +1906,12 @@ Replace with:
             body += numbered_preview(ctx, root, max_lines=max(80, max_lines // 3))
 ```
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 Run: `python3 -m pytest skills/external-review/tests/test_incremental_drops_context.py skills/external-review/tests/test_prompt_contract.py -v`
 Expected: all pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add skills/external-review/scripts/external-reviewer.py \
@@ -1925,7 +1925,7 @@ git commit -m "external-reviewer: drop context previews on incremental rounds"
 - Modify: `skills/external-review/scripts/external-reviewer.py` (`make_prompt`)
 - Create: `skills/external-review/tests/test_target_preview_trim.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `skills/external-review/tests/test_target_preview_trim.py`:
 
@@ -1968,12 +1968,12 @@ def test_incremental_mode_target_preview_trimmed_to_150(tmp_path, monkeypatch):
     assert "line 200" not in out  # past 150-line trim
 ```
 
-- [ ] **Step 2: Run tests**
+- [x] **Step 2: Run tests**
 
 Run: `python3 -m pytest skills/external-review/tests/test_target_preview_trim.py -v`
 Expected: `test_incremental_mode_target_preview_trimmed_to_150` fails (current code uses full `max_lines` regardless of mode).
 
-- [ ] **Step 3: Apply the trim**
+- [x] **Step 3: Apply the trim**
 
 In `skills/external-review/scripts/external-reviewer.py`, find:
 
@@ -1990,12 +1990,12 @@ Replace with:
     body += numbered_preview(target, root, max_lines=effective_target_max)
 ```
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 Run: `python3 -m pytest skills/external-review/tests/test_target_preview_trim.py -v`
 Expected: both pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add skills/external-review/scripts/external-reviewer.py \
@@ -2009,7 +2009,7 @@ git commit -m "external-reviewer: trim target preview to 150 lines on incrementa
 - Modify: `skills/external-review/scripts/external-reviewer.py` (`build_incremental_preamble`)
 - Create: `skills/external-review/tests/test_prior_text_caps.py`
 
-- [ ] **Step 1: Add the cap helper**
+- [x] **Step 1: Add the cap helper**
 
 In `skills/external-review/scripts/external-reviewer.py`, immediately after the `strip_prompt_echo` function added in Task 1.1, add:
 
@@ -2036,7 +2036,7 @@ def cap_with_elision(text: str, max_bytes: int = 80 * 1024) -> str:
     return head + marker + tail
 ```
 
-- [ ] **Step 2: Write the failing test**
+- [x] **Step 2: Write the failing test**
 
 Create `skills/external-review/tests/test_prior_text_caps.py`:
 
@@ -2090,12 +2090,12 @@ def test_preamble_caps_prior_response_text(tmp_path):
     assert "bytes elided" in out
 ```
 
-- [ ] **Step 3: Run tests to verify the preamble-cap test fails**
+- [x] **Step 3: Run tests to verify the preamble-cap test fails**
 
 Run: `python3 -m pytest skills/external-review/tests/test_prior_text_caps.py -v`
 Expected: the cap helper tests pass; the preamble integration test fails (the preamble does not yet apply the cap).
 
-- [ ] **Step 4: Apply the cap in build_incremental_preamble**
+- [x] **Step 4: Apply the cap in build_incremental_preamble**
 
 In `build_incremental_preamble`, find the three places that read text whole (the merged-findings/response read added in Task 1.10, and the resolution read). Wrap each read with `cap_with_elision`:
 
@@ -2135,12 +2135,12 @@ And the resolution block (originally around lines 287-298 of the script):
 
 (Keep the existing `elif` branches unchanged.)
 
-- [ ] **Step 5: Run tests**
+- [x] **Step 5: Run tests**
 
 Run: `python3 -m pytest skills/external-review/tests/test_prior_text_caps.py skills/external-review/tests/test_preamble_skips_failed.py -v`
 Expected: all pass.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add skills/external-review/scripts/external-reviewer.py \
@@ -2154,7 +2154,7 @@ git commit -m "external-reviewer: cap prior-text reads with head+tail elision"
 - Modify: `skills/external-review/scripts/external-reviewer.py` (argparse, `make_prompt`)
 - Create: `skills/external-review/tests/test_incremental_budget.py`
 
-- [ ] **Step 1: Add the budget flag**
+- [x] **Step 1: Add the budget flag**
 
 In `skills/external-review/scripts/external-reviewer.py`, in the argparse setup (around lines 620-700), add:
 
@@ -2169,7 +2169,7 @@ In `skills/external-review/scripts/external-reviewer.py`, in the argparse setup 
     )
 ```
 
-- [ ] **Step 2: Write the failing test**
+- [x] **Step 2: Write the failing test**
 
 Create `skills/external-review/tests/test_incremental_budget.py`:
 
@@ -2217,12 +2217,12 @@ def test_apply_budget_passthrough_under_cap():
     assert er.apply_budget(body, budget_chars=10_000) == body
 ```
 
-- [ ] **Step 3: Run tests to verify they fail**
+- [x] **Step 3: Run tests to verify they fail**
 
 Run: `python3 -m pytest skills/external-review/tests/test_incremental_budget.py -v`
 Expected: failure — `apply_budget` does not exist yet.
 
-- [ ] **Step 4: Implement apply_budget**
+- [x] **Step 4: Implement apply_budget**
 
 In `skills/external-review/scripts/external-reviewer.py`, add immediately after the `cap_with_elision` function:
 
@@ -2316,7 +2316,7 @@ def apply_budget(text: str, budget_chars: int) -> str:
     return out
 ```
 
-- [ ] **Step 5: Wire apply_budget through make_prompt as a real parameter**
+- [x] **Step 5: Wire apply_budget through make_prompt as a real parameter**
 
 In `make_prompt`, add a new optional parameter `incremental_budget_chars: int | None = None` to the signature. Find the current signature:
 
@@ -2364,7 +2364,7 @@ Replace with:
     return assembled
 ```
 
-- [ ] **Step 6: Pass the flag from main() into make_prompt**
+- [x] **Step 6: Pass the flag from main() into make_prompt**
 
 In `main()`, find the call site of `make_prompt`. The current call (around line 948-952) looks like:
 
@@ -2389,7 +2389,7 @@ Replace with:
 
 If there is a second `make_prompt` call site in `main()` (e.g. inside a sweep dispatch branch around line 1033), update it identically.
 
-- [ ] **Step 7: Add a CLI-level integration test**
+- [x] **Step 7: Add a CLI-level integration test**
 
 Append to `skills/external-review/tests/test_incremental_budget.py`:
 
@@ -2441,12 +2441,12 @@ def test_cli_budget_trims_actual_request(tmp_path):
     assert len(body) <= 20_000 + 500  # +500 bytes scaffolding allowance
 ```
 
-- [ ] **Step 8: Run tests, including the Task 1.12 fixture**
+- [x] **Step 8: Run tests, including the Task 1.12 fixture**
 
 Run: `python3 -m pytest skills/external-review/tests/test_incremental_budget.py skills/external-review/tests/test_failed_r2_bounded_r3.py -v`
 Expected: all budget tests pass; the CLI integration test asserts that the budget flag has real effect on the persisted request. If `test_failed_r2_bounded_r3` was marked `xfail` for the size assertion in Task 1.12, remove the `xfail` marker now and confirm it passes.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add skills/external-review/scripts/external-reviewer.py \
@@ -2461,7 +2461,7 @@ git commit -m "external-reviewer: add --incremental-budget-chars (proper param +
 - Modify: `skills/external-review/scripts/external-reviewer.py` (`compute_diff_section`, around lines 733-779)
 - Create: `skills/external-review/tests/test_diff_caps.py`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `skills/external-review/tests/test_diff_caps.py`:
 
@@ -2539,12 +2539,12 @@ def test_global_diff_cap_applies(tmp_path):
     assert "bytes elided" in diff
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `python3 -m pytest skills/external-review/tests/test_diff_caps.py -v`
 Expected: all three fail — current `compute_diff_section` has no untracked-count cap, no per-file extra cap, and no global cap.
 
-- [ ] **Step 3: Replace compute_diff_section**
+- [x] **Step 3: Replace compute_diff_section**
 
 In `skills/external-review/scripts/external-reviewer.py`, replace the body of `compute_diff_section` (the version with `parts = [...]` building three subsections with independent `_cap_lines` calls):
 
@@ -2613,14 +2613,14 @@ def compute_diff_section(
     return cap_with_elision(full, max_bytes=max(max_lines * 80, 64 * 1024))
 ```
 
-- [ ] **Step 4: Run all diff tests**
+- [x] **Step 4: Run all diff tests**
 
 Run: `python3 -m pytest skills/external-review/tests/test_diff_caps.py skills/external-review/tests/test_diff.py skills/external-review/tests/test_diff_wiring.py -v`
 Expected: the three new cap tests pass; existing diff tests still pass. The structural changes are: an untracked-file count cap, a per-untracked-file line cap of `min(max_lines, 200)`, and a final global `cap_with_elision`.
 
 If a pre-existing diff test breaks, inspect its fixture. A test with > 10 untracked files or with more than `max_lines` per untracked file is asserting against a behaviour this slice deliberately tightens — update the test to match the new caps.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add skills/external-review/scripts/external-reviewer.py \
@@ -2630,12 +2630,12 @@ git commit -m "external-reviewer: global diff cap, untracked-file count + line l
 
 ### Task 2.6: Slice 2 acceptance check
 
-- [ ] **Step 1: Run the full suite**
+- [x] **Step 1: Run the full suite**
 
 Run: `python3 -m pytest skills/external-review/tests/ -v 2>&1 | tail -30`
 Expected: all green. No `xfail`s should remain related to this work.
 
-- [ ] **Step 2: Synthetic large-chain manual check**
+- [x] **Step 2: Synthetic large-chain manual check**
 
 This is a documented manual verification, not a test:
 
@@ -2664,7 +2664,7 @@ ls -la docs/reviewer/plan-plan/r2-*-request.md
 
 Expected: the round-2 request file is under 200 KB.
 
-- [ ] **Step 3: Commit any final fixes**
+- [x] **Step 3: Commit any final fixes**
 
 If you needed to adjust anything during the manual check, commit it:
 
