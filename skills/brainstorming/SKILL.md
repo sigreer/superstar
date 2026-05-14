@@ -26,7 +26,7 @@ You MUST create a task for each of these items and complete them in order:
 3. **Ask clarifying questions** — one at a time, understand purpose/constraints/success criteria
 4. **Propose 2-3 approaches** — with trade-offs and your recommendation
 5. **Present design** — in sections scaled to their complexity, get user approval after each section
-6. **Write design doc** — save to `docs/specs/YYYY-MM-DD-<id>-<topic>-design.md` (where `<id>` is the TASKLIST ID per [[tasklist-discipline]], omitted if no TASKLIST.md) and commit
+6. **Write design doc** — save to `docs/specs/YYYY-MM-DD-<id>-<topic>-design.md` (where `<id>` is the TASKLIST ID per [[tasklist-discipline]], omitted if no TASKLIST.md) and commit. **If no TASKLIST row exists for `<id>` yet, create it first** via [[tasklist-discipline]] (see "Allocating a new ID") — the spec must not be the first artifact carrying the ID.
 7. **Spec self-review** — quick inline check for placeholders, contradictions, ambiguity, scope (see below)
 8. **User reviews written spec** — ask user to review the spec file before proceeding
 9. **Transition to implementation** — invoke writing-plans skill to create implementation plan
