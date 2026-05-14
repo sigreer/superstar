@@ -344,6 +344,33 @@ def make_prompt(
     return body
 
 
+def expand_command_template(
+    template: str,
+    *,
+    prompt_file: Path,
+    prompt_text: str,
+    target_file: Path,
+    kind: str,
+    chain_dir: Path,
+    round_num: int,
+    previous_response: Path | None,
+    resolution_file: Path | None,
+    session_file: Path,
+) -> str:
+    values = {
+        "prompt_file": shlex.quote(str(prompt_file)),
+        "prompt_text": shlex.quote(prompt_text),
+        "target_file": shlex.quote(str(target_file)),
+        "kind": shlex.quote(kind),
+        "chain_dir": shlex.quote(str(chain_dir)),
+        "round": str(round_num),
+        "previous_response": shlex.quote(str(previous_response)) if previous_response else "",
+        "resolution_file": shlex.quote(str(resolution_file)) if resolution_file else "",
+        "session_file": shlex.quote(str(session_file)),
+    }
+    return template.format(**values)
+
+
 def run_reviewer(
     *,
     command_template: str,
@@ -353,16 +380,25 @@ def run_reviewer(
     kind: str,
     prompt_transport: str,
     timeout: int,
+    chain_dir: Path,
+    round_num: int,
+    previous_response: Path | None,
+    resolution_file: Path | None,
+    session_file: Path,
 ) -> subprocess.CompletedProcess[str]:
-    values = {
-        "prompt_file": shlex.quote(str(prompt_file)),
-        "target_file": shlex.quote(str(target_file)),
-        "kind": shlex.quote(kind),
-        "prompt_text": shlex.quote(prompt_text),
-    }
-
     if "{" in command_template and "}" in command_template:
-        command = command_template.format(**values)
+        command = expand_command_template(
+            command_template,
+            prompt_file=prompt_file,
+            prompt_text=prompt_text,
+            target_file=target_file,
+            kind=kind,
+            chain_dir=chain_dir,
+            round_num=round_num,
+            previous_response=previous_response,
+            resolution_file=resolution_file,
+            session_file=session_file,
+        )
         return subprocess.run(
             command,
             shell=True,
@@ -453,7 +489,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--reviewer-cmd",
         default=os.environ.get("AGENT_REVIEWER_CMD", "reviewer-agent"),
-        help="Command or template. Supports {prompt_file}, {prompt_text}, {target_file}, {kind}.",
+        help="Command or template. Supports {prompt_file}, {prompt_text}, {target_file}, {kind}, {chain_dir}, {round}, {previous_response}, {resolution_file}, {session_file}.",
     )
     parser.add_argument(
         "--prompt-transport",
@@ -709,6 +745,17 @@ def main() -> int:
 
     resolution_file = chain_dir / f"r{round_num - 1}-resolution.md"
     resolution_attached = resolution_file.name if (round_num > 1 and resolution_file.exists()) else None
+
+    # Session-resume placeholders. session_file lives alongside other chain artefacts;
+    # chain_dir was mkdir'd above so the parent already exists.
+    session_file = chain_dir / "session.state"
+    prior_round_entry = manifest["rounds"][-1] if manifest["rounds"] else None
+    previous_response_path: Path | None = None
+    if prior_round_entry and prior_round_entry.get("response"):
+        candidate = chain_dir / prior_round_entry["response"]
+        if candidate.exists():
+            previous_response_path = candidate
+    resolution_for_template: Path | None = resolution_file if (round_num > 1 and resolution_file.exists()) else None
     resolution_waiver = bool(
         args.allow_missing_resolution and round_num > 1 and not resolution_attached
     )
@@ -768,6 +815,11 @@ def main() -> int:
             prompt_file=prompt_file, prompt_text=prompt_text,
             target_file=target, kind=args.kind,
             prompt_transport=args.prompt_transport, timeout=args.timeout,
+            chain_dir=chain_dir,
+            round_num=round_num,
+            previous_response=previous_response_path,
+            resolution_file=resolution_for_template,
+            session_file=session_file,
         )
     except FileNotFoundError as exc:
         print(f"ERROR: reviewer command not found: {exc}", file=sys.stderr)
