@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "chain": "context-optimisation-brief-design",
+  "kind": "design",
+  "target": "docs/_drafts/context-optimisation-brief.md",
+  "work_id": null,
+  "legacy_migrated": false,
+  "rounds": [
+    {
+      "round": 1,
+      "reviewers": [
+        {
+          "role": "primary",
+          "sweep_group": null,
+          "parent_round": 1,
+          "request": "r1-2026-05-14T1411-request.md",
+          "response": "r1-2026-05-14T1411-response.md",
+          "verdict": "revise",
+          "verdict_valid": true
+        }
+      ],
+      "merged_verdict": "revise",
+      "merged_findings": null,
+      "request": "r1-2026-05-14T1411-request.md",
+      "response": "r1-2026-05-14T1411-response.md",
+      "resolution": null,
+      "resolution_parse_status": null,
+      "resolution_waiver": false,
+      "head_sha_at_request": "9aa5d1885ee014763d5364b0b3d934cdcad1a78f",
+      "head_sha_after_round": "9aa5d1885ee014763d5364b0b3d934cdcad1a78f",
+      "worktree_dirty_at_request": true,
+      "verdict": "revise",
+      "verdict_valid": true,
+      "findings_count": 4,
+      "blocking_findings_count": 0,
+      "base_ref": null,
+      "base_ref_source": null,
+      "diff_included": false
+    }
+  ],
+  "sweep_checkpoints": {
+    "first-round": "pending",
+    "final-ready": "pending"
+  }
+}
