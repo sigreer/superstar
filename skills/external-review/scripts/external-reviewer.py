@@ -592,7 +592,7 @@ def parse_verdict(text: str) -> tuple[str | None, bool]:
 
 HEADING_FINDING_RE = re.compile(r"^##\s+F(\d+)\b(.*)$", re.MULTILINE)
 PROSE_FINDING_RE = re.compile(
-    r"^F(\d+)\.\s+(Blocking|Important|Minor|Critical|Major|Nit)?\b(.*)$",
+    r"^F(\d+)\s*[.\-—:]\s+(Blocking|Important|Minor|Critical|Major|Nit)?\b(.*)$",
     re.MULTILINE | re.IGNORECASE,
 )
 BULLET_FINDING_RE = re.compile(r"^\s*[-*]\s*\**F(\d+)\**[:\s\-](.*)$", re.MULTILINE)

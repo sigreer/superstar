@@ -63,6 +63,40 @@ def test_prose_style_findings_counted():
     assert blocking == 2
 
 
+def test_prose_em_dash_separator_counted():
+    body = (
+        "1. Findings\n\n"
+        "F1 — Important: the S2 resolution artifact does not follow the contract.\n\n"
+        "F2 — Minor: closeout note omits some commits.\n\n"
+        "Overall verdict: revise\n"
+    )
+    n, blocking = er.parse_findings(body)
+    assert n == 2
+    assert blocking == 0
+
+
+def test_prose_hyphen_separator_counted():
+    body = (
+        "F1 - Blocking: a thing.\n\n"
+        "F2 - Minor: another thing.\n\n"
+        "Overall verdict: revise\n"
+    )
+    n, blocking = er.parse_findings(body)
+    assert n == 2
+    assert blocking == 1
+
+
+def test_prose_colon_separator_counted():
+    body = (
+        "F1: Blocking: x.\n\n"
+        "F2: Important: y.\n\n"
+        "Overall verdict: revise\n"
+    )
+    n, blocking = er.parse_findings(body)
+    assert n == 2
+    assert blocking == 1
+
+
 def test_crash_phrase_in_quoted_content_does_not_block_parse():
     body = (
         "1. Findings\n\n"

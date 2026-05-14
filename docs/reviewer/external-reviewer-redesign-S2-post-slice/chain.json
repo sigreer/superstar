@@ -19,6 +19,19 @@
       "findings_count": 3,
       "blocking_findings_count": 2,
       "note": "Originally misrouted as round 5 of the Slice-1 chain (external-reviewer-redesign-post-slice/r5-*). Moved to this S2-keyed chain after fixing discover_legacy_chain to require absence of chain.json before treating a sibling folder as a legacy candidate."
+    },
+    {
+      "round": 2,
+      "request": "r2-2026-05-14T0228-request.md",
+      "response": "r2-2026-05-14T0228-response.md",
+      "resolution": null,
+      "head_sha_at_request": "1df15e3d0f4fb8c927b7b5cc00135e0e68c9fb2f",
+      "head_sha_after_round": "1df15e3d0f4fb8c927b7b5cc00135e0e68c9fb2f",
+      "worktree_dirty_at_request": true,
+      "verdict": "revise",
+      "verdict_valid": true,
+      "findings_count": 2,
+      "blocking_findings_count": 0
     }
   ],
   "sweep_checkpoints": {
