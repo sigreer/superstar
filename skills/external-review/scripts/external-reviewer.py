@@ -1227,7 +1227,14 @@ def main() -> int:
         merged_path = None
         merged_verdict = primary.verdict if primary.returncode == 0 else None
 
-    findings_count, blocking_count = parse_findings(primary.review_body)
+    # Spec: failed primary reviewers must record findings_count = 0.
+    # Echoed prompt fragments on stderr can otherwise yield false finding
+    # counts even though verdict is invalidated. See
+    # docs/specs/2026-05-14-external-reviewer-context-optimisation-spec.md.
+    if primary.returncode == 0:
+        findings_count, blocking_count = parse_findings(primary.review_body)
+    else:
+        findings_count, blocking_count = 0, 0
 
     head_sha_after_round = current_head_sha(root)
     resolution_parse = None
