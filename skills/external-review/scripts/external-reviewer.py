@@ -944,24 +944,23 @@ def main() -> int:
     head_sha_at_request = current_head_sha(root)
     worktree_dirty_at_request = is_dirty(root)
 
-    # Plan sweep dispatch.
-    primary_verdict_pre_run = None
-    if manifest["rounds"]:
-        primary_verdict_pre_run = (
-            manifest["rounds"][-1].get("merged_verdict")
-            or manifest["rounds"][-1].get("verdict")
-        )
-    sweep_plan = plan_sweeps(
+    # Plan sweep dispatch. `first-round` policy depends only on round_num /
+    # checkpoint state; `final-ready` requires the CURRENT primary's verdict,
+    # so we plan it AFTER the primary runs.
+    checkpoints = manifest.setdefault(
+        "sweep_checkpoints", {"first-round": "pending", "final-ready": "pending"}
+    )
+    # Pre-run plan: covers first-round only (passes None for primary verdict so
+    # final-ready can never fire here).
+    pre_sweep_plan = plan_sweeps(
         depth=args.review_depth,
         policy=args.sweep_policy,
         count=args.independent_reviewers,
         round_num=round_num,
-        checkpoints=manifest.setdefault(
-            "sweep_checkpoints", {"first-round": "pending", "final-ready": "pending"}
-        ),
-        primary_verdict_pre_run=primary_verdict_pre_run,
+        checkpoints=checkpoints,
+        primary_verdict_pre_run=None,
     )
-    namespaced = sweep_plan.sweep_count > 0
+    namespaced = pre_sweep_plan.sweep_count > 0
 
     try:
         primary = run_one_reviewer(
@@ -970,6 +969,34 @@ def main() -> int:
             prompt_text=prompt_text, args=args, target=target, root=root,
             namespaced=namespaced,
         )
+
+        # Post-run plan: now that primary has a verdict, evaluate final-ready.
+        sweep_plan = plan_sweeps(
+            depth=args.review_depth,
+            policy=args.sweep_policy,
+            count=args.independent_reviewers,
+            round_num=round_num,
+            checkpoints=checkpoints,
+            primary_verdict_pre_run=primary.verdict,
+        )
+
+        # If final-ready fires but we ran primary without namespacing, rename
+        # primary artefacts to add the `-primary` suffix.
+        if sweep_plan.sweep_count > 0 and not namespaced:
+            new_suffix = "-primary"
+            new_basename = f"r{round_num}-{timestamp}{new_suffix}"
+            new_request = chain_dir / f"{new_basename}-request.md"
+            new_response = chain_dir / f"{new_basename}-response.md"
+            primary.request_path.rename(new_request)
+            primary.response_path.rename(new_response)
+            primary = ReviewerResult(
+                role=primary.role, sweep_index=primary.sweep_index,
+                request_path=new_request, response_path=new_response,
+                review_body=primary.review_body, verdict=primary.verdict,
+                verdict_valid=primary.verdict_valid, returncode=primary.returncode,
+            )
+            namespaced = True
+
         sweeps: list = []
         for k in range(1, sweep_plan.sweep_count + 1):
             sweep_prompt = prompt_text
