@@ -2992,9 +2992,13 @@ No spec requirement is unimplemented. All task signatures match across tasks (`p
 - `012e3c1` feat(external-reviewer): synthesize_legacy_manifest from rN-* files
 - `5404a2d` feat(external-reviewer): wire manifest + verdict/finding parsing into main()
 
-Plus the post-review fix commits (round 1 resolution at `docs/reviewer/external-reviewer-redesign-post-slice/r1-resolution.md`; round 2 resolution at `docs/reviewer/external-reviewer-redesign-post-slice/r2-resolution.md`).
+Plus the post-review fix commits:
+- Round 1 resolution at `docs/reviewer/external-reviewer-redesign-post-slice/r1-resolution.md`.
+- Round 2 resolution at `docs/reviewer/external-reviewer-redesign-post-slice/r2-resolution.md`.
+- Round 3 fix commits: `5cbb0fb` (committed r2 + r3 chain artefacts — F2 round 3), `6bc9289` (`parse_findings` spec drift fix + tests — F3 round 3), `062dccb` (F4 backfill: named SHAs in r2-resolution.md), `a8e6127` (backfilled F4's own SHA into r3-resolution.md); resolution at `docs/reviewer/external-reviewer-redesign-post-slice/r3-resolution.md`.
+- Round 4 returned `ready with small edits`, closing the post-slice review gate; resolution at `docs/reviewer/external-reviewer-redesign-post-slice/r4-resolution.md`. The two small doc edits (this closeout note + the spec's finding-count parsing section) plus committing the r4 chain artefacts were applied in this commit.
 
-**Final test result:** `21 passed` (19 after round 1 + 2 new round-2 parser tests for prose-style findings and crash-phrase-in-quoted-content) — `python3 -m pytest skills/external-review/tests/`.
+**Final test result:** `23 passed` (21 after round 2 + 2 new round-3 parser tests for prose-style spec drift) — `python3 -m pytest skills/external-review/tests/`.
 
 **Pre-flight override:** the plan's pre-flight branch-check was overridden by user direction; Slice 1 was implemented directly on `main`.
 

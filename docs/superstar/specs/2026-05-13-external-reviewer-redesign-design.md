@@ -309,12 +309,15 @@ For single-reviewer rounds, `reviewers[]` has one entry, `merged_findings_path` 
 
 ### Finding-count parsing
 
-Real reviewers may emit findings as headings or bullets. Parser accepts:
+Real reviewers may emit findings as prose paragraphs, headings, or bullets. Parser accepts three styles (see `parse_findings` / `_collect_findings` in `skills/external-review/scripts/external-reviewer.py:503`):
 
-- `^##\s+F\d+\b`
-- `^\s*[-*]?\s*\**F\d+\**[:\s\-]`
+- Prose: `^F\d+\.\s+(Blocking|Important|Minor|Critical|Major|Nit)?\b...` — severity word is captured inline and `Blocking` (case-insensitive) marks the finding as blocking.
+- Heading: `^##\s+F\d+\b` — heading-only matches are not blocking by default; blocking is derived from a subsequent `Severity: blocking` line or inline `(blocking)` marker.
+- Bullet: `^\s*[-*]?\s*\**F\d+\**[:\s\-]` — blocking is derived from an inline `(blocking)` marker.
 
-If neither matches, `findings_count` and `blocking_findings_count` are `null` and the coordinator inspects prose. "Blocking" is derived from an explicit `Severity: blocking` line within a finding or an inline `(blocking)` marker.
+Style precedence is prose > heading > bullet: the first style that yields any matches wins, so embedded preview blocks in a prose-style response do not double-count. Findings are de-duplicated by ID (first occurrence wins for the blocking flag).
+
+If no style matches, `findings_count` and `blocking_findings_count` are `null` and the coordinator inspects prose. An explicit "no findings" sentinel (`## Findings\nnone`, `Findings: none|n/a|0|zero`) is parsed as `(0, 0)`.
 
 ## Pass 2 — session resume placeholders
 
