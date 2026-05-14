@@ -159,6 +159,43 @@ def chain_folder_name(target: Path, kind: str, work_id: str | None = None) -> st
     return f"{base}-{kind}"
 
 
+class AmbiguousLegacyChain(Exception):
+    pass
+
+
+def discover_legacy_chain(
+    reviewer_root: Path,
+    target_stem: str,
+    kind: str,
+    new_slug: str,
+) -> Path | None:
+    new_path = reviewer_root / new_slug
+    if new_path.exists():
+        return new_path
+    if not reviewer_root.exists():
+        return None
+    legacy_old_name = f"{slugify(target_stem)}-{kind}"
+    candidates = []
+    for entry in reviewer_root.iterdir():
+        if not entry.is_dir():
+            continue
+        if entry.name == legacy_old_name:
+            candidates.append(entry)
+        elif entry.name.startswith(f"{slugify(target_stem)}-") and entry.name.endswith(f"-{kind}"):
+            # Legacy with embedded suffix (e.g. an interim variant). Treat as candidate.
+            if entry.name != new_slug and not (entry / "chain.json").exists():
+                candidates.append(entry)
+    if not candidates:
+        return None
+    if len(candidates) > 1:
+        names = ", ".join(c.name for c in candidates)
+        raise AmbiguousLegacyChain(
+            f"Multiple legacy chains match {slugify(target_stem)}-{kind}: {names}. "
+            "Migrate manually or specify --chain-dir."
+        )
+    return candidates[0]
+
+
 def next_round_number(chain_dir: Path) -> int:
     if not chain_dir.exists():
         return 1
@@ -381,23 +418,35 @@ def main() -> int:
             return 2
         context.append(path)
 
-    chain_dir = (root / args.output_dir / chain_folder_name(target, args.kind, args.work_id)).resolve()
+    new_slug = chain_folder_name(target, args.kind, args.work_id)
+    reviewer_root = (root / args.output_dir).resolve()
+    try:
+        existing = discover_legacy_chain(
+            reviewer_root=reviewer_root,
+            target_stem=DATE_PREFIX_RE.sub("", target.stem),
+            kind=args.kind,
+            new_slug=new_slug,
+        )
+    except AmbiguousLegacyChain as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 5
+    chain_dir = existing if existing else (reviewer_root / new_slug)
     chain_dir.mkdir(parents=True, exist_ok=True)
     manifest_path = chain_dir / "chain.json"
     manifest = read_manifest(manifest_path)
     if manifest is None and any(chain_dir.glob("r*-*-request.md")):
         manifest = synthesize_legacy_manifest(
             chain_dir=chain_dir,
-            chain=chain_folder_name(target, args.kind, args.work_id),
+            chain=chain_dir.name,
             kind=args.kind,
             target=rel_or_abs(target, root),
-            work_id=None,
+            work_id=args.work_id,
         )
         write_manifest(manifest_path, manifest)
     if manifest is None:
         manifest = {
             "schema_version": SUPPORTED_SCHEMA_VERSION,
-            "chain": chain_folder_name(target, args.kind, args.work_id),
+            "chain": new_slug,
             "kind": args.kind,
             "target": rel_or_abs(target, root),
             "work_id": None,
