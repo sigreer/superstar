@@ -64,3 +64,52 @@ def test_success_with_short_clean_stderr_keeps_tail_capped(tmp_path):
     if "## Reviewer stderr (tail)" in body:
         tail = body.split("## Reviewer stderr (tail)", 1)[1]
         assert len(tail) <= 2 * 1024 + 200  # 200 bytes of fenced-block scaffolding
+
+
+def test_failed_stderr_strip_then_cap_ordering(tmp_path):
+    """Failed path: 20 KB of echoed prompt on stderr → tail ≤ 4 KB and no markers leak."""
+    huge_echo = f"{er.PROMPT_SENTINEL_START}\n" + ("Y" * 20_000) + f"\n{er.PROMPT_SENTINEL_END}"
+    result = _fake_result(
+        returncode=1, stdout="",
+        stderr=f"banner\n{huge_echo}\nerror: turn/start failed",
+    )
+    response_path = tmp_path / "r2-response.md"
+    prompt_path = tmp_path / "r2-request.md"
+    prompt_path.write_text("ignored")
+    target = tmp_path / "plan.md"
+    target.write_text("ignored")
+    er.write_review_artifact(
+        root=tmp_path, target=target, kind="plan",
+        command_template="fake", prompt_file=prompt_path,
+        response_file=response_path, round_num=2, result=result,
+    )
+    body = response_path.read_text()
+    assert er.PROMPT_SENTINEL_START not in body
+    assert er.PROMPT_SENTINEL_END not in body
+    assert "Y" * 1000 not in body
+    # Total file ≤ 8 KB (headers + ≤ 4 KB tail)
+    assert response_path.stat().st_size < 8 * 1024
+    # Diagnostic substring survives the tail cap
+    assert "error: turn/start failed" in body
+
+
+def test_failed_path_does_not_persist_stdout(tmp_path):
+    """Failed path: stdout (if any) is dropped — only stderr tail is persisted."""
+    result = _fake_result(
+        returncode=1,
+        stdout="this should not appear",
+        stderr="short stderr",
+    )
+    response_path = tmp_path / "r1-response.md"
+    prompt_path = tmp_path / "r1-request.md"
+    prompt_path.write_text("ignored")
+    target = tmp_path / "plan.md"
+    target.write_text("ignored")
+    er.write_review_artifact(
+        root=tmp_path, target=target, kind="plan",
+        command_template="fake", prompt_file=prompt_path,
+        response_file=response_path, round_num=1, result=result,
+    )
+    body = response_path.read_text()
+    assert "this should not appear" not in body
+    assert "short stderr" in body
