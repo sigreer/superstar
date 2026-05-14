@@ -99,6 +99,31 @@ and tailor findings to the supplied target and context.""",
 }
 
 
+SUPPORTED_SCHEMA_VERSION = 1
+
+
+class ManifestSchemaTooNew(Exception):
+    """Raised when chain.json declares a schema_version newer than this script supports."""
+
+
+def read_manifest(path: Path) -> dict | None:
+    if not path.exists():
+        return None
+    data = json.loads(path.read_text(encoding="utf-8"))
+    version = data.get("schema_version")
+    if isinstance(version, int) and version > SUPPORTED_SCHEMA_VERSION:
+        raise ManifestSchemaTooNew(
+            f"chain.json schema_version {version} is newer than this script supports "
+            f"(max {SUPPORTED_SCHEMA_VERSION}). Upgrade external-reviewer.py."
+        )
+    return data
+
+
+def write_manifest(path: Path, data: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+
+
 def repo_root() -> Path:
     result = subprocess.run(
         ["git", "rev-parse", "--show-toplevel"],
