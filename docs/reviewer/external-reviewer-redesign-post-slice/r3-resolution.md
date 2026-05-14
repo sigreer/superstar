@@ -43,4 +43,4 @@
   - Line 21 (F1 parser fix): `see git log` → `43f0aff`.
   - Line 30 (F2 planning artefacts): `see git log` → `591a20c` (bundled commit).
   - Line 35 (F3 checkboxes): `see git log` → `591a20c` (bundled with F2).
-- **Commit:** captured in the same commit as this resolution doc (see closing commit SHA below).
+- **Commit:** `062dccb` (bundled with this r3-resolution doc).
