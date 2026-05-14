@@ -2899,14 +2899,14 @@ git commit -m "external-review: document rate-limit handling (exit 8, menu, subc
 
 ### Task 7.1: Full suite + acceptance checks
 
-- [ ] **Step 1: Run the full suite**
+- [x] **Step 1: Run the full suite**
 
 `python3 -m pytest skills/external-review/tests/ -v 2>&1 | tail -30`
 Expected: 190 passed (142 baseline + 48 added across S1–S5; adjust if some new tests collapsed during implementation). No `xfail`s.
 
 Record the actual pass count for the close-out note.
 
-- [ ] **Step 2: End-to-end smoke check**
+- [x] **Step 2: End-to-end smoke check**
 
 Run, from /home/simon/Dev/sigreer/skills/superstar:
 
@@ -2958,7 +2958,7 @@ unset AGENT_REVIEWER_CMD AGENT_REVIEWER_STATE_FILE
 
 Expected outcomes inline above. Record any deviation in the close-out commit.
 
-- [ ] **Step 3: Commit any final fixes**
+- [x] **Step 3: Commit any final fixes**
 
 If the smoke check surfaced anything broken, commit the fix:
 
@@ -2979,9 +2979,9 @@ Slice 7 acceptance is met when:
 
 After Slice 7:
 
-- [ ] **Step 1: Final test count recorded** in the phase-close commit message.
-- [ ] **Step 2: SKILL.md final sanity-read** — confirm "Rate-limit handling" section reads well and table cells render correctly.
-- [ ] **Step 3: Invoke `superstar:finishing-a-development-branch`** to integrate the work.
+- [x] **Step 1: Final test count recorded** in the phase-close commit message.
+- [x] **Step 2: SKILL.md final sanity-read** — confirm "Rate-limit handling" section reads well and table cells render correctly.
+- [x] **Step 3: Invoke `superstar:finishing-a-development-branch`** to integrate the work.
 
 ---
 
