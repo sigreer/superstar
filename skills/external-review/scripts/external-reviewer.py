@@ -486,6 +486,96 @@ class SweepPlan:
     checkpoint: str | None  # "first-round" | "final-ready" | None
 
 
+@dataclass
+class ReviewerResult:
+    role: str            # "primary" | "sweep"
+    sweep_index: int | None
+    request_path: Path
+    response_path: Path
+    review_body: str
+    verdict: str | None
+    verdict_valid: bool
+    returncode: int
+
+
+def run_one_reviewer(
+    *,
+    role: str,
+    sweep_index: int | None,
+    chain_dir: Path,
+    round_num: int,
+    timestamp: str,
+    prompt_text: str,
+    args,
+    target: Path,
+    root: Path,
+    namespaced: bool,
+) -> ReviewerResult:
+    suffix = ""
+    if namespaced:
+        suffix = "-primary" if role == "primary" else f"-sweep{sweep_index}"
+    basename = f"r{round_num}-{timestamp}{suffix}"
+    request_path = chain_dir / f"{basename}-request.md"
+    response_path = chain_dir / f"{basename}-response.md"
+    request_path.write_text(prompt_text, encoding="utf-8")
+    session_file = chain_dir / (
+        "session.state" if role == "primary" else f"sweep{sweep_index}.session.state"
+    )
+
+    result = run_reviewer(
+        command_template=args.reviewer_cmd,
+        prompt_file=request_path, prompt_text=prompt_text,
+        target_file=target, kind=args.kind,
+        prompt_transport=args.prompt_transport, timeout=args.timeout,
+        chain_dir=chain_dir, round_num=round_num,
+        previous_response=None, resolution_file=None,
+        session_file=session_file,
+    )
+    write_review_artifact(
+        root=root, target=target, kind=args.kind,
+        command_template=args.reviewer_cmd,
+        prompt_file=request_path, response_file=response_path,
+        round_num=round_num, result=result,
+    )
+    body = response_path.read_text(encoding="utf-8")
+    verdict, valid = parse_verdict(body)
+    return ReviewerResult(
+        role=role, sweep_index=sweep_index,
+        request_path=request_path, response_path=response_path,
+        review_body=body, verdict=verdict, verdict_valid=valid,
+        returncode=result.returncode,
+    )
+
+
+def compute_merged_verdict(reviewer_results: list) -> str | None:
+    if any((not r.verdict_valid) or r.verdict == "revise" for r in reviewer_results):
+        return "revise"
+    if any(r.verdict == "ready with small edits" for r in reviewer_results):
+        return "ready with small edits"
+    if all(r.verdict == "ready" for r in reviewer_results):
+        return "ready"
+    return None
+
+
+def _renamespace_finding_ids(body: str, sweep_index: int) -> str:
+    body = re.sub(r"^(##\s+)F(\d+)\b", rf"\1S{sweep_index}.F\2", body, flags=re.MULTILINE)
+    body = re.sub(r"(\bF)(\d+)\b", rf"S{sweep_index}.F\2", body)
+    return body
+
+
+def write_merged_findings(
+    *,
+    chain_dir: Path, round_num: int,
+    primary: "ReviewerResult", sweeps: list,
+) -> Path:
+    parts = [f"# Merged findings for r{round_num}\n", "## Primary\n", primary.review_body, ""]
+    for s in sweeps:
+        parts += [f"## Sweep {s.sweep_index}\n", _renamespace_finding_ids(s.review_body, s.sweep_index), ""]
+    path = chain_dir / f"r{round_num}-merged-findings.md"
+    path.write_text("\n".join(parts), encoding="utf-8")
+    return path
+
+
 DEPTH_DEFAULTS = {
     "standard":   {"policy": "never",       "count_first": 0, "count_final": 0},
     "thorough":   {"policy": "both",        "count_first": 1, "count_final": 1},
@@ -799,23 +889,10 @@ def main() -> int:
 
     round_num = next_round_number(chain_dir)
     timestamp = dt.datetime.now().strftime("%Y-%m-%dT%H%M")
-    basename = f"r{round_num}-{timestamp}"
-    prompt_file = chain_dir / f"{basename}-request.md"
-    response_file = chain_dir / f"{basename}-response.md"
 
     resolution_file = chain_dir / f"r{round_num - 1}-resolution.md"
     resolution_attached = resolution_file.name if (round_num > 1 and resolution_file.exists()) else None
 
-    # Session-resume placeholders. session_file lives alongside other chain artefacts;
-    # chain_dir was mkdir'd above so the parent already exists.
-    session_file = chain_dir / "session.state"
-    prior_round_entry = manifest["rounds"][-1] if manifest["rounds"] else None
-    previous_response_path: Path | None = None
-    if prior_round_entry and prior_round_entry.get("response"):
-        candidate = chain_dir / prior_round_entry["response"]
-        if candidate.exists():
-            previous_response_path = candidate
-    resolution_for_template: Path | None = resolution_file if (round_num > 1 and resolution_file.exists()) else None
     resolution_waiver = bool(
         args.allow_missing_resolution and round_num > 1 and not resolution_attached
     )
@@ -864,23 +941,51 @@ def main() -> int:
         context=context, max_lines=args.max_lines,
         mode=mode, incremental_preamble=incremental_preamble,
     )
-    prompt_file.write_text(prompt_text, encoding="utf-8")
 
     head_sha_at_request = current_head_sha(root)
     worktree_dirty_at_request = is_dirty(root)
 
-    try:
-        result = run_reviewer(
-            command_template=args.reviewer_cmd,
-            prompt_file=prompt_file, prompt_text=prompt_text,
-            target_file=target, kind=args.kind,
-            prompt_transport=args.prompt_transport, timeout=args.timeout,
-            chain_dir=chain_dir,
-            round_num=round_num,
-            previous_response=previous_response_path,
-            resolution_file=resolution_for_template,
-            session_file=session_file,
+    # Plan sweep dispatch.
+    primary_verdict_pre_run = None
+    if manifest["rounds"]:
+        primary_verdict_pre_run = (
+            manifest["rounds"][-1].get("merged_verdict")
+            or manifest["rounds"][-1].get("verdict")
         )
+    sweep_plan = plan_sweeps(
+        depth=args.review_depth,
+        policy=args.sweep_policy,
+        count=args.independent_reviewers,
+        round_num=round_num,
+        checkpoints=manifest.setdefault(
+            "sweep_checkpoints", {"first-round": "pending", "final-ready": "pending"}
+        ),
+        primary_verdict_pre_run=primary_verdict_pre_run,
+    )
+    namespaced = sweep_plan.sweep_count > 0
+
+    try:
+        primary = run_one_reviewer(
+            role="primary", sweep_index=None,
+            chain_dir=chain_dir, round_num=round_num, timestamp=timestamp,
+            prompt_text=prompt_text, args=args, target=target, root=root,
+            namespaced=namespaced,
+        )
+        sweeps: list = []
+        for k in range(1, sweep_plan.sweep_count + 1):
+            sweep_prompt = prompt_text
+            if sweep_plan.checkpoint == "final-ready":
+                sweep_prompt = make_prompt(
+                    root=root, target=target, kind=args.kind,
+                    context=context, max_lines=args.max_lines,
+                    mode="broad", incremental_preamble=None,
+                )
+            sweeps.append(run_one_reviewer(
+                role="sweep", sweep_index=k,
+                chain_dir=chain_dir, round_num=round_num, timestamp=timestamp,
+                prompt_text=sweep_prompt, args=args, target=target, root=root,
+                namespaced=True,
+            ))
     except FileNotFoundError as exc:
         print(f"ERROR: reviewer command not found: {exc}", file=sys.stderr)
         print("Set AGENT_REVIEWER_CMD, e.g. AGENT_REVIEWER_CMD='reviewer {prompt_file}'", file=sys.stderr)
@@ -889,33 +994,54 @@ def main() -> int:
         print(f"ERROR: reviewer command timed out after {args.timeout}s", file=sys.stderr)
         return 124
 
-    review_path = write_review_artifact(
-        root=root, target=target, kind=args.kind,
-        command_template=args.reviewer_cmd,
-        prompt_file=prompt_file, response_file=response_file,
-        round_num=round_num, result=result,
-    )
-    review_body = review_path.read_text(encoding="utf-8")
-    verdict, verdict_valid = parse_verdict(review_body)
-    findings_count, blocking_count = parse_findings(review_body)
+    reviewer_results = [primary] + sweeps
+    if sweeps:
+        merged_path = write_merged_findings(
+            chain_dir=chain_dir, round_num=round_num,
+            primary=primary, sweeps=sweeps,
+        )
+        merged_verdict = compute_merged_verdict(reviewer_results)
+        if sweep_plan.checkpoint:
+            manifest["sweep_checkpoints"][sweep_plan.checkpoint] = "completed"
+    else:
+        merged_path = None
+        merged_verdict = primary.verdict
+
+    findings_count, blocking_count = parse_findings(primary.review_body)
 
     head_sha_after_round = current_head_sha(root)
     resolution_parse = None
     if resolution_attached:
         parsed = parse_resolution(resolution_file.read_text(encoding="utf-8"))
         resolution_parse = parsed.status
+    # Persist work_id on first creation / backfill.
+    manifest["work_id"] = args.work_id or manifest.get("work_id")
     round_entry = {
         "round": round_num,
-        "request": prompt_file.name,
-        "response": response_file.name,
+        "reviewers": [
+            {
+                "role": r.role,
+                "sweep_group": r.sweep_index,
+                "parent_round": round_num,
+                "request": r.request_path.name,
+                "response": r.response_path.name,
+                "verdict": r.verdict,
+                "verdict_valid": r.verdict_valid,
+            }
+            for r in reviewer_results
+        ],
+        "merged_verdict": merged_verdict,
+        "merged_findings": merged_path.name if merged_path else None,
+        "request": primary.request_path.name,
+        "response": primary.response_path.name,
         "resolution": resolution_attached,
         "resolution_parse_status": resolution_parse,
         "resolution_waiver": resolution_waiver,
         "head_sha_at_request": head_sha_at_request,
         "head_sha_after_round": head_sha_after_round,
         "worktree_dirty_at_request": worktree_dirty_at_request,
-        "verdict": verdict,
-        "verdict_valid": verdict_valid,
+        "verdict": primary.verdict,
+        "verdict_valid": primary.verdict_valid,
         "findings_count": findings_count,
         "blocking_findings_count": blocking_count,
         "base_ref": base_ref,
@@ -925,15 +1051,17 @@ def main() -> int:
     manifest["rounds"].append(round_entry)
     write_manifest(manifest_path, manifest)
 
-    review_rel = rel_or_abs(review_path, root)
-    prompt_rel = rel_or_abs(prompt_file, root)
+    review_rel = rel_or_abs(primary.response_path, root)
+    prompt_rel = rel_or_abs(primary.request_path, root)
     if args.emit == "paths":
         print(f"REVIEW_PATH={review_rel}")
         print(f"PROMPT_PATH={prompt_rel}")
         print(f"ROUND={round_num}")
     elif args.emit == "review":
-        print(review_body)
+        print(primary.review_body)
     elif args.emit == "json":
+        merged_findings_text = merged_path.read_text(encoding="utf-8") if merged_path else None
+        top_review = merged_findings_text or primary.review_body
         print(json.dumps({
             "review_path": review_rel,
             "prompt_path": prompt_rel,
@@ -941,30 +1069,34 @@ def main() -> int:
             "round": round_num,
             "kind": args.kind,
             "work_id": manifest.get("work_id"),
-            "status": "ok" if result.returncode == 0 else "failed",
-            "returncode": result.returncode,
-            "verdict": verdict,
-            "verdict_valid": verdict_valid,
+            "status": "ok" if primary.returncode == 0 else "failed",
+            "returncode": primary.returncode,
+            "verdict": primary.verdict,
+            "verdict_valid": primary.verdict_valid,
             "findings_count": findings_count,
             "blocking_findings_count": blocking_count,
             "resolution_parse_status": resolution_parse,
             "resolution_waiver": resolution_waiver,
             "diff_included": round_entry["diff_included"],
             "base_ref": base_ref,
-            "review_depth": "standard",
-            "reviewers": [{
-                "role": "primary",
-                "verdict": verdict,
-                "verdict_valid": verdict_valid,
-                "review_path": review_rel,
-                "review": review_body,
-            }],
-            "merged_verdict": verdict,
-            "merged_findings_path": None,
-            "merged_findings": None,
-            "review": review_body,
+            "worktree_dirty_at_request": round_entry["worktree_dirty_at_request"],
+            "review_depth": args.review_depth,
+            "reviewers": [
+                {
+                    "role": r.role,
+                    "verdict": r.verdict,
+                    "verdict_valid": r.verdict_valid,
+                    "review_path": rel_or_abs(r.response_path, root),
+                    "review": r.review_body,
+                }
+                for r in reviewer_results
+            ],
+            "merged_verdict": merged_verdict,
+            "merged_findings_path": rel_or_abs(merged_path, root) if merged_path else None,
+            "merged_findings": merged_findings_text,
+            "review": top_review,
         }, indent=2))
-    return result.returncode
+    return primary.returncode
 
 
 VERDICT_VALUES = ("ready with small edits", "ready", "revise")
