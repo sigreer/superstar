@@ -20,6 +20,21 @@
       "verdict_valid": true,
       "findings_count": 3,
       "blocking_findings_count": 1
+    },
+    {
+      "round": 2,
+      "request": "r2-2026-05-14T0325-request.md",
+      "response": "r2-2026-05-14T0325-response.md",
+      "resolution": "r1-resolution.md",
+      "resolution_parse_status": "ok",
+      "resolution_waiver": false,
+      "head_sha_at_request": "65d964a40ce127db5118b91d7f700cd844fdee1c",
+      "head_sha_after_round": "65d964a40ce127db5118b91d7f700cd844fdee1c",
+      "worktree_dirty_at_request": true,
+      "verdict": "ready with small edits",
+      "verdict_valid": true,
+      "findings_count": 3,
+      "blocking_findings_count": 1
     }
   ],
   "sweep_checkpoints": {
