@@ -77,7 +77,7 @@ This is the keystone slice. Without it, any size optimisation only delays the co
 - Modify: `skills/external-review/scripts/external-reviewer.py` (add module-level constants near the top, add helper near `parse_verdict`)
 - Create: `skills/external-review/tests/test_sentinel_stripper.py`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `skills/external-review/tests/test_sentinel_stripper.py`:
 
@@ -144,12 +144,12 @@ def test_strip_handles_multiple_blocks():
     assert "head" in out and "middle" in out and "tail" in out
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `python3 -m pytest skills/external-review/tests/test_sentinel_stripper.py -v`
 Expected: all six tests fail with `AttributeError: module 'external_reviewer' has no attribute 'PROMPT_SENTINEL_START'`.
 
-- [ ] **Step 3: Add constants and helper to the script**
+- [x] **Step 3: Add constants and helper to the script**
 
 In `skills/external-review/scripts/external-reviewer.py`, immediately before the line `SUPPORTED_SCHEMA_VERSION = 1`, insert:
 
@@ -191,12 +191,12 @@ def strip_prompt_echo(text: str) -> str:
     return out
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `python3 -m pytest skills/external-review/tests/test_sentinel_stripper.py -v`
 Expected: all six tests pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add skills/external-review/scripts/external-reviewer.py \
@@ -209,7 +209,7 @@ git commit -m "external-reviewer: add prompt-echo sentinel stripper"
 **Files:**
 - Modify: `skills/external-review/scripts/external-reviewer.py` (`make_prompt`, around lines 328-354)
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `skills/external-review/tests/test_sentinel_stripper.py`:
 
@@ -229,12 +229,12 @@ def test_make_prompt_wraps_body_in_sentinels(tmp_path, monkeypatch):
     assert er.strip_prompt_echo(out).strip() == ""
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `python3 -m pytest skills/external-review/tests/test_sentinel_stripper.py::test_make_prompt_wraps_body_in_sentinels -v`
 Expected: AssertionError — the prompt does not start with the sentinel.
 
-- [ ] **Step 3: Wrap the prompt body**
+- [x] **Step 3: Wrap the prompt body**
 
 In `skills/external-review/scripts/external-reviewer.py`, edit `make_prompt`. Find:
 
@@ -264,14 +264,14 @@ Replace with:
     return f"{PROMPT_SENTINEL_START}\n{body}\n{PROMPT_SENTINEL_END}"
 ```
 
-- [ ] **Step 4: Run the full test suite**
+- [x] **Step 4: Run the full test suite**
 
 Run: `python3 -m pytest skills/external-review/tests/ -v`
 Expected: the new test passes. Other tests may break if they inspect the raw prompt body — fix any breakages by stripping the markers in the assertion (using `er.strip_prompt_echo`) before comparing. Common likely failure: `test_incremental_prompt.py` and `test_prompt_contract.py`.
 
 If a pre-existing test breaks because it asserts the prompt starts with something other than the sentinel, change that assertion to: `assert er.strip_prompt_echo(out).startswith(...)`. Do not weaken the assertion in any other way.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add skills/external-review/scripts/external-reviewer.py \
@@ -289,7 +289,7 @@ git commit -m "external-reviewer: wrap make_prompt body in echo-strip sentinels"
 - Modify: `skills/external-review/scripts/external-reviewer.py` (`write_review_artifact`, around lines 440-473)
 - Create: `skills/external-review/tests/test_response_artifact.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `skills/external-review/tests/test_response_artifact.py`:
 
@@ -363,12 +363,12 @@ def test_success_with_short_clean_stderr_keeps_tail_capped(tmp_path):
         assert len(tail) <= 2 * 1024 + 200  # 200 bytes of fenced-block scaffolding
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `python3 -m pytest skills/external-review/tests/test_response_artifact.py -v`
 Expected: `test_success_stderr_with_full_prompt_echo_does_not_persist_prompt` fails (the full stderr currently leaks); the short-clean test may pass or fail depending on current behaviour.
 
-- [ ] **Step 3: Implement the success path**
+- [x] **Step 3: Implement the success path**
 
 In `skills/external-review/scripts/external-reviewer.py`, replace the body of `write_review_artifact` (currently lines ~440-473):
 
@@ -426,12 +426,12 @@ def write_review_artifact(
     return response_file
 ```
 
-- [ ] **Step 4: Run tests to verify success path passes**
+- [x] **Step 4: Run tests to verify success path passes**
 
 Run: `python3 -m pytest skills/external-review/tests/test_response_artifact.py -v`
 Expected: both tests pass. Run the full suite once: `python3 -m pytest skills/external-review/tests/`. Other tests may break if they parse the response body assuming the old format. Fix any breakages by updating the assertion to look for the new headings (`## Reviewer stderr (tail)`).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add skills/external-review/scripts/external-reviewer.py \
@@ -446,7 +446,7 @@ The previous task already wrote the failed-path branch. This task adds the dedic
 **Files:**
 - Modify: `skills/external-review/tests/test_response_artifact.py`
 
-- [ ] **Step 1: Append the failing test**
+- [x] **Step 1: Append the failing test**
 
 Append to `skills/external-review/tests/test_response_artifact.py`:
 
@@ -500,12 +500,12 @@ def test_failed_path_does_not_persist_stdout(tmp_path):
     assert "short stderr" in body
 ```
 
-- [ ] **Step 2: Run tests**
+- [x] **Step 2: Run tests**
 
 Run: `python3 -m pytest skills/external-review/tests/test_response_artifact.py -v`
 Expected: both new tests pass (implementation was already done in Task 1.3).
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add skills/external-review/tests/test_response_artifact.py
@@ -518,7 +518,7 @@ git commit -m "external-reviewer: test strip-before-cap and stdout-drop on faile
 - Modify: `skills/external-review/scripts/external-reviewer.py` (`run_one_reviewer`, around line 542)
 - Create: `skills/external-review/tests/test_failed_round_truth.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `skills/external-review/tests/test_failed_round_truth.py`:
 
@@ -585,12 +585,12 @@ def test_failed_reviewer_with_echoed_verdict_is_not_trusted(tmp_path):
     assert payload["returncode"] != 0
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `python3 -m pytest skills/external-review/tests/test_failed_round_truth.py -v`
 Expected: failure. Today, the script parses the echoed `Overall verdict: revise` and records `verdict_valid: True`.
 
-- [ ] **Step 3: Force the verdict in `run_one_reviewer`**
+- [x] **Step 3: Force the verdict in `run_one_reviewer`**
 
 In `skills/external-review/scripts/external-reviewer.py`, find the end of `run_one_reviewer` where the `ReviewerResult` is constructed (around line 542-549):
 
@@ -631,12 +631,12 @@ Replace with:
     )
 ```
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 Run: `python3 -m pytest skills/external-review/tests/test_failed_round_truth.py -v`
 Expected: the new test passes. The reviewer process exit is reflected in the top-level JSON correctly (see Task 1.8 for full persistence). Some part of the test may still fail if `status`/`returncode` are not yet in the top-level payload — if so, mark it `xfail` with reason `pending Task 1.8` and proceed; remove the xfail after Task 1.8.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add skills/external-review/scripts/external-reviewer.py \
@@ -650,7 +650,7 @@ git commit -m "external-reviewer: failed turn forces verdict=None/valid=False"
 - Modify: `skills/external-review/scripts/external-reviewer.py` (`write_merged_findings`, around line 567; caller at line ~1055)
 - Create: `skills/external-review/tests/test_merged_findings_skips_failed.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `skills/external-review/tests/test_merged_findings_skips_failed.py`:
 
@@ -699,12 +699,12 @@ def test_all_failed_writes_no_merged_findings(tmp_path):
     assert path is None
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `python3 -m pytest skills/external-review/tests/test_merged_findings_skips_failed.py -v`
 Expected: failure — current `write_merged_findings` concatenates all reviewer bodies unconditionally.
 
-- [ ] **Step 3: Update write_merged_findings**
+- [x] **Step 3: Update write_merged_findings**
 
 In `skills/external-review/scripts/external-reviewer.py`, replace `write_merged_findings`:
 
@@ -739,7 +739,7 @@ def write_merged_findings(
     return path
 ```
 
-- [ ] **Step 4: Update the caller to handle None merged_path**
+- [x] **Step 4: Update the caller to handle None merged_path**
 
 In `skills/external-review/scripts/external-reviewer.py`, find (around line 1054-1064):
 
@@ -774,12 +774,12 @@ Replace with:
         merged_verdict = primary.verdict if primary.returncode == 0 else None
 ```
 
-- [ ] **Step 5: Run tests**
+- [x] **Step 5: Run tests**
 
 Run: `python3 -m pytest skills/external-review/tests/test_merged_findings_skips_failed.py skills/external-review/tests/test_sweep_dispatch.py -v`
 Expected: new tests pass; existing sweep-dispatch tests still pass.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add skills/external-review/scripts/external-reviewer.py \
@@ -795,7 +795,7 @@ Implement spec §S1.7: primary failure flips top-level status; sweep failure is 
 - Modify: `skills/external-review/scripts/external-reviewer.py` (`compute_merged_verdict`, around line 552)
 - Modify: `skills/external-review/tests/test_merged_findings_skips_failed.py`
 
-- [ ] **Step 1: Append the failing test**
+- [x] **Step 1: Append the failing test**
 
 Append to `skills/external-review/tests/test_merged_findings_skips_failed.py`:
 
@@ -819,12 +819,12 @@ def test_merged_verdict_revise_when_primary_failed():
     assert er.compute_merged_verdict([failed_primary, ok_sweep]) is None
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `python3 -m pytest skills/external-review/tests/test_merged_findings_skips_failed.py::test_merged_verdict_ignores_failed_reviewers -v`
 Expected: fails — current `compute_merged_verdict` returns `revise` when any reviewer has `verdict_valid=False`.
 
-- [ ] **Step 3: Update compute_merged_verdict**
+- [x] **Step 3: Update compute_merged_verdict**
 
 In `skills/external-review/scripts/external-reviewer.py`, replace `compute_merged_verdict`:
 
@@ -854,12 +854,12 @@ def compute_merged_verdict(reviewer_results: list) -> str | None:
     return None
 ```
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 Run: `python3 -m pytest skills/external-review/tests/test_merged_findings_skips_failed.py skills/external-review/tests/test_gate_merged_verdict.py -v`
 Expected: new tests pass; existing gate/merged-verdict tests pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add skills/external-review/scripts/external-reviewer.py \
@@ -873,7 +873,7 @@ git commit -m "external-reviewer: aggregate merged verdict only over ok reviewer
 - Modify: `skills/external-review/scripts/external-reviewer.py` (round entry construction around lines 1075-1106, top-level JSON emit around lines 1118-1140)
 - Create: `skills/external-review/tests/test_returncode_status_persisted.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `skills/external-review/tests/test_returncode_status_persisted.py`:
 
@@ -954,12 +954,12 @@ def test_failed_round_persists_status_failed(tmp_path):
     assert round1["reviewers"][0]["status"] == "failed"
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `python3 -m pytest skills/external-review/tests/test_returncode_status_persisted.py -v`
 Expected: failures — `status` and `returncode` are not yet on the round entry or per-reviewer entry.
 
-- [ ] **Step 3: Extend the test to cover emitted JSON `reviewers[]`**
+- [x] **Step 3: Extend the test to cover emitted JSON `reviewers[]`**
 
 Append to `skills/external-review/tests/test_returncode_status_persisted.py`:
 
@@ -987,7 +987,7 @@ def test_emitted_json_reviewers_show_failure(tmp_path):
         assert r["verdict_valid"] is False
 ```
 
-- [ ] **Step 4: Add status + returncode to round entry construction**
+- [x] **Step 4: Add status + returncode to round entry construction**
 
 In `skills/external-review/scripts/external-reviewer.py`, find the `round_entry = {...}` block (around line 1075):
 
@@ -1033,7 +1033,7 @@ Replace the `"reviewers"` list comprehension and add top-level `status`/`returnc
 
 (Continue with the rest of the existing keys: `"merged_verdict": merged_verdict, ...`.)
 
-- [ ] **Step 5: Add status + returncode to the emitted JSON `reviewers[]`**
+- [x] **Step 5: Add status + returncode to the emitted JSON `reviewers[]`**
 
 In `skills/external-review/scripts/external-reviewer.py`, find the JSON emit (around line 1140-1149):
 
@@ -1067,12 +1067,12 @@ Replace with:
             ],
 ```
 
-- [ ] **Step 6: Run tests**
+- [x] **Step 6: Run tests**
 
 Run: `python3 -m pytest skills/external-review/tests/test_returncode_status_persisted.py skills/external-review/tests/test_main_round_writes_manifest.py -v`
 Expected: all four tests in `test_returncode_status_persisted.py` pass; existing tests pass.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add skills/external-review/scripts/external-reviewer.py \
@@ -1086,7 +1086,7 @@ git commit -m "external-reviewer: persist returncode + status on rounds, reviewe
 - Modify: `skills/external-review/scripts/external-reviewer.py` (manifest read path around lines 821-845)
 - Create: `skills/external-review/tests/test_chain_soft_migration.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `skills/external-review/tests/test_chain_soft_migration.py`:
 
@@ -1166,12 +1166,12 @@ def test_legacy_chain_entries_treated_as_unknown(tmp_path):
     assert round1["reviewers"][0]["returncode"] is None
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `python3 -m pytest skills/external-review/tests/test_chain_soft_migration.py -v`
 Expected: failure — `migrate_manifest_inplace` does not exist.
 
-- [ ] **Step 3: Implement the migrator**
+- [x] **Step 3: Implement the migrator**
 
 In `skills/external-review/scripts/external-reviewer.py`, immediately after the `write_manifest` function (around line 138), add:
 
@@ -1245,7 +1245,7 @@ Replace with:
 
 This ensures synthesized rounds (built from on-disk legacy `r*-request.md` / `r*-response.md` files where `chain.json` never existed) get `status: "unknown"` and `returncode: null` before being persisted, instead of inheriting the (untrusted) `verdict_valid: true` that `synthesize_legacy_manifest` currently derives from echoed prompt text.
 
-- [ ] **Step 4: Add a second test for synthesized chains**
+- [x] **Step 4: Add a second test for synthesized chains**
 
 Append to `skills/external-review/tests/test_chain_soft_migration.py`:
 
@@ -1285,12 +1285,12 @@ def test_synthesized_legacy_manifest_marks_rounds_unknown(tmp_path):
     assert rounds[1]["status"] == "ok"
 ```
 
-- [ ] **Step 5: Run tests**
+- [x] **Step 5: Run tests**
 
 Run: `python3 -m pytest skills/external-review/tests/test_chain_soft_migration.py skills/external-review/tests/test_legacy_migration.py -v`
 Expected: both new tests pass; existing legacy-migration tests pass.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add skills/external-review/scripts/external-reviewer.py \
@@ -1304,7 +1304,7 @@ git commit -m "external-reviewer: soft-migrate legacy rounds (read + synthesis) 
 - Modify: `skills/external-review/scripts/external-reviewer.py` (`build_incremental_preamble`, around lines 257-325)
 - Create: `skills/external-review/tests/test_preamble_skips_failed.py`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `skills/external-review/tests/test_preamble_skips_failed.py`:
 
@@ -1382,12 +1382,12 @@ def test_preamble_no_successful_prior_round(tmp_path):
     assert "no prior review available" in out.lower() or "no successful prior" in out.lower()
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `python3 -m pytest skills/external-review/tests/test_preamble_skips_failed.py -v`
 Expected: failures — current preamble always embeds the immediate prior round's body.
 
-- [ ] **Step 3: Update build_incremental_preamble**
+- [x] **Step 3: Update build_incremental_preamble**
 
 In `skills/external-review/scripts/external-reviewer.py`, replace the prior-response selection logic in `build_incremental_preamble`. Find (around line 275-285):
 
@@ -1453,7 +1453,7 @@ Replace with:
         prior_response_text = skip_note + prior_response_text
 ```
 
-- [ ] **Step 4: Add stable section headings to the returned preamble**
+- [x] **Step 4: Add stable section headings to the returned preamble**
 
 The current `build_incremental_preamble` returns a body whose sub-section labels are plain prose (e.g. `Prior-round findings ({prior_source}):`). Task 2.4's budget trimmer needs stable, regex-friendly anchors. In the f-string `return` of `build_incremental_preamble` (around lines 300-325 of the script), replace the labels with markdown subheadings:
 
@@ -1491,12 +1491,12 @@ Source: {prior_source}
 
 (The `## ` subheadings are new; the body content under each is unchanged.)
 
-- [ ] **Step 5: Run tests**
+- [x] **Step 5: Run tests**
 
 Run: `python3 -m pytest skills/external-review/tests/test_preamble_skips_failed.py skills/external-review/tests/test_incremental_prompt.py -v`
 Expected: new tests pass; existing incremental-prompt tests pass (they use `status: "ok"` rounds by default; if any synthesise a round dict without `status`, run `migrate_manifest_inplace` on the manifest in those tests or add `"status": "ok"`). If `test_incremental_prompt.py` asserts the old label strings (`"Prior-round findings ("`), update those assertions to the new `## Prior-round findings` heading.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add skills/external-review/scripts/external-reviewer.py \
@@ -1513,12 +1513,12 @@ git commit -m "external-reviewer: preamble walks back past failed/unknown rounds
 - Modify: `skills/external-review/scripts/external-reviewer.py` (the resolution-required gate at line ~871)
 - Create: `skills/external-review/tests/test_resolution_gate_bypass.py`
 
-- [ ] **Step 1: Locate the gate**
+- [x] **Step 1: Locate the gate**
 
 Run: `grep -n "verdict_valid is False\|allow_missing_resolution\|resolution-required" skills/external-review/scripts/external-reviewer.py | head -10`
 Note the exact line numbers; the gate is around line 871.
 
-- [ ] **Step 2: Write the failing tests**
+- [x] **Step 2: Write the failing tests**
 
 Create `skills/external-review/tests/test_resolution_gate_bypass.py`:
 
@@ -1606,12 +1606,12 @@ def test_unknown_prior_round_does_not_bypass_gate(tmp_path):
     )
 ```
 
-- [ ] **Step 3: Run tests to verify they fail**
+- [x] **Step 3: Run tests to verify they fail**
 
 Run: `python3 -m pytest skills/external-review/tests/test_resolution_gate_bypass.py -v`
 Expected: failure — failed prior round currently has no special treatment, so the gate fires with exit 3.
 
-- [ ] **Step 4: Update the resolution gate**
+- [x] **Step 4: Update the resolution gate**
 
 In `skills/external-review/scripts/external-reviewer.py`, locate the resolution-required gate (the block starting around line 871). The current code uses the variable name `prior` for the prior round's dict and `prior_round` for its integer round number — keep those names. The current code:
 
@@ -1661,12 +1661,12 @@ Replace the inner `needs_resolution` predicate construction and the file-missing
 
 (Preserve every line below the `if not resolution_path.exists():` check exactly as it is — the ERROR-printing block, the rel/response_rel computation, all of it. Only the predicate and the new `prior_was_process_failure` Note-printing branch are new.)
 
-- [ ] **Step 5: Run tests**
+- [x] **Step 5: Run tests**
 
 Run: `python3 -m pytest skills/external-review/tests/test_resolution_gate_bypass.py skills/external-review/tests/test_resolution_gate.py -v`
 Expected: both bypass tests pass; the existing resolution-gate tests pass.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add skills/external-review/scripts/external-reviewer.py \
@@ -1681,7 +1681,7 @@ This is the integration test that pins the spec's primary acceptance gate. All s
 **Files:**
 - Create: `skills/external-review/tests/test_failed_r2_bounded_r3.py`
 
-- [ ] **Step 1: Write the test**
+- [x] **Step 1: Write the test**
 
 Create `skills/external-review/tests/test_failed_r2_bounded_r3.py`:
 
@@ -1781,13 +1781,13 @@ def test_failed_r2_yields_bounded_and_clean_r3_request(tmp_path):
     assert "Reading prompt from stdin..." not in body
 ```
 
-- [ ] **Step 2: Run the test**
+- [x] **Step 2: Run the test**
 
 Run: `python3 -m pytest skills/external-review/tests/test_failed_r2_bounded_r3.py -v`
 
 Expected: depending on whether Slice 2's diet has been applied, r3 may be under 250 KB already (Task 1.10's walk-back skips r2 entirely; r1's 150 KB merged-findings is the dominant body). If the test fails on r3 size, do not implement the diet here — mark the size assertion `xfail` with reason `"size guarantee tightens after Slice 2"` and proceed. Remove the xfail in Task 2.4. Status, gate-bypass, and sentinel assertions must pass now.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add skills/external-review/tests/test_failed_r2_bounded_r3.py
@@ -1796,17 +1796,17 @@ git commit -m "external-reviewer: e2e test — failed r2 yields bounded clean r3
 
 ### Task 1.13: Run the full suite, snapshot baseline
 
-- [ ] **Step 1: Run the suite**
+- [x] **Step 1: Run the suite**
 
 Run: `python3 -m pytest skills/external-review/tests/ -v 2>&1 | tail -30`
 Expected: all tests pass (or only the Task 1.12 size assertion is `xfail`). If any pre-existing test fails because of the changes in this slice, fix it in this task before moving on — the slice does not close on a red suite.
 
-- [ ] **Step 2: Confirm count**
+- [x] **Step 2: Confirm count**
 
 Run: `python3 -m pytest skills/external-review/tests/ -q 2>&1 | tail -5`
 Note the passed/failed/xfailed counts in chat to the operator at slice close.
 
-- [ ] **Step 3: Commit any test fixes**
+- [x] **Step 3: Commit any test fixes**
 
 If you needed to fix any pre-existing tests for the new contract:
 
