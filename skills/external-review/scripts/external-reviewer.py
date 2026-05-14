@@ -240,6 +240,55 @@ def get_active_limit(reviewer_cmd_basename: str) -> dict | None:
     return entry
 
 
+RATE_LIMIT_BUILTIN_PATTERNS = [
+    ("codex_usage_limit",
+     re.compile(r"You've hit your usage limit.*?try again at (\d{1,2}:\d{2}\s*(?:AM|PM)?)", re.IGNORECASE | re.DOTALL)),
+    ("claude_cli_rate_limit",
+     re.compile(r"(?:rate limit|rate-limited).*?reset (?:at|in)? ?(.+?)$", re.IGNORECASE | re.MULTILINE)),
+    ("gemini_cli_rate_limit",
+     re.compile(r"quota exceeded.*?retry (?:after|at) (.+?)$", re.IGNORECASE | re.MULTILINE)),
+]
+
+
+def _user_patterns_from_env() -> list[tuple[str, re.Pattern]]:
+    raw = os.environ.get("AGENT_REVIEWER_RATE_LIMIT_PATTERNS", "")
+    if not raw:
+        return []
+    pairs = []
+    for chunk in raw.split(";"):
+        chunk = chunk.strip()
+        if "=" not in chunk:
+            continue
+        name, pattern = chunk.split("=", 1)
+        try:
+            pairs.append((name.strip(), re.compile(pattern.strip(), re.IGNORECASE | re.DOTALL)))
+        except re.error:
+            print(f"WARNING: invalid user rate-limit pattern '{name}': skipping", file=sys.stderr)
+    return pairs
+
+
+def detect_rate_limit(stderr_text: str) -> tuple[bool, "dt.datetime | None", "str | None"]:
+    """Inspect reviewer stderr for a rate-limit signature.
+    Returns (matched, reset_at_local, pattern_name)."""
+    patterns = RATE_LIMIT_BUILTIN_PATTERNS + _user_patterns_from_env()
+    for name, pat in patterns:
+        m = pat.search(stderr_text)
+        if m:
+            time_group = m.group(1) if m.groups() else None
+            reset_at = _parse_reset_time(time_group) if time_group else _fallback_reset_time()
+            return True, reset_at, name
+    return False, None, None
+
+
+def _fallback_reset_time() -> "dt.datetime":
+    hours = int(os.environ.get("AGENT_REVIEWER_LIMIT_FALLBACK_HOURS", "4"))
+    return (dt.datetime.now() + dt.timedelta(hours=hours)).replace(second=0, microsecond=0)
+
+
+def _parse_reset_time(s: str) -> "dt.datetime":
+    return _fallback_reset_time()  # placeholder; refined in Task 1.5
+
+
 _BUDGET_SECTIONS = [
     ("target_preview", r"\n## Target Preview\n", [80 * 80, 40 * 80, 0]),
     ("diff_body", r"\n## Changes since prior round\n", [50 * 1024, 12 * 1024, 0]),
