@@ -15,6 +15,28 @@ Guide completion of development work by presenting clear options and handling ch
 
 ## The Process
 
+### Step 0: Verify External-Review Gates Passed
+
+Before anything else, confirm the slice(s) and phase that are about to be closed actually went through `[[external-review]]`. The per-task internal review does not satisfy this gate.
+
+```bash
+# For each slice/phase closed on this branch, the reviewer chain folder
+# should exist and contain a ready (or "ready with small edits") verdict.
+ls docs/reviewer/ 2>/dev/null
+```
+
+For every slice flipped to ✅ on this branch and the phase if it has been archived, verify there is a corresponding chain folder under `docs/reviewer/` with a final `ready` verdict for `--kind post-slice` (and `--kind post-phase` for the phase).
+
+**If a gate is missing:**
+
+```
+External-review gate missing for <slice/phase>. Cannot finish branch
+until `superstar:external-review --kind <post-slice|post-phase>` returns
+ready. Running that now is required before merge/PR.
+```
+
+Stop. Do not proceed to Step 1 until the gate is satisfied. If the slice was prematurely closed without external review, the agent must run the external review retroactively before continuing — even if it's "late," as in the case the original transcript flagged.
+
 ### Step 1: Verify Tests
 
 **Before presenting options, verify tests pass:**

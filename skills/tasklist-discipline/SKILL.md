@@ -44,6 +44,7 @@ Every slice and task carries a glanceable emoji + a status tag.
 
 ## Closing a slice
 
+0. **Run `[[external-review]] --kind post-slice` before flipping status.** This is a gate, not a suggestion. It is separate from the in-loop internal review (`[[requesting-internal-review]]`) that runs per task — both are required, and the per-task internal review does not substitute for the slice-boundary external review. Do not close on a `revise` verdict — address findings, re-submit, iterate until the verdict ∈ {ready, ready with small edits}. Link the reviewer chain folder in step 3 below.
 1. Tick the checkboxes inside the slice (☐ → ✅).
 2. Flip the slice header to `✅ DONE YYYY-MM-DD`.
 3. Append post-impl notes inline under the slice (spec/plan links, reviewer chain link, commit SHAs, verification evidence).
@@ -86,7 +87,9 @@ If a project does not yet have `docs/TASKLIST.md`, do not create one mid-flow. D
 | "I'll renumber to make execution order match the IDs"         | No. IDs are stable. Execution order is positional, IDs are creation order.|
 | "This new bug is tiny, I'll just fix it without an ID"        | If it touches a slice that's already ✅, it needs a follow-up ID.        |
 | "I'll move the closed slice to the bottom for cleanliness"    | Close in place. Move only at phase close, and only to the archive file.  |
+| "I'll mark the slice ✅ before running post-slice review"     | Review first. `revise` blocks closure. The per-task internal review does not satisfy this gate. |
 | "I'll mark the phase ✅ before running post-phase review"     | Review first. `revise` blocks closure.                                   |
+| "The internal reviewer already approved this slice, skip external" | No. Internal review = per-task, in-loop. External review = per-slice/phase, out-of-loop. Both required. |
 | "The status tag is fine without a date"                       | `DONE` requires `YYYY-MM-DD`. Future-you needs the timestamp.            |
 
 ## Integration

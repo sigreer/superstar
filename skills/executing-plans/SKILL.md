@@ -27,11 +27,31 @@ For each task:
 1. Mark as in_progress
 2. Follow each step exactly (plan has bite-sized steps)
 3. Run verifications as specified
-4. Mark as completed
+4. Run the in-loop internal review per `[[requesting-internal-review]]` if the plan or task calls for it
+5. Mark as completed
 
-### Step 3: Complete Development
+### Step 3: Close Each Slice (REQUIRED GATE)
 
-After all tasks complete and verified:
+When the last task in a slice is verified — **before flipping slice status** — run the external-review gate:
+
+- Announce: "I'm using the external-review skill to gate slice close."
+- **REQUIRED SUB-SKILL:** `superstar:external-review` with `--kind post-slice`, passing the plan as `--file` and the spec + TASKLIST.md as `--context`.
+- On `revise`: address findings, re-submit. Loop until verdict ∈ {ready, ready with small edits}.
+- Only then flip the slice status per `[[tasklist-discipline]]`.
+
+**This gate is separate from any per-task internal review.** Even when the in-loop internal/code-quality review has approved every task in the slice, the external review at slice boundary is still required. They are different reviews with different scopes (per-task vs. per-slice) and different reviewers (in-session subagent vs. third-party CLI).
+
+### Step 4: Close the Phase (REQUIRED GATE)
+
+When the last slice in a phase has closed — **before archiving the phase**:
+
+- **REQUIRED SUB-SKILL:** `superstar:external-review` with `--kind post-phase`.
+- Same gate rules. Iterate until accepted.
+- Then archive the phase per `[[tasklist-discipline]]`.
+
+### Step 5: Complete Development
+
+After all tasks, slices, and the phase are closed:
 - Announce: "I'm using the finishing-a-development-branch skill to complete this work."
 - **REQUIRED SUB-SKILL:** Use superstar:finishing-a-development-branch
 - Follow that skill to verify tests, present options, execute choice
@@ -61,6 +81,8 @@ After all tasks complete and verified:
 - Reference skills when plan says to
 - Stop when blocked, don't guess
 - Never start implementation on main/master branch without explicit user consent
+- **Internal review ≠ external review.** Per-task internal review is in-loop and may run more than once per task. External review is a separate, out-of-loop gate at slice and phase boundaries. One does not satisfy the other.
+- **Never flip a slice or phase to ✅ before its external review returns a `ready` verdict.**
 
 ## Integration
 
