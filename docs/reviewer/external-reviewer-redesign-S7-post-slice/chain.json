@@ -36,6 +36,37 @@
       "base_ref": null,
       "base_ref_source": null,
       "diff_included": false
+    },
+    {
+      "round": 2,
+      "reviewers": [
+        {
+          "role": "primary",
+          "sweep_group": null,
+          "parent_round": 2,
+          "request": "r2-2026-05-14T0415-request.md",
+          "response": "r2-2026-05-14T0415-response.md",
+          "verdict": "ready",
+          "verdict_valid": true
+        }
+      ],
+      "merged_verdict": "ready",
+      "merged_findings": null,
+      "request": "r2-2026-05-14T0415-request.md",
+      "response": "r2-2026-05-14T0415-response.md",
+      "resolution": "r1-resolution.md",
+      "resolution_parse_status": "ok",
+      "resolution_waiver": false,
+      "head_sha_at_request": "38c6c62b2c58609d94df98a5368ac9f11e14c6e5",
+      "head_sha_after_round": "38c6c62b2c58609d94df98a5368ac9f11e14c6e5",
+      "worktree_dirty_at_request": true,
+      "verdict": "ready",
+      "verdict_valid": true,
+      "findings_count": 4,
+      "blocking_findings_count": 2,
+      "base_ref": "eb187da1efef62813c82c8e4c6831ef21b1d6ef1",
+      "base_ref_source": "auto",
+      "diff_included": true
     }
   ],
   "sweep_checkpoints": {
