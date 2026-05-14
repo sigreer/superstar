@@ -60,3 +60,17 @@ def test_failed_reviewer_with_echoed_verdict_is_not_trusted(tmp_path):
     assert payload["verdict"] is None
     assert payload["status"] == "failed"
     assert payload["returncode"] != 0
+
+    # Spec §S3 item 1: the manifest entry for a failed round must record
+    # `merged_verdict: null`, and the persisted response file must be small
+    # (under 8 KiB) since failed runs persist only a sanitised stderr tail.
+    chain_dir = repo / "docs" / "reviewer" / "plan-plan"
+    manifest = json.loads((chain_dir / "chain.json").read_text(encoding="utf-8"))
+    last_round = manifest["rounds"][-1]
+    assert last_round["merged_verdict"] is None, last_round
+
+    response_name = last_round["reviewers"][0]["response"]
+    response_path = chain_dir / response_name
+    assert response_path.exists(), response_path
+    size = response_path.stat().st_size
+    assert size < 8 * 1024, f"failed-round response file too large: {size} bytes"
