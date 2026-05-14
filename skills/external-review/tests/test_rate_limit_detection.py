@@ -1,4 +1,5 @@
 # skills/external-review/tests/test_rate_limit_detection.py
+import datetime as dt
 from pathlib import Path
 import sys, importlib.util
 import pytest
@@ -23,11 +24,11 @@ def test_codex_sample_matches():
     assert name == "codex_usage_limit"
 
 
-def test_codex_sample_extracts_time_group():
+def test_codex_sample_extracts_time_group(monkeypatch):
+    monkeypatch.setattr(er, "_now_local", lambda: dt.datetime(2026, 5, 14, 17, 0, 0))
     matched, reset_at, _ = er.detect_rate_limit(CODEX_STDERR)
     assert matched is True
-    # reset_at parsing strengthened in Task 1.5; for this task only assert non-None.
-    assert reset_at is not None
+    assert reset_at == dt.datetime(2026, 5, 14, 18, 48, 0)
 
 
 def test_unmatched_stderr_returns_falsey():
@@ -45,5 +46,4 @@ def test_user_pattern_via_env(monkeypatch):
     matched, reset_at, name = er.detect_rate_limit("ERROR limit hit until 14:30")
     assert matched is True
     assert name == "my_backend"
-    # reset_at parsing strengthened in Task 1.5; for now just assert non-None.
-    assert reset_at is not None
+    assert reset_at is not None and reset_at.hour == 14 and reset_at.minute == 30

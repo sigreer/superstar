@@ -280,13 +280,44 @@ def detect_rate_limit(stderr_text: str) -> tuple[bool, "dt.datetime | None", "st
     return False, None, None
 
 
+_TIME_RE_AMPM = re.compile(r"^(\d{1,2}):(\d{2})\s*([AaPp][Mm])$")
+_TIME_RE_24H = re.compile(r"^(\d{1,2}):(\d{2})$")
+
+
+def _now_local() -> "dt.datetime":
+    """Override hook for tests."""
+    return dt.datetime.now()
+
+
 def _fallback_reset_time() -> "dt.datetime":
     hours = int(os.environ.get("AGENT_REVIEWER_LIMIT_FALLBACK_HOURS", "4"))
-    return (dt.datetime.now() + dt.timedelta(hours=hours)).replace(second=0, microsecond=0)
+    return (_now_local() + dt.timedelta(hours=hours)).replace(second=0, microsecond=0)
 
 
 def _parse_reset_time(s: str) -> "dt.datetime":
-    return _fallback_reset_time()  # placeholder; refined in Task 1.5
+    """Parse a clock time (HH:MM with optional AM/PM, or 24-hour) as local time.
+    If the parsed time is in the past relative to now, add one day."""
+    s = (s or "").strip()
+    hour, minute = None, None
+    m = _TIME_RE_AMPM.match(s)
+    if m:
+        hour, minute = int(m.group(1)), int(m.group(2))
+        suffix = m.group(3).upper()
+        if suffix == "PM" and hour < 12:
+            hour += 12
+        elif suffix == "AM" and hour == 12:
+            hour = 0
+    else:
+        m = _TIME_RE_24H.match(s)
+        if m:
+            hour, minute = int(m.group(1)), int(m.group(2))
+    if hour is None or not (0 <= hour <= 23) or not (0 <= minute <= 59):
+        return _fallback_reset_time()
+    now = _now_local()
+    candidate = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    if candidate <= now:
+        candidate += dt.timedelta(days=1)
+    return candidate
 
 
 _BUDGET_SECTIONS = [
