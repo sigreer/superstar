@@ -12,7 +12,7 @@
   - Slice 1 chain artefacts under `docs/reviewer/external-reviewer-redesign-post-slice/` committed (round-1 request + response + this resolution doc).
   - Plan file updated with a "Slice 1 closeout note" enumerating the seven Slice 1 commits, the final test count (`19 passed`), the pre-flight override on `main`, and the new script location.
   - Unrelated dirty files (`CLAUDE.md`, four other SKILL.md edits) deliberately left in place — they predate Slice 1 and are outside scope, as called out in the closeout note.
-- **Commit:** `<this commit>`
+- **Commit:** `c9b1ca3`
 
 ## F3 — head_sha capture timing
 - **Verdict:** fixed
