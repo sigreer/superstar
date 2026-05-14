@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "chain": "reviewer-rate-limit-handling-design-spec",
+  "kind": "spec",
+  "target": "docs/specs/2026-05-14-reviewer-rate-limit-handling-design.md",
+  "work_id": null,
+  "legacy_migrated": false,
+  "rounds": [
+    {
+      "round": 1,
+      "reviewers": [
+        {
+          "role": "primary",
+          "sweep_group": null,
+          "parent_round": 1,
+          "request": "r1-2026-05-14T1904-request.md",
+          "response": "r1-2026-05-14T1904-response.md",
+          "verdict": "revise",
+          "verdict_valid": true,
+          "returncode": 0,
+          "status": "ok"
+        }
+      ],
+      "status": "ok",
+      "returncode": 0,
+      "merged_verdict": "revise",
+      "merged_findings": null,
+      "request": "r1-2026-05-14T1904-request.md",
+      "response": "r1-2026-05-14T1904-response.md",
+      "resolution": null,
+      "resolution_parse_status": null,
+      "resolution_waiver": false,
+      "head_sha_at_request": "42c084b30e4294760c7b4d5ab2029d1e1adb65d5",
+      "head_sha_after_round": "42c084b30e4294760c7b4d5ab2029d1e1adb65d5",
+      "worktree_dirty_at_request": false,
+      "verdict": "revise",
+      "verdict_valid": true,
+      "findings_count": 5,
+      "blocking_findings_count": 2,
+      "base_ref": null,
+      "base_ref_source": null,
+      "diff_included": false
+    }
+  ],
+  "sweep_checkpoints": {
+    "first-round": "pending",
+    "final-ready": "pending"
+  }
+}

@@ -40,7 +40,7 @@ Two layers:
 - Detects rate-limit via stderr regex.
 - Writes/reads `~/.config/superstar/reviewer-state.json` (a global, per-user state file).
 - Refuses spawn while limited; exits **code 8** with a JSON payload describing the limit.
-- Three new subcommands: `manual-approve`, `ingest-response`, `show-limit`, `clear-limit`.
+- Four new subcommands: `manual-approve`, `ingest-response`, `show-limit`, `clear-limit`.
 
 **Skill / coordinator layer** (`skills/external-review/SKILL.md`)
 - Documents exit 8 + the three-option menu.
@@ -49,7 +49,9 @@ Two layers:
 
 ## 5. State file
 
-Path: `~/.config/superstar/reviewer-state.json` (parent dir created with `0700` permissions on first write).
+Path: `~/.config/superstar/reviewer-state.json` by default. **Overridable** via the env var `AGENT_REVIEWER_STATE_FILE` (absolute path) or the CLI flag `--state-file PATH` on every subcommand that touches state (`review`, `manual-approve`, `ingest-response`, `show-limit`, `clear-limit`). Tests MUST set the env var to a `tmp_path`-scoped file so they never touch the developer's real state.
+
+The parent dir is created with `0700` permissions on first write.
 
 Shape:
 
@@ -91,9 +93,9 @@ Built-in patterns (compiled at import):
 
 | name                     | regex (Python)                                                                     |
 |--------------------------|------------------------------------------------------------------------------------|
-| `codex_usage_limit`      | `r"You've hit your usage limit.*?try again at (\d{1,2}:\d{2}\s*(?:AM\|PM)?)"`     |
-| `claude_cli_rate_limit`  | stub — `r"(rate limit|rate-limited).*?reset (?:at\|in)? ?(.+?)$"` (best-effort)    |
-| `gemini_cli_rate_limit`  | stub — `r"quota exceeded.*?retry (?:after\|at) (.+?)$"` (best-effort)              |
+| `codex_usage_limit`      | `r"You've hit your usage limit.*?try again at (\d{1,2}:\d{2}\s*(?:AM|PM)?)"` (the pipe is regex alternation; spec table escaping is incidental — the actual compiled pattern uses an unescaped `|`) |
+| `claude_cli_rate_limit`  | stub — `r"(rate limit|rate-limited).*?reset (?:at|in)? ?(.+?)$"` (best-effort)     |
+| `gemini_cli_rate_limit`  | stub — `r"quota exceeded.*?retry (?:after|at) (.+?)$"` (best-effort)               |
 
 The stub patterns are extensible slots; we ship them as conservative matchers but expect real samples to refine them.
 
@@ -161,7 +163,29 @@ The `--review-depth thorough` case: when only the **primary** reviewer is rate-l
 
 `--emit json` (already a flag) emits this on the same stdout the success path uses, so the existing parsing code in callers can branch on the `rate_limited` key.
 
-### 7.4 New subcommands
+### 7.4 Rate-limited status semantics (interaction with existing logic)
+
+The introduction of `status: "rate-limited"` requires updates at four sites in the existing script. Each is enumerated here so the plan can land them as small, named tasks.
+
+| Site | Current behaviour | Required change |
+|---|---|---|
+| **Resolution gate** (`post-slice` / `post-phase` requires `r{N-1}-resolution.md` unless prior round was `status="failed"`) | Bypasses only on `"failed"` | Also bypass on `"rate-limited"`. A rate-limited round has no findings to resolve. |
+| **`build_incremental_preamble` walk-back** (skips `status ∈ {failed, unknown}` to find the last trusted round) | Skips `failed`/`unknown` | Also skip `rate-limited`. The "Note: rounds N..K were ... skipped" annotation lists all three classes. |
+| **`compute_merged_verdict` reviewer filter** (aggregates only over `returncode == 0` reviewers) | Excludes failed reviewers | Also exclude rate-limited reviewers (`status == "rate-limited"`). A round that is fully rate-limited (no successful reviewer) produces `merged_verdict: null`, mirroring the all-failed case. |
+| **`write_merged_findings`** (returns None if all failed) | Returns None when all failed | Also return None when all reviewers are rate-limited (or any mix of failed/rate-limited). No partial findings file. |
+
+`manual-approved` rounds do **not** need bypass treatment — they have a real `verdict: "ready"` and `verdict_valid: true`, so the existing gating machinery accepts them as-is.
+
+### 7.5 Coalescing repeated refusals
+
+Pre-spawn refusals (§7.1) do NOT each append a new chain round. Instead:
+
+1. The first detection of the limit (either via post-failure regex match in §7.2, OR the first pre-spawn refusal when state was set by a *prior session* and the chain has no rate-limited round yet) writes one new round with `status: "rate-limited"`.
+2. Subsequent pre-spawn refusals against the *same chain* while the limit is still active find that round at the head and **update its `last_refused_at` timestamp** (and append the new refusal time to a bounded `refused_at[]` list — capped at 20 entries; older entries elided) instead of writing a new round. They still emit the exit-8 JSON and print the menu.
+3. Once the limit clears (state's `reset_at <= now()`), the next invocation proceeds normally and writes a fresh round as it always has. The dangling `rate-limited` round at the head is left in place as audit history.
+4. If the user picks `manual-approve` or `ingest-response` while the rate-limited round is still at the head, those subcommands write a *new* round (status `manual-approved` or `human-bridged`) immediately after it. The chain advances; the rate-limited round remains as the audit trail of why this happened.
+
+### 7.6 New subcommands
 
 **`manual-approve`**
 
@@ -241,7 +265,7 @@ Always presented via `AskUserQuestion` on every rate-limited invocation while th
 ### 8.3 Dispatch
 
 - **Manual approve.** Coordinator collects a one-line operator note via a follow-up `AskUserQuestion`, then runs `external-reviewer.py manual-approve ...`. Commits the resulting chain artifacts at round close-out (same convention as today). Slice/phase advances.
-- **Schedule retry.** Coordinator confirms `reset_at` with the user (showing the parsed value + raw stderr tail), then invokes the `schedule` skill to register a one-shot routine. Routine name: `reviewer-retry-<chain-slug>-r<N>`. Routine prompt: literal re-invocation of the original `external-reviewer.py review ...` command. The coordinator then exits the current chain gate as "deferred" — the in-loop work pauses. When the scheduled task fires, the routine runs in a fresh session and proceeds.
+- **Schedule retry.** Coordinator confirms `reset_at` with the user (showing the parsed value + raw stderr tail), then invokes the **harness-level `schedule` skill** (this is a Claude Code harness skill — auto-discovered in the available-skills list at session start; it is not a file in this repo's `skills/` tree) to register a one-shot routine. Routine name: `reviewer-retry-<chain-slug>-r<N>`. Routine prompt: literal re-invocation of the original `external-reviewer.py review ...` command. The coordinator then exits the current chain gate as "deferred" — the in-loop work pauses. When the scheduled task fires, the routine runs in a fresh session and proceeds. **Fallback if the `schedule` skill is unavailable** in the user's harness: the coordinator falls back to printing a one-line `at`/`cron`-suitable command and the absolute path of the original invocation, leaving the user to schedule it themselves. The scheduled-retry path therefore degrades to an instruction rather than failing outright.
 - **Human bridge.** Coordinator prints the absolute path to `r{N}-request.md` and asks the user to paste the response in chat OR provide a local file path containing the response. Two intake forms:
   - Paste: coordinator writes the chat text to a tmp file, then runs `ingest-response --from-paste <tmp>`.
   - Link: coordinator runs `ingest-response --from-link <path>` where `<path>` is a local filesystem path. Remote URLs are out of scope for v1 — if the user has only a URL, they fetch it themselves (e.g. via `curl`) and pass the local copy.
@@ -265,6 +289,10 @@ The script refuses spawn on every invocation while the limit window is open (§7
 | `test_manual_approve_subcommand.py`    | Writes synthetic response, updates chain, verdict ready, exits 0. |
 | `test_ingest_response_subcommand.py`   | `--from-paste` and `--from-link`; reformat strips single outer fence pair; rewrites stray `Overall verdict\n\n<X>` to inline form; preserves verbatim otherwise. Exit 2 on unparseable. |
 | `test_show_clear_limit.py`             | `show-limit` prints state; `clear-limit` removes entry; `--reviewer-cmd` filter works; idempotent. |
+| `test_rate_limited_status_semantics.py`| Resolution gate bypasses on `rate-limited` predecessor; preamble walk-back skips `rate-limited` rounds; merged-verdict excludes rate-limited reviewers; `write_merged_findings` returns None when all reviewers are rate-limited/failed. |
+| `test_refusal_coalescing.py`           | First refusal writes a `rate-limited` round; subsequent refusals on the same chain update `last_refused_at`/`refused_at[]` and DO NOT append a new round; cap at 20 entries respected. |
+
+All tests MUST set `AGENT_REVIEWER_STATE_FILE` to a `tmp_path`-scoped file so they never touch the developer's real `~/.config/superstar/reviewer-state.json`.
 
 Existing 142 tests must remain green.
 
@@ -278,13 +306,15 @@ Existing 142 tests must remain green.
 
 ## 11. Acceptance gate
 
-- Existing test suite green (142 → 142+9 with new tests).
+- Existing test suite green (142 → 142+11 with new tests).
 - `detect_rate_limit` correctly identifies the codex sample stderr captured in this session.
 - A faked rate-limit run produces: exit 8, JSON payload with parseable `reset_at`, state file written under `~/.config/superstar/`, rate-limited round artifact written to the chain.
 - A subsequent run with the state file still active refuses without spawn (verified by counting subprocess calls in the test).
 - `manual-approve` writes a synthetic round whose verdict is `ready` and whose `chain.json` entry round status is `manual-approved`.
 - `ingest-response --from-paste` and `--from-link` both produce a chain-advancing response.md and a parseable verdict.
 - SKILL.md documents the exit code, the menu, and the three dispatch paths.
+- Resolution gate bypasses on `rate-limited` predecessor (verified by test).
+- All tests use `AGENT_REVIEWER_STATE_FILE` override; the developer's real `~/.config/superstar/reviewer-state.json` is never touched by the suite.
 
 ## 12. Open questions
 
