@@ -61,6 +61,12 @@ def test_thorough_round_1_writes_primary_and_sweep_files(tmp_path):
     assert sweeps
     assert merged.exists()
 
+    # Regression: sweep finding IDs must be namespaced exactly once,
+    # not double-prefixed (e.g. "## S1.S1.F1") by the renamespacer.
+    merged_text = merged.read_text(encoding="utf-8")
+    assert "## S1.F1" in merged_text
+    assert "S1.S1" not in merged_text
+
     payload = json.loads(r.stdout)
     assert payload["review_depth"] == "thorough"
     assert len(payload["reviewers"]) == 2

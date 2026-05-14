@@ -558,9 +558,8 @@ def compute_merged_verdict(reviewer_results: list) -> str | None:
 
 
 def _renamespace_finding_ids(body: str, sweep_index: int) -> str:
-    body = re.sub(r"^(##\s+)F(\d+)\b", rf"\1S{sweep_index}.F\2", body, flags=re.MULTILINE)
-    body = re.sub(r"(\bF)(\d+)\b", rf"S{sweep_index}.F\2", body)
-    return body
+    """Rewrite bare F<n> identifiers to S{k}.F<n>, leaving already-prefixed IDs alone."""
+    return re.sub(r"(?<![.\w])F(\d+)\b", rf"S{sweep_index}.F\1", body)
 
 
 def write_merged_findings(
