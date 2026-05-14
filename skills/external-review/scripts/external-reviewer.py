@@ -485,9 +485,11 @@ def write_review_artifact(
     round_num: int,
     result: subprocess.CompletedProcess[str],
 ) -> Path:
-    stdout = result.stdout.strip()
-    stderr = result.stderr.strip()
-    status = "ok" if result.returncode == 0 else f"failed ({result.returncode})"
+    # Sentinel-strip both streams in full BEFORE any size cap or tail operation.
+    stdout = strip_prompt_echo(result.stdout or "").strip()
+    stderr = strip_prompt_echo(result.stderr or "").strip()
+    ok = result.returncode == 0
+    status = "ok" if ok else f"failed ({result.returncode})"
 
     content = [
         f"# Review — {target.name} ({kind}, round {round_num})",
@@ -499,11 +501,27 @@ def write_review_artifact(
         "",
         "---",
         "",
-        stdout or "_Reviewer produced no stdout._",
-        "",
     ]
-    if stderr:
-        content.extend(["---", "", "## Reviewer stderr", "", "```text", stderr, "```", ""])
+
+    if ok:
+        content.append(stdout or "_Reviewer produced no stdout._")
+        content.append("")
+        if stderr:
+            # Capped tail of sanitised stderr — diagnostic only.
+            tail = stderr[-2048:]
+            content.extend([
+                "---", "", "## Reviewer stderr (tail)", "",
+                "```text", tail, "```", "",
+            ])
+    else:
+        # Failed: no stdout body, only a short sanitised stderr tail.
+        tail = stderr[-4096:] if stderr else ""
+        content.extend([
+            "_Reviewer process failed; no stdout persisted._",
+            "",
+            "---", "", "## Reviewer stderr (tail, sanitised)", "",
+            "```text", tail or "(no stderr captured)", "```", "",
+        ])
 
     response_file.write_text("\n".join(content), encoding="utf-8")
     return response_file
