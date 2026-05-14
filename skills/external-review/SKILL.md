@@ -87,6 +87,58 @@ When `--review-depth thorough` or `exhaustive` runs sweeps alongside the primary
 
 Failed sweeps are excluded from merged-findings and do not flip the top-level status.
 
+## Rate-limit handling
+
+When the reviewer's provider rate-limits the configured command (e.g. codex usage cap, Claude API quota), the script detects the failure mode distinctly from a generic crash and stops to ask the operator.
+
+**Exit code 8** signals "reviewer rate-limited; pick a recovery path." On exit 8 the script emits this JSON on stdout:
+
+```json
+{
+  "rate_limited": true,
+  "reviewer_cmd": "<basename>",
+  "reset_at":    "<ISO local time>",
+  "reset_source": "regex:<pattern-name>",
+  "chain":  "<chain folder name>",
+  "round":  <int>,
+  "request_path": "<absolute path>",
+  "raw_stderr_tail": "<last 2 KB of reviewer stderr>"
+}
+```
+
+Persistent state lives at `~/.config/superstar/reviewer-state.json` (override via `AGENT_REVIEWER_STATE_FILE` or `--state-file`). Subsequent invocations against any chain refuse to spawn until `reset_at` passes.
+
+### The recovery menu
+
+On exit 8 the coordinator MUST present this menu via `AskUserQuestion` (no auto-pick):
+
+| Option | Mechanism |
+|---|---|
+| **Manual approve** | Coordinator collects a one-line note, then runs `external-reviewer.py manual-approve --kind X --file Y --work-id Z --note "..."`. Writes a synthetic round with `status: "manual-approved"`, `verdict: "ready"`. Chain advances. |
+| **Schedule retry** | Coordinator invokes the **harness-level `schedule` skill** to register a one-shot routine at `reset_at + 5 min` re-invoking the same `review` command. If the harness lacks `schedule`, falls back to printing an `at`/`cron`-suitable command for the operator. Current chain gate pauses. |
+| **Human bridge** | Coordinator prints `r{N}-request.md` path. Operator obtains a response from an external reviewer (web UI, manual reading, etc.) and either pastes the text in chat or provides a local file path. Coordinator runs `external-reviewer.py ingest-response --kind X --file Y --work-id Z (--from-paste FILE \| --from-link PATH)`. Writes the response with status `human-bridged`. |
+| **Hold** | Do nothing. Exit the current gate. State persists; next session sees the same limit. |
+
+Repeated refusals against the **same chain** while the limit is open do NOT append new rounds — they coalesce onto the head rate-limited round via `last_refused_at` / `refused_at[]` (capped at 20).
+
+### Status semantics
+
+A `status: "rate-limited"` round is treated symmetrically with `status: "failed"`:
+- The resolution-required gate is bypassed for the next round.
+- `build_incremental_preamble` walks back past it to find the last `ok` round.
+- It is excluded from `merged_verdict` and `write_merged_findings` aggregation.
+
+Manual-approved (`status: "manual-approved"`) and human-bridged (`status: "human-bridged"`) rounds carry real verdicts and pass through the existing gating machinery unchanged.
+
+### Subcommands at a glance
+
+| Subcommand | Purpose |
+|---|---|
+| `manual-approve` | Record an operator-approved closure on the chain. |
+| `ingest-response` | Write an externally-obtained reviewer response into the chain. |
+| `show-limit` | Print the current `~/.config/superstar/reviewer-state.json` content. |
+| `clear-limit [--reviewer-cmd X]` | Clear the limit entry (for a single reviewer or all). Idempotent. |
+
 ## Reading the response
 
 The JSON output (always use `--emit json`) is the source of truth. Agents MUST consult:
@@ -227,6 +279,7 @@ Round number is auto-incremented. Commit the entire chain folder alongside the w
 | 4 | `chain.json` schema_version newer than supported. | Upgrade `external-reviewer.py`. |
 | 5 | Ambiguous legacy-chain match. | Migrate manually. |
 | 6 | `--work-id` mismatch with chain's stored work_id. | Use the correct `--work-id` or a fresh chain folder. |
+| 8 | Reviewer rate-limited. | Read the JSON payload; pick a recovery path from the menu in "Rate-limit handling". |
 | 124 | Reviewer timed out. | Raise `--timeout`, or split the target. |
 | 127 | Reviewer command not found. | Set `AGENT_REVIEWER_CMD` or run `[[project-setup]]`. |
 | other | Reviewer's own non-zero exit. | A response file was still written. Read it and surface the issue. |
@@ -249,6 +302,7 @@ After applying edits, summarise:
 | "The reviewer is being pedantic, I'll skip the edit"   | Either apply, or document why you waived it inline in the target.         |
 | "`revise` but the issues are minor"                    | `revise` means re-submit. `ready with small edits` is the lenient verdict.|
 | "I'll loop the reviewer in the background while I work"| Foreground only. No `Monitor`, no polling, no retry loops.                |
+| "Saw exit 8, retried without surfacing the menu"       | The menu must be presented every time exit 8 fires. Coordinator does not auto-pick. |
 
 ## Integration
 
