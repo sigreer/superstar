@@ -995,16 +995,43 @@ def run_one_reviewer(
     key = reviewer_cmd_basename()
     active = get_active_limit(key)
     if active is not None:
+        _manifest_path = chain_dir / "chain.json"
+        _manifest = read_manifest(_manifest_path)
+        if _manifest is None:
+            # Defensive: post-T2.0 eager-write should make this unreachable.
+            _manifest = {"rounds": []}
+        now_iso = _now_local().isoformat(timespec="seconds")
+        rounds = _manifest.get("rounds", [])
+        head = rounds[-1] if rounds else None
+        if head is not None and head.get("status") == "rate-limited":
+            # Coalesce onto the head rate-limited round.
+            refused_at = list(head.get("refused_at", []))
+            refused_at.append(now_iso)
+            refused_at = refused_at[-20:]
+            head["refused_at"] = refused_at
+            head["last_refused_at"] = now_iso
+            write_manifest(_manifest_path, _manifest)
+            # Best-effort: remove the speculative request artifact we just wrote
+            # so the chain dir doesn't accumulate junk per refusal.
+            try:
+                if request_path.exists():
+                    request_path.unlink()
+            except OSError:
+                pass
+            synthetic_request = chain_dir / f"r{head['round']}-coalesced-request.md"
+            raise ReviewerRateLimited(
+                reviewer_cmd=key, reset_at=active["reset_at"],
+                reset_source=active.get("reset_source", "unknown"),
+                chain=chain_dir.name, round_num=head["round"],
+                request_path=str(synthetic_request),
+                raw_stderr_tail=active.get("raw_stderr_tail", ""),
+            )
         # First refusal in this chain → write a rate-limited round artifact.
-        # (Coalescing onto an existing head round is handled in Slice 4.)
         artifact_path = write_rate_limited_artifact(
             chain_dir=chain_dir, round_num=round_num, timestamp=timestamp,
             reviewer_cmd=key, reset_at=active["reset_at"],
             raw_stderr_tail=active.get("raw_stderr_tail", ""),
         )
-        # F3: chain.json is guaranteed to exist (Task 2.0 eager-write).
-        _manifest_path = chain_dir / "chain.json"
-        _manifest = read_manifest(_manifest_path)
         new_round = {
             "round": round_num,
             "status": "rate-limited",
@@ -1016,9 +1043,11 @@ def run_one_reviewer(
             "reviewer_cmd": key,
             "request": request_path.name,
             "response": artifact_path.name,
-            "limited_at": _now_local().isoformat(timespec="seconds"),
+            "limited_at": now_iso,
+            "refused_at": [now_iso],
+            "last_refused_at": now_iso,
         }
-        _manifest["rounds"].append(new_round)
+        _manifest.setdefault("rounds", []).append(new_round)
         write_manifest(_manifest_path, _manifest)
         raise ReviewerRateLimited(
             reviewer_cmd=key, reset_at=active["reset_at"],
