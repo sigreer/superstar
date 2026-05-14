@@ -2084,7 +2084,7 @@ git commit -m "feat(external-reviewer): --base-ref / --no-diff / --changed-files
 - Modify: `skills/external-review/scripts/external-reviewer.py` (`run_reviewer`)
 - Create: `skills/external-review/tests/test_placeholders.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # skills/external-review/tests/test_placeholders.py
@@ -2121,7 +2121,7 @@ def test_substitute_all_new_placeholders(tmp_path):
     assert str(session) in out
 ```
 
-- [ ] **Step 2: Run the test; confirm it fails**
+- [x] **Step 2: Run the test; confirm it fails**
 
 ```bash
 python3 -m pytest skills/external-review/tests/test_placeholders.py -v
@@ -2129,7 +2129,7 @@ python3 -m pytest skills/external-review/tests/test_placeholders.py -v
 
 Expected: failure (`expand_command_template` not defined).
 
-- [ ] **Step 3: Extract template expansion**
+- [x] **Step 3: Extract template expansion**
 
 Refactor the substitution block in `run_reviewer` into a helper:
 
@@ -2163,7 +2163,7 @@ def expand_command_template(
 
 Update `run_reviewer` to accept and pass these args, calling `expand_command_template` instead of the inline `.format(**values)`. Ensure `session_file = chain_dir / "session.state"` is computed once in `main()` and its parent directory is guaranteed to exist (it is — chain_dir is mkdir'd already).
 
-- [ ] **Step 4: Run the tests**
+- [x] **Step 4: Run the tests**
 
 ```bash
 python3 -m pytest skills/external-review/tests/test_placeholders.py -v
@@ -2172,7 +2172,7 @@ python3 -m pytest skills/external-review/tests/ -v
 
 Expected: all passed.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add skills/external-review/scripts/external-reviewer.py skills/external-review/tests/test_placeholders.py
@@ -3102,3 +3102,18 @@ Both commits passed in-loop spec compliance and code-quality reviews via subagen
 **Unrelated dirty files (out of Slice 5 scope, intentionally left untouched):** `CLAUDE.md`, `skills/executing-plans/SKILL.md`, `skills/finishing-a-development-branch/SKILL.md`, `skills/subagent-driven-development/SKILL.md`, `skills/tasklist-discipline/SKILL.md` (authorised by the human partner to remain across Slice 1–5 closeouts).
 
 **Post-slice review (round 2, S5 chain) — final close-out:** verdict `ready with small edits` with **no required edits**. All three round-1 findings (F1 `--changed-files` diff scoping, F2 plan stale, F3 dirty/untracked artefacts) confirmed RESOLVED by the reviewer. Resolution at `docs/reviewer/external-reviewer-redesign-S5-post-slice/r2-resolution.md`. The Slice 5 post-slice gate passes at round 2 and Slice 5 is closed.
+
+---
+
+## Slice 6 closeout note (2026-05-14)
+
+**Commits comprising Slice 6:**
+- `609d2bc` Task 6.1 — `feat(external-reviewer): {chain_dir}/{round}/{previous_response}/{resolution_file}/{session_file} placeholders` (extract `expand_command_template`, substitute new placeholders, add `test_placeholders.py`).
+
+**Final test result:** `python3 -m pytest skills/external-review/tests/` → `75 passed`.
+
+**Pre-flight branch check:** standing override applies — Slice 6 was developed on `main` per the human-partner authorisation recorded at the Slice 4 closeout.
+
+**Post-slice review (round 1, S6 chain):** verdict `revise` with 2 findings (both blocking, both procedural). Resolution at `docs/reviewer/external-reviewer-redesign-S6-post-slice/r1-resolution.md`. F1 (dirty tree + `main` branch) waived under the standing override; F2 (plan still records Slice 6 steps as unchecked + closeout missing) fixed by this commit. r1 chain artefacts (request, response, chain.json, resolution) committed as part of this commit.
+
+**Unrelated dirty files (out of Slice 6 scope, intentionally left untouched):** `CLAUDE.md`, `skills/executing-plans/SKILL.md`, `skills/finishing-a-development-branch/SKILL.md`, `skills/subagent-driven-development/SKILL.md`, `skills/tasklist-discipline/SKILL.md` (authorised by the human partner to remain across Slice 1–6 closeouts).
