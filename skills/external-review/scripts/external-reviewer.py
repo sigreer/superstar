@@ -228,6 +228,72 @@ def numbered_preview(path: Path, root: Path, max_lines: int) -> str:
     return "\n".join(rendered)
 
 
+def build_incremental_preamble(
+    *,
+    manifest: dict,
+    chain_dir: Path,
+    round_num: int,
+    resolution_waiver: bool,
+    legacy_first_round: bool,
+) -> str:
+    chain = manifest.get("chain", "<unknown chain>")
+    prior_rounds = manifest.get("rounds", [])
+    summary_rows = ["| round | verdict | findings | blocking |", "|---|---|---|---|"]
+    for r in prior_rounds:
+        summary_rows.append(
+            f"| {r['round']} | {r.get('merged_verdict') or r.get('verdict')} "
+            f"| {r.get('findings_count')} | {r.get('blocking_findings_count')} |"
+        )
+
+    prior = prior_rounds[-1] if prior_rounds else None
+    prior_response_text = ""
+    merged_findings_file = chain_dir / f"r{round_num - 1}-merged-findings.md"
+    if merged_findings_file.exists():
+        prior_response_text = merged_findings_file.read_text(encoding="utf-8")
+        prior_source = "merged findings (authoritative)"
+    elif prior and prior.get("response"):
+        prior_response_text = (chain_dir / prior["response"]).read_text(encoding="utf-8")
+        prior_source = "primary reviewer response"
+    else:
+        prior_source = "no prior response available"
+
+    resolution_file = chain_dir / f"r{round_num - 1}-resolution.md"
+    if resolution_file.exists():
+        resolution_text = resolution_file.read_text(encoding="utf-8")
+    elif resolution_waiver:
+        resolution_text = "MISSING — explicitly waived by caller via --allow-missing-resolution"
+    elif legacy_first_round:
+        resolution_text = (
+            "MISSING — chain migrated from legacy artifacts; please verify whether "
+            "changes occurred from the diff below."
+        )
+    else:
+        resolution_text = "MISSING — please verify whether changes occurred."
+
+    return f"""You are continuing an existing review chain. This is round {round_num} of {chain}.
+
+In incremental mode:
+- Verify whether prior findings are resolved per the resolution report below.
+- Reuse the existing finding IDs (F1, F2, …). If a prior finding is resolved,
+  mark it RESOLVED in your findings list with its original ID. If still
+  unresolved, keep its ID.
+- Only introduce new finding IDs for genuine regressions caused by the fix, or
+  blocking issues clearly missed in earlier rounds. Do not reopen broad review
+  unless prior fixes changed broad architecture.
+
+Review chain summary:
+{chr(10).join(summary_rows)}
+
+Prior-round findings ({prior_source}):
+
+{prior_response_text}
+
+Resolution report for prior round:
+
+{resolution_text}
+"""
+
+
 def make_prompt(
     *,
     root: Path,
@@ -235,6 +301,8 @@ def make_prompt(
     kind: str,
     context: list[Path],
     max_lines: int,
+    mode: str = "broad",
+    incremental_preamble: str | None = None,
 ) -> str:
     context_display = "\n".join(f"- {rel_or_abs(p, root)}" for p in context) or "- none"
     body = REVIEW_PROMPT.format(
@@ -244,6 +312,8 @@ def make_prompt(
         target_file=rel_or_abs(target, root),
         context_files=context_display,
     )
+    if mode == "incremental" and incremental_preamble:
+        body = incremental_preamble + "\n---\n\n" + body
     body += "\n\n## Target Preview\n\n"
     body += numbered_preview(target, root, max_lines=max_lines)
     if context:
@@ -537,9 +607,31 @@ def main() -> int:
     basename = f"r{round_num}-{timestamp}"
     prompt_file = chain_dir / f"{basename}-request.md"
     response_file = chain_dir / f"{basename}-response.md"
+
+    resolution_file = chain_dir / f"r{round_num - 1}-resolution.md"
+    resolution_attached = resolution_file.name if (round_num > 1 and resolution_file.exists()) else None
+    resolution_waiver = bool(
+        args.allow_missing_resolution and round_num > 1 and not resolution_attached
+    )
+
+    mode = resolve_mode(args.mode, round_num=round_num)
+    incremental_preamble = None
+    if mode == "incremental":
+        incremental_preamble = build_incremental_preamble(
+            manifest=manifest,
+            chain_dir=chain_dir,
+            round_num=round_num,
+            resolution_waiver=resolution_waiver,
+            legacy_first_round=(
+                manifest.get("legacy_migrated", False)
+                and not any(r.get("head_sha_after_round") for r in manifest["rounds"])
+            ),
+        )
+
     prompt_text = make_prompt(
         root=root, target=target, kind=args.kind,
         context=context, max_lines=args.max_lines,
+        mode=mode, incremental_preamble=incremental_preamble,
     )
     prompt_file.write_text(prompt_text, encoding="utf-8")
 
@@ -572,11 +664,6 @@ def main() -> int:
     findings_count, blocking_count = parse_findings(review_body)
 
     head_sha_after_round = current_head_sha(root)
-    resolution_file = chain_dir / f"r{round_num - 1}-resolution.md"
-    resolution_attached = resolution_file.name if (round_num > 1 and resolution_file.exists()) else None
-    resolution_waiver = bool(
-        args.allow_missing_resolution and round_num > 1 and not resolution_attached
-    )
     resolution_parse = None
     if resolution_attached:
         parsed = parse_resolution(resolution_file.read_text(encoding="utf-8"))
