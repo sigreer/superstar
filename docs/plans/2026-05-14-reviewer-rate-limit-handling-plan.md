@@ -1492,7 +1492,7 @@ git commit -m "external-reviewer: pre-spawn check refuses when state shows activ
 - Modify: `skills/external-review/scripts/external-reviewer.py` (find the resolution-gate check; in S1 it lives in `main()` around the post-slice/post-phase dispatch and checks `prior.get("status") == "failed"`)
 - Create: `skills/external-review/tests/test_rate_limited_status_semantics.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # skills/external-review/tests/test_rate_limited_status_semantics.py
@@ -1552,11 +1552,11 @@ def test_resolution_gate_bypasses_on_rate_limited_prior(tmp_path):
     assert proc.returncode == 0, proc.stderr
 ```
 
-- [ ] **Step 2: Verify failure**
+- [x] **Step 2: Verify failure**
 
 Expected: returncode 3 (resolution-required gate).
 
-- [ ] **Step 3: Update the resolution-gate check**
+- [x] **Step 3: Update the resolution-gate check**
 
 In `external-reviewer.py`, find the gate (look for the existing string `"failed"` near the resolution check; it'll look something like `if prior.get("status") == "failed": ... else: if not resolution_file.exists() ...`). Change to:
 
@@ -1573,11 +1573,11 @@ In `external-reviewer.py`, find the gate (look for the existing string `"failed"
 
 If the existing gate uses `if not file.exists(): exit(3)`, wrap accordingly.
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 Expected: 1 passed.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add skills/external-review/scripts/external-reviewer.py \
@@ -1593,7 +1593,7 @@ git commit -m "external-reviewer: bypass resolution gate on rate-limited predece
 - Modify: `skills/external-review/scripts/external-reviewer.py` (`build_incremental_preamble`)
 - Modify: `skills/external-review/tests/test_rate_limited_status_semantics.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `test_rate_limited_status_semantics.py`:
 
@@ -1625,11 +1625,11 @@ def test_preamble_walks_back_past_rate_limited(tmp_path):
     assert "rounds 2..2 were" in out or "rate-limited" in out.lower()
 ```
 
-- [ ] **Step 2: Verify failure**
+- [x] **Step 2: Verify failure**
 
 Expected: trusted-finding text might be missing or skip annotation absent.
 
-- [ ] **Step 3: Update `build_incremental_preamble`**
+- [x] **Step 3: Update `build_incremental_preamble`**
 
 In `build_incremental_preamble`, find the walk-back loop. It already excludes `{"failed", "unknown"}`. Extend to include `"rate-limited"`:
 
@@ -1652,13 +1652,13 @@ And the annotation string emitted to the preamble (currently mentions "process f
         preamble_parts.append(annotation)
 ```
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 Expected: 2 passed in this file.
 
 Full suite: should be 173 passed.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add skills/external-review/scripts/external-reviewer.py \
@@ -1674,7 +1674,7 @@ git commit -m "external-reviewer: preamble walk-back skips rate-limited rounds"
 - Modify: `skills/external-review/scripts/external-reviewer.py`
 - Modify: `skills/external-review/tests/test_rate_limited_status_semantics.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append:
 
@@ -1697,11 +1697,11 @@ def test_merged_verdict_all_rate_limited_returns_none():
     assert er.compute_merged_verdict(reviewers) is None
 ```
 
-- [ ] **Step 2: Verify failure**
+- [x] **Step 2: Verify failure**
 
 Expected: function currently filters only on `returncode == 0`; the rate-limited entry has `returncode: None` so it's already filtered out — test 1 may pass. Test 2 depends on whether the function currently handles "no ok reviewers" via returning None.
 
-- [ ] **Step 3: Update `compute_merged_verdict`**
+- [x] **Step 3: Update `compute_merged_verdict`**
 
 In `external-reviewer.py`, find the filter. Change to be status-aware:
 
@@ -1723,11 +1723,11 @@ def compute_merged_verdict(reviewers: list[dict]) -> str | None:
 
 (Adjust to whatever the existing logic does; the key change is filtering on `status == "ok"` not just `returncode == 0`. The two are usually equivalent today, but rate-limited rounds may have `returncode == 1` (the reviewer's own exit code), so the status filter is more precise.)
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 Expected: 4 passed in this file.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add skills/external-review/scripts/external-reviewer.py \
@@ -1743,7 +1743,7 @@ git commit -m "external-reviewer: merged verdict filter on status=='ok' (exclude
 - Modify: `skills/external-review/scripts/external-reviewer.py`
 - Modify: `skills/external-review/tests/test_rate_limited_status_semantics.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append:
 
@@ -1775,11 +1775,11 @@ def test_write_merged_findings_returns_path_when_one_ok(tmp_path):
     assert "primary review body" in body
 ```
 
-- [ ] **Step 2: Verify failure**
+- [x] **Step 2: Verify failure**
 
 Expected: existing logic may include non-ok reviewers or fail differently.
 
-- [ ] **Step 3: Update `write_merged_findings`**
+- [x] **Step 3: Update `write_merged_findings`**
 
 ```python
 def write_merged_findings(*, chain_dir, round_num, reviewers, ...):
@@ -1789,13 +1789,13 @@ def write_merged_findings(*, chain_dir, round_num, reviewers, ...):
     # ... existing concatenation logic, but iterate over `ok` instead of `reviewers`
 ```
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 Expected: 6 passed in this file.
 
 Full suite: 177 passed.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add skills/external-review/scripts/external-reviewer.py \
