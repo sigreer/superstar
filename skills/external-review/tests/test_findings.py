@@ -97,6 +97,29 @@ def test_prose_colon_separator_counted():
     assert blocking == 1
 
 
+def test_prose_markdown_bold_heading_counted():
+    # `F<n>. **heading**` form without an inline severity word — the bold
+    # markdown wraps the heading text directly after the separator.
+    body = "F1. **Some heading.**\n\nMore prose.\n\nF2. **Another heading.**\n"
+    n, blocking = er.parse_findings(body)
+    assert n == 2
+    assert blocking == 0
+
+
+def test_prose_markdown_bold_with_blocking_in_paragraph():
+    # Severity does not appear inline (the heading is bold-wrapped) but a
+    # `Blocking` token appears in the finding's paragraph body.
+    body = (
+        "F1. **The post-slice gate is not clean.**\n"
+        "Blocking: the chain manifest is missing round 3.\n\n"
+        "F2. **Minor staleness.**\nThe closeout omits some commits.\n\n"
+        "Overall verdict: revise\n"
+    )
+    n, blocking = er.parse_findings(body)
+    assert n == 2
+    assert blocking == 1
+
+
 def test_crash_phrase_in_quoted_content_does_not_block_parse():
     body = (
         "1. Findings\n\n"

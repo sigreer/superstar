@@ -32,6 +32,19 @@
       "verdict_valid": true,
       "findings_count": 2,
       "blocking_findings_count": 0
+    },
+    {
+      "round": 3,
+      "request": "r3-2026-05-14T0236-request.md",
+      "response": "r3-2026-05-14T0236-response.md",
+      "resolution": "r3-resolution.md",
+      "head_sha_at_request": "bb679ad239dbb73e8cf1d0254b0696987e2d97cf",
+      "head_sha_after_round": "bb679ad239dbb73e8cf1d0254b0696987e2d97cf",
+      "worktree_dirty_at_request": true,
+      "verdict": "revise",
+      "verdict_valid": true,
+      "findings_count": 2,
+      "blocking_findings_count": 0
     }
   ],
   "sweep_checkpoints": {

@@ -591,10 +591,20 @@ def parse_verdict(text: str) -> tuple[str | None, bool]:
 
 
 HEADING_FINDING_RE = re.compile(r"^##\s+F(\d+)\b(.*)$", re.MULTILINE)
+# Prose findings: `F<n>` followed by one of `.`, `-`, `—`, `:` separators, then
+# the heading content. The heading content may be wrapped in markdown bold
+# (`**...**`) and an explicit severity word may or may not be present
+# immediately after the separator. We capture the rest of the line so the
+# caller can inspect the paragraph for a `Blocking` marker.
 PROSE_FINDING_RE = re.compile(
-    r"^F(\d+)\s*[.\-—:]\s+(Blocking|Important|Minor|Critical|Major|Nit)?\b(.*)$",
-    re.MULTILINE | re.IGNORECASE,
+    r"^F(\d+)\s*[.\-—:]\s+(.*)$",
+    re.MULTILINE,
 )
+PROSE_SEVERITY_RE = re.compile(
+    r"\b(Blocking|Important|Minor|Critical|Major|Nit)\b",
+    re.IGNORECASE,
+)
+PROSE_BLOCKING_PARAGRAPH_RE = re.compile(r"\bBlocking\b", re.IGNORECASE)
 BULLET_FINDING_RE = re.compile(r"^\s*[-*]\s*\**F(\d+)\**[:\s\-](.*)$", re.MULTILINE)
 INLINE_BLOCKING_RE = re.compile(r"\(blocking\)", re.IGNORECASE)
 SEVERITY_BLOCKING_RE = re.compile(r"^severity\s*:\s*blocking", re.IGNORECASE | re.MULTILINE)
@@ -620,10 +630,39 @@ def _collect_findings(text: str) -> tuple[dict[str, bool], str]:
     incidentally contain heading/bullet shapes inside embedded previews.
     """
     findings: dict[str, bool] = {}
-    for m in PROSE_FINDING_RE.finditer(text):
+    # Collect prose matches with their span so we can scope each finding's
+    # paragraph (up to the next prose finding, or end of text).
+    prose_matches = list(PROSE_FINDING_RE.finditer(text))
+    for idx, m in enumerate(prose_matches):
         fid = m.group(1)
-        severity = (m.group(2) or "").lower()
-        is_blocking = severity == "blocking"
+        rest = m.group(2) or ""
+        # Strip optional markdown-bold wrapper so a leading `**` does not hide
+        # the severity word from the inline-severity check.
+        rest_stripped = rest.lstrip()
+        if rest_stripped.startswith("**"):
+            rest_stripped = rest_stripped[2:]
+        inline_sev = PROSE_SEVERITY_RE.match(rest_stripped)
+        if inline_sev:
+            is_blocking = inline_sev.group(1).lower() == "blocking"
+        else:
+            # No inline severity — inspect the finding's immediate paragraph
+            # for a `Blocking` token. The paragraph runs from the finding's
+            # heading line up to the first blank line (markdown paragraph
+            # break) or the next prose finding, whichever comes first. This
+            # keeps us from sweeping in unrelated `blocking` mentions that
+            # appear in quoted previews further down the response.
+            next_finding_start = (
+                prose_matches[idx + 1].start()
+                if idx + 1 < len(prose_matches)
+                else len(text)
+            )
+            blank_line = re.search(r"\n\s*\n", text[m.end():next_finding_start])
+            if blank_line:
+                para_end = m.end() + blank_line.start()
+            else:
+                para_end = next_finding_start
+            paragraph = text[m.start():para_end]
+            is_blocking = bool(PROSE_BLOCKING_PARAGRAPH_RE.search(paragraph))
         # First occurrence wins; later duplicates from echoed/quoted content
         # do not change the blocking flag.
         if fid not in findings:
