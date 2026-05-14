@@ -963,6 +963,7 @@ class ReviewerResult:
     verdict: str | None
     verdict_valid: bool
     returncode: int
+    status: str | None = None   # "ok" | "failed" | "rate-limited"; None → derive from returncode
 
 
 def run_one_reviewer(
@@ -1019,6 +1020,15 @@ def run_one_reviewer(
             except OSError:
                 pass
             head_request_path = chain_dir / head.get("request", f"r{head['round']}-coalesced-request.md")
+            if role == "sweep":
+                # Sweep pre-spawn refusal: return rate-limited result without
+                # raising; primary may still succeed and the round proceed.
+                return ReviewerResult(
+                    role=role, sweep_index=sweep_index,
+                    request_path=request_path, response_path=head_request_path,
+                    review_body="", verdict=None, verdict_valid=False,
+                    returncode=0, status="rate-limited",
+                )
             raise ReviewerRateLimited(
                 reviewer_cmd=key, reset_at=active["reset_at"],
                 reset_source=active.get("reset_source", "unknown"),
@@ -1032,6 +1042,15 @@ def run_one_reviewer(
             reviewer_cmd=key, reset_at=active["reset_at"],
             raw_stderr_tail=active.get("raw_stderr_tail", ""),
         )
+        if role == "sweep":
+            # Sweep pre-spawn refusal (first in chain): persist artifact but no
+            # chain.json round entry — caller records per-reviewer status.
+            return ReviewerResult(
+                role=role, sweep_index=sweep_index,
+                request_path=request_path, response_path=artifact_path,
+                review_body="", verdict=None, verdict_valid=False,
+                returncode=0, status="rate-limited",
+            )
         new_round = {
             "round": round_num,
             "status": "rate-limited",
@@ -1088,6 +1107,20 @@ def run_one_reviewer(
                 reviewer_cmd=key, reset_at=reset_at_iso,
                 raw_stderr_tail=result.stderr or "",
             )
+            if role == "sweep":
+                # Spec §7.4/§7.5: a rate-limited sweep does NOT abort the round.
+                # The primary may have produced a valid verdict; the sweep is
+                # excluded from merged verdict (Task 3.3/3.4) and recorded as
+                # status="rate-limited" in the round-entry by the caller.
+                # State is already persisted above so subsequent runs refuse
+                # pre-spawn. Do NOT append a chain.json round entry here —
+                # that's done once by main() after all reviewers finish.
+                return ReviewerResult(
+                    role=role, sweep_index=sweep_index,
+                    request_path=request_path, response_path=artifact_path,
+                    review_body="", verdict=None, verdict_valid=False,
+                    returncode=result.returncode, status="rate-limited",
+                )
             # F3: chain.json is guaranteed to exist (Task 2.0 eager-write).
             _manifest_path = chain_dir / "chain.json"
             _manifest = read_manifest(_manifest_path)
@@ -1131,6 +1164,7 @@ def run_one_reviewer(
         request_path=request_path, response_path=response_path,
         review_body=body, verdict=verdict, verdict_valid=valid,
         returncode=result.returncode,
+        status="ok" if result.returncode == 0 else "failed",
     )
 
 
@@ -1933,6 +1967,7 @@ def main() -> int:
                 request_path=new_request, response_path=new_response,
                 review_body=response_text, verdict=primary.verdict,
                 verdict_valid=primary.verdict_valid, returncode=primary.returncode,
+                status=primary.status,
             )
             namespaced = True
 
@@ -2013,7 +2048,7 @@ def main() -> int:
                 "verdict": r.verdict,
                 "verdict_valid": r.verdict_valid,
                 "returncode": r.returncode,
-                "status": "ok" if r.returncode == 0 else "failed",
+                "status": _rv_status(r),
             }
             for r in reviewer_results
         ],
@@ -2078,7 +2113,7 @@ def main() -> int:
                     "review_path": rel_or_abs(r.response_path, root),
                     "review": r.review_body,
                     "returncode": r.returncode,
-                    "status": "ok" if r.returncode == 0 else "failed",
+                    "status": _rv_status(r),
                 }
                 for r in reviewer_results
             ],
