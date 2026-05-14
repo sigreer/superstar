@@ -335,6 +335,14 @@ def write_review_artifact(
     return response_file
 
 
+def resolve_mode(mode: str, *, round_num: int) -> str:
+    if mode == "incremental" and round_num == 1:
+        raise ValueError("--mode incremental is not valid on round 1")
+    if mode == "auto":
+        return "broad" if round_num == 1 else "incremental"
+    return mode
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Send a document to the configured reviewer.")
     parser.add_argument("command", choices=["review"])
@@ -376,6 +384,12 @@ def parse_args() -> argparse.Namespace:
         "--allow-missing-resolution",
         action="store_true",
         help="Waive the resolution-required gate for post-slice/post-phase round 2+.",
+    )
+    parser.add_argument(
+        "--mode",
+        choices=["auto", "broad", "incremental"],
+        default="auto",
+        help="Override the round-1-vs-N prompt mode. Default 'auto'.",
     )
     parser.add_argument("--timeout", type=int, default=900)
     parser.add_argument("--max-lines", type=int, default=600)
