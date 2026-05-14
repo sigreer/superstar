@@ -2688,7 +2688,7 @@ Slice 2 acceptance is met when:
 **Files:**
 - Modify: `skills/external-review/SKILL.md`
 
-- [ ] **Step 1: Add the new flag to "Configuration"**
+- [x] **Step 1: Add the new flag to "Configuration"**
 
 In `skills/external-review/SKILL.md`, after the existing `--prompt-transport` documentation (around line 35-39 of the current SKILL.md), append:
 
@@ -2696,7 +2696,7 @@ In `skills/external-review/SKILL.md`, after the existing `--prompt-transport` do
 - `--incremental-budget-chars` (default `400000`) sets a target cap on assembled prompt size for incremental rounds. The prompt is pruned in priority order — target preview, diff body, resolution body, prior findings body — toward the target; sentinel markers, chain summary, and finding-ID lists are never trimmed. The final size may exceed the target by ~150 bytes due to the appended `<!-- budget-applied: ... -->` diagnostic note.
 ```
 
-- [ ] **Step 2: Add a "Failure handling" section**
+- [x] **Step 2: Add a "Failure handling" section**
 
 In `skills/external-review/SKILL.md`, immediately before the "## Reading the response" section, add:
 
@@ -2726,7 +2726,7 @@ When `--review-depth thorough` or `exhaustive` runs sweeps alongside the primary
 Failed sweeps are excluded from merged-findings and do not flip the top-level status.
 ```
 
-- [ ] **Step 3: Update the "Exit codes" table preface**
+- [x] **Step 3: Update the "Exit codes" table preface**
 
 In `skills/external-review/SKILL.md`, immediately above the "## Exit codes" heading, add a one-line note:
 
@@ -2734,7 +2734,7 @@ In `skills/external-review/SKILL.md`, immediately above the "## Exit codes" head
 *No new exit codes are introduced by failure handling — a failed reviewer exits with the reviewer's own non-zero code (typically `1`), exactly as it did before. The resolution-required gate (exit `3`) is bypassed on process failures.*
 ```
 
-- [ ] **Step 4: Update the precursor "How a round runs" example**
+- [x] **Step 4: Update the precursor "How a round runs" example**
 
 In `skills/external-review/SKILL.md`, find the example command (around line 43-50):
 
@@ -2761,14 +2761,14 @@ python3 scripts/external-reviewer.py review \
     --emit json
 ```
 
-- [ ] **Step 5: Sanity-read**
+- [x] **Step 5: Sanity-read**
 
 Run: `python3 -m pytest skills/external-review/tests/ -q 2>&1 | tail -5`
 Expected: still all green; no test depends on SKILL.md content.
 
 Open `skills/external-review/SKILL.md` and skim it end-to-end. Confirm the new sections fit the existing tone (terse, sectioned, no marketing language).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add skills/external-review/SKILL.md
@@ -2787,12 +2787,12 @@ Slice 3 acceptance is met when:
 
 After Slice 3 closes:
 
-- [ ] **Step 1: Full suite final run**
+- [x] **Step 1: Full suite final run**
 
 Run: `python3 -m pytest skills/external-review/tests/ -v 2>&1 | tail -30`
 Expected: 100% green. Capture the pass count for the phase-close note.
 
-- [ ] **Step 2: Real-chain dry-run (optional but recommended)**
+- [x] **Step 2: Real-chain dry-run (optional but recommended)**
 
 Against the actual broken multistore chain — pure read-only verification that the new script produces a clean r5 even with the existing poisoned r2-r4 files in place:
 
@@ -2811,7 +2811,7 @@ python3 /home/simon/Dev/sigreer/skills/superstar/skills/external-review/scripts/
 
 Note in the close-out: the actual r5-request size, the verdict (should be a real verdict not a fabricated one), and whether the gate-bypass note appeared on stderr.
 
-- [ ] **Step 3: Invoke external-review for post-phase**
+- [x] **Step 3: Invoke external-review for post-phase**
 
 `superstar:external-review --kind post-phase --file docs/plans/2026-05-14-external-reviewer-context-optimisation-plan.md --context docs/specs/2026-05-14-external-reviewer-context-optimisation-spec.md --review-depth thorough`
 
