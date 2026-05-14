@@ -62,6 +62,8 @@ def test_two_refusals_coalesce_into_one_round(tmp_path):
     assert head["status"] == "rate-limited"
     assert "last_refused_at" in head
     assert len(head.get("refused_at", [])) >= 2
+    p2_payload = json.loads(p2.stdout)
+    assert Path(p2_payload["request_path"]).exists(), f"{p2_payload['request_path']} should exist"
 
 
 def test_refused_at_caps_at_20(tmp_path):

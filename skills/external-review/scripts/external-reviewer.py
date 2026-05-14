@@ -1018,12 +1018,12 @@ def run_one_reviewer(
                     request_path.unlink()
             except OSError:
                 pass
-            synthetic_request = chain_dir / f"r{head['round']}-coalesced-request.md"
+            head_request_path = chain_dir / head.get("request", f"r{head['round']}-coalesced-request.md")
             raise ReviewerRateLimited(
                 reviewer_cmd=key, reset_at=active["reset_at"],
                 reset_source=active.get("reset_source", "unknown"),
                 chain=chain_dir.name, round_num=head["round"],
-                request_path=str(synthetic_request),
+                request_path=str(head_request_path),
                 raw_stderr_tail=active.get("raw_stderr_tail", ""),
             )
         # First refusal in this chain → write a rate-limited round artifact.
