@@ -2804,7 +2804,7 @@ git commit -m "external-reviewer: partial rate-limit on sweep records per-review
 **Files:**
 - Modify: `skills/external-review/SKILL.md`
 
-- [ ] **Step 1: Add the new section**
+- [x] **Step 1: Add the new section**
 
 In `skills/external-review/SKILL.md`, immediately before the existing "## Reporting back to the user" section (or in a logical place — find where the "Failure handling" section currently lives and add this just after it), insert:
 
@@ -2862,7 +2862,7 @@ Manual-approved (`status: "manual-approved"`) and human-bridged (`status: "human
 | `clear-limit [--reviewer-cmd X]` | Clear the limit entry (for a single reviewer or all). Idempotent. |
 ```
 
-- [ ] **Step 2: Update the "Exit codes" table**
+- [x] **Step 2: Update the "Exit codes" table**
 
 Find the exit-codes table in SKILL.md. Add the row:
 
@@ -2870,7 +2870,7 @@ Find the exit-codes table in SKILL.md. Add the row:
 | 8 | Reviewer rate-limited. | Read the JSON payload; pick a recovery path from the menu in "Rate-limit handling". |
 ```
 
-- [ ] **Step 3: Update the "Red flags" table**
+- [x] **Step 3: Update the "Red flags" table**
 
 In SKILL.md's red-flags table, add:
 
@@ -2878,13 +2878,13 @@ In SKILL.md's red-flags table, add:
 | "Saw exit 8, retried without surfacing the menu" | The menu must be presented every time exit 8 fires. Coordinator does not auto-pick. |
 ```
 
-- [ ] **Step 4: Run tests + sanity-read**
+- [x] **Step 4: Run tests + sanity-read**
 
 `python3 -m pytest skills/external-review/tests/ -q` — confirm still 190 passed (no test depends on SKILL.md content).
 
 Skim the whole SKILL.md file. The new section should fit the existing terse, sectioned tone.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add skills/external-review/SKILL.md
