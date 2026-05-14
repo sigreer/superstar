@@ -1381,6 +1381,12 @@ def parse_args() -> argparse.Namespace:
     src_group.add_argument("--from-link", dest="from_link", default=None)
     sp_ingest.add_argument("--state-file", default=None)
 
+    sp_show = subparsers.add_parser("show-limit", help="Print active reviewer limits")
+    sp_show.add_argument("--state-file", default=None)
+    sp_clear = subparsers.add_parser("clear-limit", help="Clear reviewer limit state")
+    sp_clear.add_argument("--reviewer-cmd", default=None)
+    sp_clear.add_argument("--state-file", default=None)
+
     return parser.parse_args()
 
 
@@ -1523,6 +1529,25 @@ def run_ingest_response(args) -> int:
         print(f"WARNING: response ingested but verdict unparseable; {response_path}", file=sys.stderr)
         return 2
     print(f"Human-bridged response recorded: {chain_dir.name} r{next_round} verdict={verdict}")
+    return 0
+
+
+def run_show_limit(args) -> int:
+    state = load_state()
+    if not state["limits"]:
+        print("(no active limits)")
+        return 0
+    print(json.dumps(state, indent=2, sort_keys=True))
+    return 0
+
+
+def run_clear_limit(args) -> int:
+    state = load_state()
+    if args.reviewer_cmd:
+        state["limits"].pop(args.reviewer_cmd, None)
+    else:
+        state["limits"] = {}
+    save_state(state)
     return 0
 
 
