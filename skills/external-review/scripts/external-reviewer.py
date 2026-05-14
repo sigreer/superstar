@@ -369,6 +369,11 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Stable slice/phase ID (e.g. P2.S3 or P2). Required for post-slice/post-phase.",
     )
+    parser.add_argument(
+        "--allow-missing-resolution",
+        action="store_true",
+        help="Waive the resolution-required gate for post-slice/post-phase round 2+.",
+    )
     parser.add_argument("--timeout", type=int, default=900)
     parser.add_argument("--max-lines", type=int, default=600)
     parser.add_argument(
@@ -479,6 +484,37 @@ def main() -> int:
         # If the stored value is None and a CLI value was provided, backfill it.
         if stored_work_id is None and args.work_id is not None:
             manifest["work_id"] = args.work_id
+
+    if (
+        args.kind in ("post-slice", "post-phase")
+        and manifest["rounds"]
+        and not args.allow_missing_resolution
+    ):
+        prior = manifest["rounds"][-1]
+        prior_round = prior["round"]
+        prior_verdict = prior.get("merged_verdict") or prior.get("verdict")
+        prior_valid = prior.get("verdict_valid", True)
+        needs_resolution = (prior_verdict == "revise") or (prior_valid is False)
+        if needs_resolution:
+            resolution_path = chain_dir / f"r{prior_round}-resolution.md"
+            if not resolution_path.exists():
+                rel = rel_or_abs(resolution_path, root)
+                response_rel = (
+                    rel_or_abs(chain_dir / prior["response"], root)
+                    if prior.get("response")
+                    else "<missing>"
+                )
+                print(
+                    f"ERROR: Previous {args.kind} round returned revise, but {rel} is missing.\n\n"
+                    f"Dispatch a fixer subagent with:\n"
+                    f"  - previous response: {response_rel}\n"
+                    f"  - required output:   {rel}\n\n"
+                    f"Then re-run this review.\n"
+                    f"Use --allow-missing-resolution only if you intentionally fixed outside the standard workflow.",
+                    file=sys.stderr,
+                )
+                return 3
+
     round_num = next_round_number(chain_dir)
     timestamp = dt.datetime.now().strftime("%Y-%m-%dT%H%M")
     basename = f"r{round_num}-{timestamp}"
@@ -519,11 +555,22 @@ def main() -> int:
     findings_count, blocking_count = parse_findings(review_body)
 
     head_sha_after_round = current_head_sha(root)
+    resolution_file = chain_dir / f"r{round_num - 1}-resolution.md"
+    resolution_attached = resolution_file.name if (round_num > 1 and resolution_file.exists()) else None
+    resolution_waiver = bool(
+        args.allow_missing_resolution and round_num > 1 and not resolution_attached
+    )
+    resolution_parse = None
+    if resolution_attached:
+        parsed = parse_resolution(resolution_file.read_text(encoding="utf-8"))
+        resolution_parse = parsed.status
     round_entry = {
         "round": round_num,
         "request": prompt_file.name,
         "response": response_file.name,
-        "resolution": None,
+        "resolution": resolution_attached,
+        "resolution_parse_status": resolution_parse,
+        "resolution_waiver": resolution_waiver,
         "head_sha_at_request": head_sha_at_request,
         "head_sha_after_round": head_sha_after_round,
         "worktree_dirty_at_request": worktree_dirty_at_request,
@@ -557,6 +604,8 @@ def main() -> int:
             "verdict_valid": verdict_valid,
             "findings_count": findings_count,
             "blocking_findings_count": blocking_count,
+            "resolution_parse_status": resolution_parse,
+            "resolution_waiver": resolution_waiver,
             "review_depth": "standard",
             "reviewers": [{
                 "role": "primary",
