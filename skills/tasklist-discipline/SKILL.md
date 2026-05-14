@@ -11,7 +11,7 @@ A `docs/TASKLIST.md` file is the canonical, top-level tracker for the project. I
 
 ## When to use
 
-- About to plan or write a new spec → confirm an ID exists for the work; if not, allocate one.
+- About to plan or write a new spec → confirm an ID exists for the work; if not, allocate one per "Allocating a new ID" below. **Write the TASKLIST.md entry before the spec file is created.** The TASKLIST entry is the act of allocation; the spec/plan/reviewer-chain filenames are downstream of it. Orphaned artifacts (spec or plan committed without a corresponding TASKLIST row) are how IDs get duplicated later.
 - About to close a slice → flip status in place per the rules below.
 - About to close a phase → archive per the rules below.
 - Referencing work in a spec, plan, reviewer chain folder, or commit — use the canonical IDs.
@@ -30,6 +30,21 @@ Every unit of work has a stable identifier. Within a nested context, the short f
 | Cross-cutting    | `X4`                           | `P2.X4` (or just `X4` if global)|
 
 **Stability.** IDs are assigned at birth and **never renumbered**. New slices get the next free integer; follow-ups get the next free letter under their parent. Sections are arranged in **execution order**; IDs preserve **creation order**. If they diverge, that's expected — that's the whole point of stable IDs.
+
+## Allocating a new ID
+
+TASKLIST.md is canonical, but it is not the only place an ID can be in flight. A spec, plan, or reviewer-chain folder may have been created against an ID that never got a tracker row (orphan). Picking "next free" by scanning TASKLIST.md alone will collide with that orphan and produce a duplicate.
+
+**Next-free rule.** Compute `max + 1` across all of:
+
+- `docs/TASKLIST.md` — every `P{n}` / `S{n}` / `X{n}` / task ID currently in the file.
+- `docs/specs/` — IDs in filename prefixes (`YYYY-MM-DD-<id>-…`).
+- `docs/plans/` — same.
+- `docs/reviewer/` — IDs in chain-folder names.
+
+Take the union, then add one. If an orphan is discovered during this scan (artifact exists but no TASKLIST row), surface it to the operator before allocating — it's either work that needs a tracker entry or work that was abandoned, and either way the operator decides before a new ID is minted.
+
+**Then write the TASKLIST entry immediately**, before the spec file is created. The entry is the allocation; everything else (filenames, reviewer chains, commit messages) follows from it.
 
 ## Status set
 
@@ -91,6 +106,8 @@ If a project does not yet have `docs/TASKLIST.md`, do not create one mid-flow. D
 | "I'll mark the phase ✅ before running post-phase review"     | Review first. `revise` blocks closure.                                   |
 | "The internal reviewer already approved this slice, skip external" | No. Internal review = per-task, in-loop. External review = per-slice/phase, out-of-loop. Both required. |
 | "The status tag is fine without a date"                       | `DONE` requires `YYYY-MM-DD`. Future-you needs the timestamp.            |
+| "I checked TASKLIST.md and X{n} is free"                      | TASKLIST.md alone is not authoritative for allocation. Check `docs/specs/`, `docs/plans/`, and `docs/reviewer/` too — an orphaned artifact can hold an ID that the tracker never recorded. |
+| "I'll commit the spec file now and add the TASKLIST row after" | No. The TASKLIST row is the allocation. Write it first — otherwise the spec is an orphan the moment it lands. |
 
 ## Integration
 

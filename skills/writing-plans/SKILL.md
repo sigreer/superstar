@@ -17,7 +17,7 @@ Assume they are a skilled developer, but know almost nothing about our toolset o
 
 **Save plans to:** `docs/plans/YYYY-MM-DD-<id>-<slug>.md` where `<id>` is the TASKLIST ID for the work (e.g. `p2-s3a`). If the project does not use TASKLIST.md, omit the ID segment. User preferences for plan location override this default.
 
-**TASKLIST integration:** If `docs/TASKLIST.md` exists, this plan must correspond to a TASKLIST entry. See [[tasklist-discipline]] for the ID scheme and status rules.
+**TASKLIST integration:** If `docs/TASKLIST.md` exists, this plan must correspond to a TASKLIST entry. See [[tasklist-discipline]] for the ID scheme and status rules. **Before writing the plan file, verify the TASKLIST row for `<id>` exists.** If it doesn't (e.g. an upstream spec was committed without one), stop and create the row first per [[tasklist-discipline]] "Allocating a new ID" — never let a plan be the artifact that mints an ID.
 
 ## Scope Check
 
