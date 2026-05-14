@@ -57,6 +57,76 @@
       "base_ref": null,
       "base_ref_source": "unavailable",
       "diff_included": false
+    },
+    {
+      "round": 3,
+      "reviewers": [
+        {
+          "role": "primary",
+          "sweep_group": null,
+          "parent_round": 3,
+          "request": "r3-2026-05-14T1957-request.md",
+          "response": "r3-2026-05-14T1957-response.md",
+          "verdict": "revise",
+          "verdict_valid": true,
+          "returncode": 0,
+          "status": "ok"
+        }
+      ],
+      "status": "ok",
+      "returncode": 0,
+      "merged_verdict": "revise",
+      "merged_findings": null,
+      "request": "r3-2026-05-14T1957-request.md",
+      "response": "r3-2026-05-14T1957-response.md",
+      "resolution": "r2-resolution.md",
+      "resolution_parse_status": "ok",
+      "resolution_waiver": false,
+      "head_sha_at_request": "94916033b4b8ca4cde221ecfd67b6ec5e352ea14",
+      "head_sha_after_round": "94916033b4b8ca4cde221ecfd67b6ec5e352ea14",
+      "worktree_dirty_at_request": false,
+      "verdict": "revise",
+      "verdict_valid": true,
+      "findings_count": 4,
+      "blocking_findings_count": 4,
+      "base_ref": "23607ef675dce5b57f42205bf5b73189732467ee",
+      "base_ref_source": "auto",
+      "diff_included": true
+    },
+    {
+      "round": 4,
+      "reviewers": [
+        {
+          "role": "primary",
+          "sweep_group": null,
+          "parent_round": 4,
+          "request": "r4-2026-05-14T2003-request.md",
+          "response": "r4-2026-05-14T2003-response.md",
+          "verdict": "ready",
+          "verdict_valid": true,
+          "returncode": 0,
+          "status": "ok"
+        }
+      ],
+      "status": "ok",
+      "returncode": 0,
+      "merged_verdict": "ready",
+      "merged_findings": null,
+      "request": "r4-2026-05-14T2003-request.md",
+      "response": "r4-2026-05-14T2003-response.md",
+      "resolution": "r3-resolution.md",
+      "resolution_parse_status": "ok",
+      "resolution_waiver": false,
+      "head_sha_at_request": "1d93acfb2db3cc75b574f4ee13bf0284e64e5671",
+      "head_sha_after_round": "1d93acfb2db3cc75b574f4ee13bf0284e64e5671",
+      "worktree_dirty_at_request": true,
+      "verdict": "ready",
+      "verdict_valid": true,
+      "findings_count": 4,
+      "blocking_findings_count": 4,
+      "base_ref": "94916033b4b8ca4cde221ecfd67b6ec5e352ea14",
+      "base_ref_source": "auto",
+      "diff_included": true
     }
   ],
   "sweep_checkpoints": {
