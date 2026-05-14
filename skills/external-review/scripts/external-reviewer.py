@@ -895,6 +895,32 @@ def write_rate_limited_artifact(
     return out_path
 
 
+EXIT_CODE_RATE_LIMITED = 8
+
+
+def make_rate_limit_payload(
+    *,
+    reviewer_cmd: str,
+    reset_at: str,
+    reset_source: str,
+    chain: str,
+    round_num: int,
+    request_path: str,
+    raw_stderr_tail: str,
+) -> dict:
+    """Build the JSON payload emitted on exit 8."""
+    return {
+        "rate_limited": True,
+        "reviewer_cmd": reviewer_cmd,
+        "reset_at": reset_at,
+        "reset_source": reset_source,
+        "chain": chain,
+        "round": round_num,
+        "request_path": request_path,
+        "raw_stderr_tail": raw_stderr_tail[-2048:],
+    }
+
+
 def resolve_mode(mode: str, *, round_num: int) -> str:
     if mode == "incremental" and round_num == 1:
         raise ValueError("--mode incremental is not valid on round 1")
