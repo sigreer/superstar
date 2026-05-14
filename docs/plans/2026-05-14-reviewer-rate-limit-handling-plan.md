@@ -2000,7 +2000,7 @@ git commit -m "external-reviewer: coalesce repeated rate-limit refusals onto hea
 - Modify: `skills/external-review/scripts/external-reviewer.py` (argparse + handler)
 - Create: `skills/external-review/tests/test_manual_approve_subcommand.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # skills/external-review/tests/test_manual_approve_subcommand.py
@@ -2068,11 +2068,11 @@ def test_manual_approve_writes_synthetic_round(tmp_path):
     assert "Overall verdict: ready (manual approval)" in body
 ```
 
-- [ ] **Step 2: Verify failure**
+- [x] **Step 2: Verify failure**
 
 Expected: argparse rejects `manual-approve` subcommand.
 
-- [ ] **Step 3: Implement the subcommand**
+- [x] **Step 3: Implement the subcommand**
 
 In `external-reviewer.py`'s `parse_args()`, add a sub-parser via the `subparsers` object created by Task 2.0:
 
@@ -2164,11 +2164,11 @@ def _git_identity() -> str:
     return os.environ.get("USER", "unknown") + "@" + os.uname().nodename
 ```
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 Expected: 1 passed.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add skills/external-review/scripts/external-reviewer.py \
@@ -2184,7 +2184,7 @@ git commit -m "external-reviewer: manual-approve subcommand"
 - Modify: `skills/external-review/scripts/external-reviewer.py`
 - Create: `skills/external-review/tests/test_ingest_response_subcommand.py`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 # skills/external-review/tests/test_ingest_response_subcommand.py
@@ -2312,11 +2312,11 @@ def test_ingest_response_unparseable_exits_2(tmp_path):
     assert candidates
 ```
 
-- [ ] **Step 2: Verify failure**
+- [x] **Step 2: Verify failure**
 
 Expected: argparse rejects `ingest-response`.
 
-- [ ] **Step 3: Implement the subcommand**
+- [x] **Step 3: Implement the subcommand**
 
 Argparse (add to `parse_args()` alongside the `subparsers` object from Task 2.0):
 
@@ -2420,11 +2420,11 @@ def run_ingest_response(args) -> int:
     return 0
 ```
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 Expected: 4 passed.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add skills/external-review/scripts/external-reviewer.py \
@@ -2440,7 +2440,7 @@ git commit -m "external-reviewer: ingest-response subcommand (paste/link, reform
 - Modify: `skills/external-review/scripts/external-reviewer.py`
 - Create: `skills/external-review/tests/test_show_clear_limit.py`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 # skills/external-review/tests/test_show_clear_limit.py
@@ -2523,11 +2523,11 @@ def test_clear_limit_idempotent_on_missing(tmp_path):
     assert proc.returncode == 0
 ```
 
-- [ ] **Step 2: Verify failure**
+- [x] **Step 2: Verify failure**
 
 Expected: argparse rejects both subcommands.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Argparse (add to `parse_args()` alongside the `subparsers` object from Task 2.0):
 
@@ -2564,13 +2564,13 @@ def run_clear_limit(args) -> int:
 
 **F2 (r3 fix): Do NOT add dispatch branches in `main()` here.** The dispatch for `show-limit` and `clear-limit` is already part of the top-of-main() block defined in Task 2.0. This task only adds the argparse sub-parsers and the handler functions.
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 Expected: 5 passed.
 
 Full suite: 189 passed.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add skills/external-review/scripts/external-reviewer.py \
@@ -2590,7 +2590,7 @@ git commit -m "external-reviewer: show-limit + clear-limit subcommands"
 
 **Chosen approach — Option A (two reviewer scripts):** Since all roles use the same command template, distinguish primary vs sweep invocations via separate wrapper scripts: the primary reviewer script succeeds; the sweep reviewer script emits the rate-limit error. Use `--independent-reviewers 1` to force a sweep invocation with `--sweep-policy first-round` (F4 fix: `always` is not a valid choice; real choices are `first-round`, `final-ready`, `both`, `never`). A single script that behaves differently based on invocation count (writing a sentinel file) is simplest.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # skills/external-review/tests/test_sweep_partial_rate_limit.py
@@ -2672,11 +2672,11 @@ def test_sweep_rate_limited_primary_ok_round_still_succeeds(tmp_path):
     assert state["limits"]  # not empty
 ```
 
-- [ ] **Step 2: Verify failure**
+- [x] **Step 2: Verify failure**
 
 Expected: the sweep's failure is currently recorded as `status="failed"`, not `"rate-limited"`, so the assertion on `sweep_entries[0] == "rate-limited"` fails. The round may or may not return exit 0 (depending on sweep-failure behaviour).
 
-- [ ] **Step 3: Update sweep handling in `run_one_reviewer`**
+- [x] **Step 3: Update sweep handling in `run_one_reviewer`**
 
 `run_one_reviewer` is called for BOTH primary and sweep invocations (same function, different `role` argument). The rate-limit detection already wired in Task 2.4 fires for ANY non-zero returncode inside `run_one_reviewer`. However, when `role == "sweep"`, raising `ReviewerRateLimited` propagates to `main()` which exits 8 — but we want the round to CONTINUE (primary already succeeded) and just mark the sweep as rate-limited.
 
@@ -2773,19 +2773,19 @@ Update the existing callers that build `ReviewerResult` to set `status="ok"` (re
 
 Update `main()`'s round-entry builder to use `r.status` instead of computing `"ok" if r.returncode == 0 else "failed"`.
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 Expected: 1 passed.
 
 Full suite: 191 passed.
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 Expected: 1 passed.
 
 Full suite: 190 passed.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add skills/external-review/scripts/external-reviewer.py \
