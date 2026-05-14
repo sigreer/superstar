@@ -985,6 +985,43 @@ def run_one_reviewer(
         "session.state" if role == "primary" else f"sweep{sweep_index}.session.state"
     )
 
+    # Pre-spawn rate-limit check
+    key = reviewer_cmd_basename()
+    active = get_active_limit(key)
+    if active is not None:
+        # First refusal in this chain → write a rate-limited round artifact.
+        # (Coalescing onto an existing head round is handled in Slice 4.)
+        artifact_path = write_rate_limited_artifact(
+            chain_dir=chain_dir, round_num=round_num, timestamp=timestamp,
+            reviewer_cmd=key, reset_at=active["reset_at"],
+            raw_stderr_tail=active.get("raw_stderr_tail", ""),
+        )
+        # F3: chain.json is guaranteed to exist (Task 2.0 eager-write).
+        _manifest_path = chain_dir / "chain.json"
+        _manifest = read_manifest(_manifest_path)
+        new_round = {
+            "round": round_num,
+            "status": "rate-limited",
+            "returncode": None,
+            "verdict": None,
+            "verdict_valid": False,
+            "merged_verdict": None,
+            "reset_at": active["reset_at"],
+            "reviewer_cmd": key,
+            "request": request_path.name,
+            "response": artifact_path.name,
+            "limited_at": _now_local().isoformat(timespec="seconds"),
+        }
+        _manifest["rounds"].append(new_round)
+        write_manifest(_manifest_path, _manifest)
+        raise ReviewerRateLimited(
+            reviewer_cmd=key, reset_at=active["reset_at"],
+            reset_source=active.get("reset_source", "unknown"),
+            chain=chain_dir.name, round_num=round_num,
+            request_path=str(request_path),
+            raw_stderr_tail=active.get("raw_stderr_tail", ""),
+        )
+
     result = run_reviewer(
         command_template=args.reviewer_cmd,
         prompt_file=request_path, prompt_text=prompt_text,
