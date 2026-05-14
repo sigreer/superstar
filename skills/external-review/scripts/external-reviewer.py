@@ -330,6 +330,25 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def current_head_sha(root: Path) -> str | None:
+    try:
+        out = subprocess.run(
+            ["git", "-C", str(root), "rev-parse", "HEAD"],
+            text=True, capture_output=True, check=True,
+        )
+        return out.stdout.strip() or None
+    except subprocess.CalledProcessError:
+        return None
+
+
+def is_dirty(root: Path) -> bool:
+    out = subprocess.run(
+        ["git", "-C", str(root), "status", "--porcelain"],
+        text=True, capture_output=True,
+    )
+    return bool(out.stdout.strip())
+
+
 def main() -> int:
     args = parse_args()
     root = repo_root()
@@ -348,29 +367,45 @@ def main() -> int:
 
     chain_dir = (root / args.output_dir / chain_folder_name(target, args.kind)).resolve()
     chain_dir.mkdir(parents=True, exist_ok=True)
+    manifest_path = chain_dir / "chain.json"
+    manifest = read_manifest(manifest_path)
+    if manifest is None and any(chain_dir.glob("r*-*-request.md")):
+        manifest = synthesize_legacy_manifest(
+            chain_dir=chain_dir,
+            chain=chain_folder_name(target, args.kind),
+            kind=args.kind,
+            target=rel_or_abs(target, root),
+            work_id=None,
+        )
+        write_manifest(manifest_path, manifest)
+    if manifest is None:
+        manifest = {
+            "schema_version": SUPPORTED_SCHEMA_VERSION,
+            "chain": chain_folder_name(target, args.kind),
+            "kind": args.kind,
+            "target": rel_or_abs(target, root),
+            "work_id": None,
+            "legacy_migrated": False,
+            "rounds": [],
+            "sweep_checkpoints": {"first-round": "pending", "final-ready": "pending"},
+        }
     round_num = next_round_number(chain_dir)
     timestamp = dt.datetime.now().strftime("%Y-%m-%dT%H%M")
     basename = f"r{round_num}-{timestamp}"
     prompt_file = chain_dir / f"{basename}-request.md"
     response_file = chain_dir / f"{basename}-response.md"
     prompt_text = make_prompt(
-        root=root,
-        target=target,
-        kind=args.kind,
-        context=context,
-        max_lines=args.max_lines,
+        root=root, target=target, kind=args.kind,
+        context=context, max_lines=args.max_lines,
     )
     prompt_file.write_text(prompt_text, encoding="utf-8")
 
     try:
         result = run_reviewer(
             command_template=args.reviewer_cmd,
-            prompt_file=prompt_file,
-            prompt_text=prompt_text,
-            target_file=target,
-            kind=args.kind,
-            prompt_transport=args.prompt_transport,
-            timeout=args.timeout,
+            prompt_file=prompt_file, prompt_text=prompt_text,
+            target_file=target, kind=args.kind,
+            prompt_transport=args.prompt_transport, timeout=args.timeout,
         )
     except FileNotFoundError as exc:
         print(f"ERROR: reviewer command not found: {exc}", file=sys.stderr)
@@ -381,15 +416,31 @@ def main() -> int:
         return 124
 
     review_path = write_review_artifact(
-        root=root,
-        target=target,
-        kind=args.kind,
+        root=root, target=target, kind=args.kind,
         command_template=args.reviewer_cmd,
-        prompt_file=prompt_file,
-        response_file=response_file,
-        round_num=round_num,
-        result=result,
+        prompt_file=prompt_file, response_file=response_file,
+        round_num=round_num, result=result,
     )
+    review_body = review_path.read_text(encoding="utf-8")
+    verdict, verdict_valid = parse_verdict(review_body)
+    findings_count, blocking_count = parse_findings(review_body)
+
+    head_sha = current_head_sha(root)
+    round_entry = {
+        "round": round_num,
+        "request": prompt_file.name,
+        "response": response_file.name,
+        "resolution": None,
+        "head_sha_at_request": head_sha,
+        "head_sha_after_round": head_sha,
+        "worktree_dirty_at_request": is_dirty(root),
+        "verdict": verdict,
+        "verdict_valid": verdict_valid,
+        "findings_count": findings_count,
+        "blocking_findings_count": blocking_count,
+    }
+    manifest["rounds"].append(round_entry)
+    write_manifest(manifest_path, manifest)
 
     review_rel = rel_or_abs(review_path, root)
     prompt_rel = rel_or_abs(prompt_file, root)
@@ -398,21 +449,34 @@ def main() -> int:
         print(f"PROMPT_PATH={prompt_rel}")
         print(f"ROUND={round_num}")
     elif args.emit == "review":
-        print(review_path.read_text(encoding="utf-8"))
+        print(review_body)
     elif args.emit == "json":
-        print(
-            json.dumps(
-                {
-                    "review_path": review_rel,
-                    "prompt_path": prompt_rel,
-                    "round": round_num,
-                    "status": "ok" if result.returncode == 0 else "failed",
-                    "returncode": result.returncode,
-                    "review": review_path.read_text(encoding="utf-8"),
-                },
-                indent=2,
-            )
-        )
+        print(json.dumps({
+            "review_path": review_rel,
+            "prompt_path": prompt_rel,
+            "chain": manifest["chain"],
+            "round": round_num,
+            "kind": args.kind,
+            "work_id": manifest.get("work_id"),
+            "status": "ok" if result.returncode == 0 else "failed",
+            "returncode": result.returncode,
+            "verdict": verdict,
+            "verdict_valid": verdict_valid,
+            "findings_count": findings_count,
+            "blocking_findings_count": blocking_count,
+            "review_depth": "standard",
+            "reviewers": [{
+                "role": "primary",
+                "verdict": verdict,
+                "verdict_valid": verdict_valid,
+                "review_path": review_rel,
+                "review": review_body,
+            }],
+            "merged_verdict": verdict,
+            "merged_findings_path": None,
+            "merged_findings": None,
+            "review": review_body,
+        }, indent=2))
     return result.returncode
 
 
