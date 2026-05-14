@@ -18,7 +18,7 @@
   - `r2-2026-05-14T0129-response.md` → `(3, 2)` ✅
 - **chain.json re-emission:** the round-1 entry's `findings_count` / `blocking_findings_count` were `null` because the bug was present when round 1 was recorded. After the parser fix, both rounds in `docs/reviewer/external-reviewer-redesign-post-slice/chain.json` were re-parsed and updated in place; both now read `findings_count: 3`, `blocking_findings_count: 2`.
 - **Test suite:** `python3 -m pytest skills/external-review/tests/` → `21 passed` (19 baseline + 2 new).
-- **Commit:** see `git log` (parser fix + tests bundled in the same commit).
+- **Commit:** `43f0aff` (parser fix + tests bundled in the same commit).
 
 ## F2 — untracked planning artefacts
 - **Verdict:** fixed
@@ -27,9 +27,9 @@
   - The Slice 1 closeout note in the plan was updated to disclose these commits explicitly.
   - The current in-flight round's `r2-*-request.md` / `r2-*-response.md` are deliberately **not** committed in this resolution — they will be committed alongside this resolution doc once the round 2 fix work lands as a single coherent commit. This matches the chain-folder convention used in round 1.
 - **By-design note:** F2 also flagged that `r2-*request.md` isn't in `chain.json`. That is expected: `chain.json` is appended to only after the reviewer finishes a round (the request file is written before the reviewer runs, the manifest entry is written after). During an in-flight round the request file may appear untracked with no manifest entry; this resolves when the round closes. The Slice 1 closeout note was extended to document this expectation.
-- **Commit:** see `git log` (planning artefacts + closeout-note edits bundled).
+- **Commit:** `591a20c` (planning artefacts + closeout-note edits + Slice 1 checkbox ticks bundled).
 
 ## F3 — Slice 1 checkboxes visually incomplete
 - **Verdict:** fixed
 - **What changed:** ticked all 31 `- [ ]` step checkboxes inside Slice 1 (tasks 1.1 through 1.6) in `docs/superstar/plans/2026-05-13-external-reviewer-redesign.md`, switching them to `- [x]`. Slice 2+ checkboxes are intentionally left open.
-- **Commit:** see `git log`.
+- **Commit:** `591a20c` (bundled with the F2 planning-artefact commit).
