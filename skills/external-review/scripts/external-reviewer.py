@@ -61,6 +61,9 @@ Additional context files:
 
 Review output contract:
 1. Findings
+   - Tag each finding with a stable ID: `F1`, `F2`, `F3`, …. IDs must remain
+     stable if this review is iterated in subsequent rounds.
+   - Mark severity inline: `Severity: blocking | important | minor | nit`.
 2. Open questions / assumptions
 3. Suggested document edits
 4. Verification gaps / commands that should be run, if any
