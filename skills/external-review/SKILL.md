@@ -5,7 +5,7 @@ description: Use after writing a spec, after writing a plan, after completing a 
 
 # External Review
 
-An independent reviewer (not the coordinating agent) reviews a target document or completed slice/phase. The bridge is `scripts/external-reviewer.py` — provider-neutral, configured via `AGENT_REVIEWER_CMD`. Each round writes a `request.md` and `response.md` pair under a per-document chain folder so the iteration history is durable and committable.
+An independent reviewer (not the coordinating agent) reviews a target document or completed slice/phase. The bridge is `skills/external-review/scripts/external-reviewer.py` — provider-neutral, configured via `AGENT_REVIEWER_CMD`. Each round writes a `request.md` and `response.md` pair under a per-document chain folder so the iteration history is durable and committable.
 
 **Announce at start:** "I'm using the external-review skill to run a `<kind>` review on `<target>`."
 
@@ -40,7 +40,7 @@ If `reviewer-agent` is missing, `[[project-setup]]` will offer to install/config
 ## How a round runs
 
 ```bash
-python3 scripts/external-reviewer.py review \
+python3 skills/external-review/scripts/external-reviewer.py review \
     --kind <spec|plan|post-slice|post-phase> \
     --file <path/to/target.md> \
     [--context <path>]... \

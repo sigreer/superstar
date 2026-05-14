@@ -400,6 +400,9 @@ def main() -> int:
     )
     prompt_file.write_text(prompt_text, encoding="utf-8")
 
+    head_sha_at_request = current_head_sha(root)
+    worktree_dirty_at_request = is_dirty(root)
+
     try:
         result = run_reviewer(
             command_template=args.reviewer_cmd,
@@ -425,15 +428,15 @@ def main() -> int:
     verdict, verdict_valid = parse_verdict(review_body)
     findings_count, blocking_count = parse_findings(review_body)
 
-    head_sha = current_head_sha(root)
+    head_sha_after_round = current_head_sha(root)
     round_entry = {
         "round": round_num,
         "request": prompt_file.name,
         "response": response_file.name,
         "resolution": None,
-        "head_sha_at_request": head_sha,
-        "head_sha_after_round": head_sha,
-        "worktree_dirty_at_request": is_dirty(root),
+        "head_sha_at_request": head_sha_at_request,
+        "head_sha_after_round": head_sha_after_round,
+        "worktree_dirty_at_request": worktree_dirty_at_request,
         "verdict": verdict,
         "verdict_valid": verdict_valid,
         "findings_count": findings_count,
