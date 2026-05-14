@@ -171,6 +171,31 @@ def cap_with_elision(text: str, max_bytes: int = 80 * 1024) -> str:
     return head + marker + tail
 
 
+DEFAULT_STATE_FILE = Path.home() / ".config" / "superstar" / "reviewer-state.json"
+
+
+def state_file_path() -> Path:
+    override = os.environ.get("AGENT_REVIEWER_STATE_FILE")
+    if override:
+        return Path(override)
+    return DEFAULT_STATE_FILE
+
+
+def load_state() -> dict:
+    """Read the reviewer state file. Fails open: missing/corrupt → empty state."""
+    path = state_file_path()
+    if not path.exists():
+        return {"schema_version": 1, "limits": {}}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(data, dict) or data.get("schema_version") != 1 or not isinstance(data.get("limits"), dict):
+            raise ValueError("schema mismatch")
+        return data
+    except (json.JSONDecodeError, ValueError, OSError) as e:
+        print(f"WARNING: reviewer-state.json at {path} unreadable ({e}); treating as empty", file=sys.stderr)
+        return {"schema_version": 1, "limits": {}}
+
+
 _BUDGET_SECTIONS = [
     ("target_preview", r"\n## Target Preview\n", [80 * 80, 40 * 80, 0]),
     ("diff_body", r"\n## Changes since prior round\n", [50 * 1024, 12 * 1024, 0]),
