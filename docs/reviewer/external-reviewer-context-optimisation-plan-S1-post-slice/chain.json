@@ -86,10 +86,91 @@
       "base_ref": "f521c4cfc27a6843e787951602c43bd30d8b84fa",
       "base_ref_source": "auto",
       "diff_included": true
+    },
+    {
+      "round": 3,
+      "reviewers": [
+        {
+          "role": "primary",
+          "sweep_group": null,
+          "parent_round": 3,
+          "request": "r3-2026-05-14T1552-primary-request.md",
+          "response": "r3-2026-05-14T1552-primary-response.md",
+          "verdict": "ready",
+          "verdict_valid": true,
+          "returncode": 0,
+          "status": "ok"
+        },
+        {
+          "role": "sweep",
+          "sweep_group": 1,
+          "parent_round": 3,
+          "request": "r3-2026-05-14T1552-sweep1-request.md",
+          "response": "r3-2026-05-14T1552-sweep1-response.md",
+          "verdict": "revise",
+          "verdict_valid": true,
+          "returncode": 0,
+          "status": "ok"
+        }
+      ],
+      "status": "ok",
+      "returncode": 0,
+      "merged_verdict": "revise",
+      "merged_findings": "r3-merged-findings.md",
+      "request": "r3-2026-05-14T1552-primary-request.md",
+      "response": "r3-2026-05-14T1552-primary-response.md",
+      "resolution": "r2-resolution.md",
+      "resolution_parse_status": "ok",
+      "resolution_waiver": false,
+      "head_sha_at_request": "5c3a967c8a157a7b8805fe0f5ec7ef75d6253865",
+      "head_sha_after_round": "5c3a967c8a157a7b8805fe0f5ec7ef75d6253865",
+      "worktree_dirty_at_request": false,
+      "verdict": "ready",
+      "verdict_valid": true,
+      "findings_count": 4,
+      "blocking_findings_count": 0,
+      "base_ref": "c343379e66bc80537dd6d3a4ed0016fb5ac8d8f6",
+      "base_ref_source": "auto",
+      "diff_included": true
+    },
+    {
+      "round": 4,
+      "reviewers": [
+        {
+          "role": "primary",
+          "sweep_group": null,
+          "parent_round": 4,
+          "request": "r4-2026-05-14T1559-request.md",
+          "response": "r4-2026-05-14T1559-response.md",
+          "verdict": "revise",
+          "verdict_valid": true,
+          "returncode": 0,
+          "status": "ok"
+        }
+      ],
+      "status": "ok",
+      "returncode": 0,
+      "merged_verdict": "revise",
+      "merged_findings": null,
+      "request": "r4-2026-05-14T1559-request.md",
+      "response": "r4-2026-05-14T1559-response.md",
+      "resolution": "r3-resolution.md",
+      "resolution_parse_status": "ok",
+      "resolution_waiver": false,
+      "head_sha_at_request": "c56de4031861ffc683a07875f26be3e8c37bcde6",
+      "head_sha_after_round": "c56de4031861ffc683a07875f26be3e8c37bcde6",
+      "worktree_dirty_at_request": true,
+      "verdict": "revise",
+      "verdict_valid": true,
+      "findings_count": 4,
+      "blocking_findings_count": 0,
+      "base_ref": "5c3a967c8a157a7b8805fe0f5ec7ef75d6253865",
+      "base_ref_source": "auto",
+      "diff_included": true
     }
   ],
   "sweep_checkpoints": {
     "first-round": "completed",
-    "final-ready": "pending"
+    "final-ready": "completed"
   }
 }
