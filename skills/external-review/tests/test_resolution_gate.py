@@ -23,7 +23,7 @@ def _run(repo, *args, env=None):
     base_env = os.environ.copy()
     if env:
         base_env.update(env)
-    base_env.setdefault("AGENT_REVIEWER_CMD", str(repo / "stub.sh"))
+    base_env["AGENT_REVIEWER_CMD"] = str(repo / "stub.sh")
     return subprocess.run(
         [sys.executable, str(SCRIPTS / "external-reviewer.py"), "review", *args],
         cwd=repo, env=base_env, capture_output=True, text=True,
