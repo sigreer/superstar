@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "chain": "external-reviewer-redesign-S2-post-slice",
+  "kind": "post-slice",
+  "target": "docs/superstar/plans/2026-05-13-external-reviewer-redesign.md",
+  "work_id": "S2",
+  "legacy_migrated": false,
+  "rounds": [
+    {
+      "round": 1,
+      "request": "r1-2026-05-14T0221-request.md",
+      "response": "r1-2026-05-14T0221-response.md",
+      "resolution": "r1-resolution.md",
+      "head_sha_at_request": "d05056fdde59906ceb557dc15bb627b9afc55130",
+      "head_sha_after_round": "d05056fdde59906ceb557dc15bb627b9afc55130",
+      "worktree_dirty_at_request": true,
+      "verdict": "revise",
+      "verdict_valid": true,
+      "findings_count": 3,
+      "blocking_findings_count": 2,
+      "note": "Originally misrouted as round 5 of the Slice-1 chain (external-reviewer-redesign-post-slice/r5-*). Moved to this S2-keyed chain after fixing discover_legacy_chain to require absence of chain.json before treating a sibling folder as a legacy candidate."
+    }
+  ],
+  "sweep_checkpoints": {
+    "first-round": "pending",
+    "final-ready": "pending"
+  }
+}
