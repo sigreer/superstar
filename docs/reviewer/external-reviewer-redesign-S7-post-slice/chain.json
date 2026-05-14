@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "chain": "external-reviewer-redesign-S7-post-slice",
+  "kind": "post-slice",
+  "target": "docs/superstar/plans/2026-05-13-external-reviewer-redesign.md",
+  "work_id": "S7",
+  "legacy_migrated": false,
+  "rounds": [
+    {
+      "round": 1,
+      "reviewers": [
+        {
+          "role": "primary",
+          "sweep_group": null,
+          "parent_round": 1,
+          "request": "r1-2026-05-14T0404-request.md",
+          "response": "r1-2026-05-14T0404-response.md",
+          "verdict": "revise",
+          "verdict_valid": true
+        }
+      ],
+      "merged_verdict": "revise",
+      "merged_findings": null,
+      "request": "r1-2026-05-14T0404-request.md",
+      "response": "r1-2026-05-14T0404-response.md",
+      "resolution": "r1-resolution.md",
+      "resolution_parse_status": "ok",
+      "resolution_waiver": true,
+      "head_sha_at_request": "eb187da1efef62813c82c8e4c6831ef21b1d6ef1",
+      "head_sha_after_round": "eb187da1efef62813c82c8e4c6831ef21b1d6ef1",
+      "worktree_dirty_at_request": true,
+      "verdict": "revise",
+      "verdict_valid": true,
+      "findings_count": 4,
+      "blocking_findings_count": 2,
+      "base_ref": null,
+      "base_ref_source": null,
+      "diff_included": false
+    }
+  ],
+  "sweep_checkpoints": {
+    "first-round": "pending",
+    "final-ready": "pending"
+  }
+}

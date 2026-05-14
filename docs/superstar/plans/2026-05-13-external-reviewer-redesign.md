@@ -2191,7 +2191,7 @@ git commit -m "feat(external-reviewer): {chain_dir}/{round}/{previous_response}/
 - Modify: `skills/external-review/scripts/external-reviewer.py` (`parse_args`, add helpers)
 - Create: `skills/external-review/tests/test_review_depth.py`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 # skills/external-review/tests/test_review_depth.py
@@ -2241,7 +2241,7 @@ def test_exhaustive_first_round_two_sweeps():
     assert plan.sweep_count == 2
 ```
 
-- [ ] **Step 2: Run the tests; confirm they fail**
+- [x] **Step 2: Run the tests; confirm they fail**
 
 ```bash
 python3 -m pytest skills/external-review/tests/test_review_depth.py -v
@@ -2249,7 +2249,7 @@ python3 -m pytest skills/external-review/tests/test_review_depth.py -v
 
 Expected: 5 failures.
 
-- [ ] **Step 3: Add the flags and the planner**
+- [x] **Step 3: Add the flags and the planner**
 
 In `parse_args()`:
 
@@ -2309,7 +2309,7 @@ def plan_sweeps(
     return SweepPlan(sweep_count=0, checkpoint=None)
 ```
 
-- [ ] **Step 4: Run the tests; confirm they pass**
+- [x] **Step 4: Run the tests; confirm they pass**
 
 ```bash
 python3 -m pytest skills/external-review/tests/test_review_depth.py -v
@@ -2317,7 +2317,7 @@ python3 -m pytest skills/external-review/tests/test_review_depth.py -v
 
 Expected: 5 passed.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add skills/external-review/scripts/external-reviewer.py skills/external-review/tests/test_review_depth.py
@@ -2330,7 +2330,7 @@ git commit -m "feat(external-reviewer): plan_sweeps + depth/policy/count flags"
 - Modify: `skills/external-review/scripts/external-reviewer.py` (`main`)
 - Create: `skills/external-review/tests/test_sweep_dispatch.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # skills/external-review/tests/test_sweep_dispatch.py
@@ -2383,7 +2383,7 @@ def test_thorough_round_1_writes_primary_and_sweep_files(tmp_path):
     assert payload["merged_findings_path"] is not None
 ```
 
-- [ ] **Step 2: Run the test; confirm it fails**
+- [x] **Step 2: Run the test; confirm it fails**
 
 ```bash
 python3 -m pytest skills/external-review/tests/test_sweep_dispatch.py -v
@@ -2391,7 +2391,7 @@ python3 -m pytest skills/external-review/tests/test_sweep_dispatch.py -v
 
 Expected: failure.
 
-- [ ] **Step 3: Refactor a single-reviewer invocation into a helper, then dispatch the plan**
+- [x] **Step 3: Refactor a single-reviewer invocation into a helper, then dispatch the plan**
 
 Add a helper that runs one reviewer and writes one pair of files:
 
@@ -2493,7 +2493,7 @@ In `main()`, after computing `mode`, `prompt_text`, and the sweep plan:
         ))
 ```
 
-- [ ] **Step 4: Compute merged findings and verdict**
+- [x] **Step 4: Compute merged findings and verdict**
 
 Add helpers:
 
@@ -2544,7 +2544,7 @@ In `main()`, after dispatching:
         merged_verdict = primary.verdict
 ```
 
-- [ ] **Step 5: Write enriched manifest entry + JSON output**
+- [x] **Step 5: Write enriched manifest entry + JSON output**
 
 Replace the single-reviewer `round_entry` block with:
 
@@ -2631,7 +2631,7 @@ Also persist `work_id` into the manifest on first creation:
     manifest["work_id"] = args.work_id or manifest.get("work_id")
 ```
 
-- [ ] **Step 6: Run the tests**
+- [x] **Step 6: Run the tests**
 
 ```bash
 python3 -m pytest skills/external-review/tests/test_sweep_dispatch.py -v
@@ -2640,7 +2640,7 @@ python3 -m pytest skills/external-review/tests/ -v
 
 Expected: all passed.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add skills/external-review/scripts/external-reviewer.py skills/external-review/tests/test_sweep_dispatch.py
@@ -2653,7 +2653,7 @@ git commit -m "feat(external-reviewer): dispatch primary + sweep reviewers; merg
 - Modify: `skills/external-review/scripts/external-reviewer.py` (gate logic in `main`)
 - Create: `skills/external-review/tests/test_gate_merged_verdict.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # skills/external-review/tests/test_gate_merged_verdict.py
@@ -2706,7 +2706,7 @@ def test_gate_fires_when_merged_verdict_is_revise_even_if_primary_ready(tmp_path
     assert r2.returncode == 3, r2.stderr
 ```
 
-- [ ] **Step 2: Run the test; confirm it fails (or already passes if gate logic was correct)**
+- [x] **Step 2: Run the test; confirm it fails (or already passes if gate logic was correct)**
 
 ```bash
 python3 -m pytest skills/external-review/tests/test_gate_merged_verdict.py -v
@@ -2714,7 +2714,7 @@ python3 -m pytest skills/external-review/tests/test_gate_merged_verdict.py -v
 
 If it passes, the gate is already merged-verdict-aware from Task 3.2's `prior.get("merged_verdict") or prior.get("verdict")` expression. If it fails, refine the gate. Either way, the test now documents the intended behavior.
 
-- [ ] **Step 3: Confirm the gate condition explicitly considers `verdict_valid`**
+- [x] **Step 3: Confirm the gate condition explicitly considers `verdict_valid`**
 
 Verify the gate fragment in `main()` reads:
 
@@ -2726,7 +2726,7 @@ Verify the gate fragment in `main()` reads:
 
 (This was added in Task 3.2 — confirm it's still in place after the Pass-3 refactor in 7.2.)
 
-- [ ] **Step 4: Run the full suite**
+- [x] **Step 4: Run the full suite**
 
 ```bash
 python3 -m pytest skills/external-review/tests/ -v
@@ -2734,7 +2734,7 @@ python3 -m pytest skills/external-review/tests/ -v
 
 Expected: all passed.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add skills/external-review/scripts/external-reviewer.py skills/external-review/tests/test_gate_merged_verdict.py
@@ -3119,3 +3119,23 @@ Both commits passed in-loop spec compliance and code-quality reviews via subagen
 **Unrelated dirty files (out of Slice 6 scope, intentionally left untouched):** `CLAUDE.md`, `skills/executing-plans/SKILL.md`, `skills/finishing-a-development-branch/SKILL.md`, `skills/subagent-driven-development/SKILL.md`, `skills/tasklist-discipline/SKILL.md` (authorised by the human partner to remain across Slice 1–6 closeouts).
 
 **Post-slice review (round 2, S6 chain) — final close-out:** verdict `ready` with **no required edits**. Both round-1 findings (F1 dirty/`main` override, F2 plan stale) confirmed RESOLVED by the reviewer. Resolution at `docs/reviewer/external-reviewer-redesign-S6-post-slice/r2-resolution.md`. The Slice 6 post-slice gate passes at round 2 and Slice 6 is closed.
+
+## Slice 7 closeout note (2026-05-14)
+
+**Commits comprising Slice 7:**
+- `3445f3a` Task 7.1 — depth/policy flags and defaults (`--review-depth`, `--independent-reviewers`, `--sweep-policy`, planner helpers, `test_review_depth.py`).
+- `6bb8399` Task 7.2 — dispatch primary + sweep reviewers, namespaced filenames, merged verdict/findings, enriched manifest entry.
+- `4016f80` Task 7.2 — renamespace fix follow-up.
+- `eb187da` Task 7.3 — gate uses `merged_verdict` when present and explicitly considers `verdict_valid`.
+
+**Post-r1 fixes (S7 chain):**
+- `d23c579` F1 fix — `plan_sweeps` ordering: `final-ready` is now planned after the current primary's result rather than from the prior manifest round, so a `revise → ready` transition triggers the required fresh sweep.
+- `fbcead7` F2 fix — placeholder plumbing: `run_one_reviewer()` now propagates `previous_response` and `resolution_file` into `run_reviewer()` so S6's `{previous_response}`/`{resolution_file}` substitution works for real sweep reviewer invocations on round N+1.
+
+**Final test result:** `python3 -m pytest skills/external-review/tests/` → `96 passed`.
+
+**Pre-flight branch check:** standing override applies — Slice 7 was developed on `main` per the human-partner authorisation recorded at the Slice 4 closeout.
+
+**Post-slice review (round 1, S7 chain):** verdict `revise` with 4 findings (2 blocking technical, 2 important procedural). Resolution at `docs/reviewer/external-reviewer-redesign-S7-post-slice/r1-resolution.md`. F1 (sweep planning ordering) fixed in `d23c579`; F2 (placeholder plumbing regression) fixed in `fbcead7`; F3 (Slice 7 checkboxes still unchecked) fixed by this commit; F4 (dirty tree + `main` branch) waived under the standing override. r1 chain artefacts (request, response, chain.json, resolution) committed as part of this commit.
+
+**Unrelated dirty files (out of Slice 7 scope, intentionally left untouched):** `CLAUDE.md`, `skills/executing-plans/SKILL.md`, `skills/finishing-a-development-branch/SKILL.md`, `skills/subagent-driven-development/SKILL.md`, `skills/tasklist-discipline/SKILL.md` (authorised by the human partner to remain across Slice 1–7 closeouts).
