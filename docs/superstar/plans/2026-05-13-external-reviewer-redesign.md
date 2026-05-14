@@ -1817,7 +1817,7 @@ git commit -m "feat(external-reviewer): incremental round preamble (chain summar
 - Modify: `skills/external-review/scripts/external-reviewer.py`
 - Create: `skills/external-review/tests/test_diff.py`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 # skills/external-review/tests/test_diff.py
@@ -1873,7 +1873,7 @@ def test_no_diff_when_base_ref_none(tmp_path):
     assert "not available" in out
 ```
 
-- [ ] **Step 2: Run the tests; confirm they fail**
+- [x] **Step 2: Run the tests; confirm they fail**
 
 ```bash
 python3 -m pytest skills/external-review/tests/test_diff.py -v
@@ -1881,7 +1881,7 @@ python3 -m pytest skills/external-review/tests/test_diff.py -v
 
 Expected: 3 failures.
 
-- [ ] **Step 3: Implement `compute_diff_section`**
+- [x] **Step 3: Implement `compute_diff_section`**
 
 ```python
 def compute_diff_section(
@@ -1939,7 +1939,7 @@ def _cap_lines(text: str, max_lines: int) -> str:
     return "\n".join(lines[:max_lines] + [f"[truncated: {len(lines) - max_lines} additional lines]"])
 ```
 
-- [ ] **Step 4: Run the tests; confirm they pass**
+- [x] **Step 4: Run the tests; confirm they pass**
 
 ```bash
 python3 -m pytest skills/external-review/tests/test_diff.py -v
@@ -1947,7 +1947,7 @@ python3 -m pytest skills/external-review/tests/test_diff.py -v
 
 Expected: 3 passed.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add skills/external-review/scripts/external-reviewer.py skills/external-review/tests/test_diff.py
@@ -1959,7 +1959,7 @@ git commit -m "feat(external-reviewer): compute_diff_section (diff + dirty + unt
 **Files:**
 - Modify: `skills/external-review/scripts/external-reviewer.py` (`parse_args`, `main`, `build_incremental_preamble`)
 
-- [ ] **Step 1: Add the flags**
+- [x] **Step 1: Add the flags**
 
 In `parse_args()`:
 
@@ -1974,7 +1974,7 @@ In `parse_args()`:
                         help="Cap diff size. Truncation marker is embedded if exceeded.")
 ```
 
-- [ ] **Step 2: Decide the diff scope per kind**
+- [x] **Step 2: Decide the diff scope per kind**
 
 Add helper:
 
@@ -1986,7 +1986,7 @@ def default_diff_paths(kind: str, target: Path, context: list[Path], root: Path)
     return files
 ```
 
-- [ ] **Step 3: Wire into `main()`**
+- [x] **Step 3: Wire into `main()`**
 
 After resolving the mode and before building the preamble:
 
@@ -2057,7 +2057,7 @@ And expose in JSON:
     "base_ref": base_ref,
 ```
 
-- [ ] **Step 4: Run the full suite**
+- [x] **Step 4: Run the full suite**
 
 ```bash
 python3 -m pytest skills/external-review/tests/ -v
@@ -2065,7 +2065,7 @@ python3 -m pytest skills/external-review/tests/ -v
 
 Expected: all passed (no regressions; existing tests still pass).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add skills/external-review/scripts/external-reviewer.py
@@ -3083,3 +3083,20 @@ Both commits passed in-loop spec compliance and code-quality reviews via subagen
 **Post-slice review (round 2, S4 chain) — final close-out:** verdict `ready with small edits` with **no required edits**. All three round-1 findings (F1 dirty/untracked artefacts, F2 plan stale, F3 on `main`) confirmed RESOLVED by the reviewer. Resolution at `docs/reviewer/external-reviewer-redesign-S4-post-slice/r2-resolution.md`. The Slice 4 post-slice gate passes at round 2 and Slice 4 is closed.
 
 **Operational gotcha (known limitation):** round 2 was the first to exercise the new incremental prompt mode (Task 4.3). The incremental preamble embeds the prior request, response, and resolution into a single prompt, which routinely exceeds `ARG_MAX` when passed via the default `--prompt-transport arg` transport (the underlying `claude` CLI rejects it with an argv-too-long error). Once incremental mode is active (round 2+), the reviewer must be invoked with `--prompt-transport stdin` (or `file`). This should be addressed in a later slice or skill-docs update — likely by auto-switching the prompt transport when the prompt body exceeds a safe threshold, or by defaulting incremental-mode invocations to `stdin`.
+
+## Slice 5 closeout note (2026-05-14)
+
+**Commits comprising Slice 5:**
+- `faed8b5` Task 5.1 — `compute_diff_section` (diff + dirty + untracked listing) with unit tests
+- `1934627` Task 5.2 — CLI flags `--base-ref` / `--no-diff` / `--changed-files` / `--max-diff-lines` and wiring into `main()` + `build_incremental_preamble`
+
+**Post-r1 fix commit (S5 post-slice review F1 + diff_included refinement):**
+- `cf65a88` `external-review: scope diff status/untracked to --changed-files paths` — scopes `git status --porcelain` and the untracked-file preview loop to `paths` when callers pass `--changed-files`, and tightens `diff_included` so it doesn't claim true when the base ref was unavailable. Adds two regression tests in `test_diff.py`.
+
+**Final test result (after post-r1 fix):** `python3 -m pytest skills/external-review/tests/` → `72 passed`.
+
+**Pre-flight branch check:** standing override applies — Slice 5 was developed on `main` per the human-partner authorisation recorded at the Slice 4 closeout.
+
+**Post-slice review (round 1, S5 chain):** verdict `revise` with 3 findings (1 blocking). Resolution at `docs/reviewer/external-reviewer-redesign-S5-post-slice/r1-resolution.md`. F1 (paths scoping bug + `diff_included` claim) fixed by `cf65a88`; F2 (plan stale) fixed by this commit; F3 (dirty/untracked) — pre-existing dirty files waived under the standing override, r1 chain artefacts (request, response, chain.json) committed as part of this commit.
+
+**Unrelated dirty files (out of Slice 5 scope, intentionally left untouched):** `CLAUDE.md`, `skills/executing-plans/SKILL.md`, `skills/finishing-a-development-branch/SKILL.md`, `skills/subagent-driven-development/SKILL.md`, `skills/tasklist-discipline/SKILL.md` (authorised by the human partner to remain across Slice 1–5 closeouts).
