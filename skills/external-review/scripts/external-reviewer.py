@@ -1364,7 +1364,83 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Override path to the reviewer state file (rate-limit tracking, etc.).",
     )
+
+    sp_manual = subparsers.add_parser("manual-approve", help="Mark a chain as manually approved")
+    sp_manual.add_argument("--kind", required=True)
+    sp_manual.add_argument("--file", required=True)
+    sp_manual.add_argument("--work-id", required=False, default=None)
+    sp_manual.add_argument("--note", required=True)
+    sp_manual.add_argument("--state-file", default=None)
+
     return parser.parse_args()
+
+
+def _git_identity() -> str:
+    try:
+        name = subprocess.run(["git", "config", "user.name"], capture_output=True, text=True).stdout.strip()
+        email = subprocess.run(["git", "config", "user.email"], capture_output=True, text=True).stdout.strip()
+        if name and email:
+            return f"{name} <{email}>"
+    except Exception:
+        pass
+    return os.environ.get("USER", "unknown") + "@" + os.uname().nodename
+
+
+def run_manual_approve(args) -> int:
+    root = repo_root()
+    target = (root / args.file).resolve() if not Path(args.file).is_absolute() else Path(args.file).resolve()
+    reviewer_root = (root / "docs/reviewer").resolve()
+    new_slug = chain_folder_name(target, args.kind, args.work_id)
+    try:
+        existing = discover_legacy_chain(
+            reviewer_root=reviewer_root,
+            target_stem=DATE_PREFIX_RE.sub("", target.stem),
+            kind=args.kind,
+            new_slug=new_slug,
+        )
+    except AmbiguousLegacyChain as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 5
+    chain_dir = existing if existing else (reviewer_root / new_slug)
+    if not chain_dir.exists():
+        print(f"ERROR: chain dir not found: {chain_dir}", file=sys.stderr)
+        return 2
+
+    manifest_path = chain_dir / "chain.json"
+    manifest = read_manifest(manifest_path)
+    if manifest is None:
+        print(f"ERROR: chain.json not found: {manifest_path}", file=sys.stderr)
+        return 2
+
+    head = manifest["rounds"][-1] if manifest["rounds"] else None
+    next_round = (head["round"] + 1) if head else 1
+    approver = _git_identity()
+    now_iso = _now_local().isoformat(timespec="seconds")
+    timestamp = _now_local().strftime("%Y-%m-%dT%H%M")
+    response_path = chain_dir / f"r{next_round}-{timestamp}-response.md"
+    response_body = (
+        f"# Manual approval — {chain_dir.name} r{next_round}\n\n"
+        f"Approved by: {approver}\n"
+        f"Approved at: {now_iso}\n\n"
+        f"## Note\n{args.note}\n\n---\n\n"
+        f"Overall verdict: ready (manual approval)\n"
+    )
+    response_path.write_text(response_body, encoding="utf-8")
+    new_round = {
+        "round": next_round,
+        "status": "manual-approved",
+        "verdict": "ready",
+        "verdict_valid": True,
+        "merged_verdict": "ready",
+        "response": response_path.name,
+        "approved_by": approver,
+        "approved_at": now_iso,
+        "approval_note": args.note,
+    }
+    manifest["rounds"].append(new_round)
+    write_manifest(manifest_path, manifest)
+    print(f"Manual approval recorded for {chain_dir.name} r{next_round}")
+    return 0
 
 
 def current_head_sha(root: Path) -> str | None:
