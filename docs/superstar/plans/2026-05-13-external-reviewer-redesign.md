@@ -3041,3 +3041,14 @@ Plus the post-review fix commits:
 - `bb679ad` chore(external-reviewer): record r2-resolution.md in S2 chain manifest
 
 **Unrelated dirty files (out of Slice 2 scope, intentionally left untouched):** `CLAUDE.md`, `skills/executing-plans/SKILL.md`, `skills/finishing-a-development-branch/SKILL.md`, `skills/subagent-driven-development/SKILL.md`, `skills/tasklist-discipline/SKILL.md` (authorised by the human partner to remain across Slice 1 and Slice 2 closeouts).
+
+**Slice 2 closed by judgment after round 4 (2026-05-14).** The S2 post-slice review chain ran to four rounds. Substantive review feedback was addressed across rounds 1–3:
+
+- **Round 1** (verdict `revise`, 3 findings, 2 blocking): manifest `work_id` persistence and chain-routing defect identified and fixed; resolution at `docs/reviewer/external-reviewer-redesign-S2-post-slice/r1-resolution.md`.
+- **Round 2** (verdict `revise`, 2 findings, 0 blocking): parser robustness for em-dash separator in finding headings, resolution-doc format compliance retrofitted, closeout-note backfill of r1 doc commits; resolution at `docs/reviewer/external-reviewer-redesign-S2-post-slice/r2-resolution.md`. Test count rose to 39.
+- **Round 3** (verdict `revise`, 2 findings, 0 blocking): parser robustness extended to markdown-bold finding headings (`F1. **<heading>**` form), closeout-note backfill of post-r2 fix commits up through `bb679ad`; resolution at `docs/reviewer/external-reviewer-redesign-S2-post-slice/r3-resolution.md`, recorded in `35cacd6`. Test count rose to 41.
+- **Round 4** (verdict `revise`, 2 findings, 1 blocking): both findings (F1, F2) are self-referential procedural artefacts of running review-during-iteration — F1 is the gate-hasn't-passed-yet tautology against a snapshot where the round is still in flight; F2 is the infinite regress of demanding the closeout note describe its own not-yet-existent commit. Neither is a technical defect in the delivered Slice 2 work. The human partner authorised closing Slice 2 by judgment rather than iterating further. Full reasoning at `docs/reviewer/external-reviewer-redesign-S2-post-slice/r4-resolution.md`.
+
+**Final test result:** `python3 -m pytest skills/external-review/tests/` → `41 passed`.
+
+**Slice 2 tasks 2.1, 2.2, 2.3 are functionally complete.** The post-slice gate is closed by judgment with this commit.
