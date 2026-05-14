@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "chain": "external-reviewer-redesign-S4-post-slice",
+  "kind": "post-slice",
+  "target": "docs/superstar/plans/2026-05-13-external-reviewer-redesign.md",
+  "work_id": "S4",
+  "legacy_migrated": false,
+  "rounds": [
+    {
+      "round": 1,
+      "request": "r1-2026-05-14T0321-request.md",
+      "response": "r1-2026-05-14T0321-response.md",
+      "resolution": null,
+      "resolution_parse_status": null,
+      "resolution_waiver": false,
+      "head_sha_at_request": "2d014353b35dc17d75045b825b58b33e404c4c39",
+      "head_sha_after_round": "2d014353b35dc17d75045b825b58b33e404c4c39",
+      "worktree_dirty_at_request": true,
+      "verdict": "revise",
+      "verdict_valid": true,
+      "findings_count": 3,
+      "blocking_findings_count": 1
+    }
+  ],
+  "sweep_checkpoints": {
+    "first-round": "pending",
+    "final-ready": "pending"
+  }
+}

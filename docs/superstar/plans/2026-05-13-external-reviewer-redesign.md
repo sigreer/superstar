@@ -1448,7 +1448,7 @@ git commit -m "feat(external-reviewer): resolution-required gate with --allow-mi
 **Files:**
 - Modify: `skills/external-review/scripts/external-reviewer.py` (`REVIEW_PROMPT`)
 
-- [ ] **Step 1: Update the round-1 prompt contract**
+- [x] **Step 1: Update the round-1 prompt contract**
 
 Replace the existing `REVIEW_PROMPT` constant with:
 
@@ -1494,7 +1494,7 @@ Read the files from disk. Do not rely only on the snippets in this prompt.
 """
 ```
 
-- [ ] **Step 2: Sanity-check prompt rendering**
+- [x] **Step 2: Sanity-check prompt rendering**
 
 ```bash
 python3 -c "
@@ -1510,7 +1510,7 @@ print('OK' if 'F1' in er.REVIEW_PROMPT else 'FAIL')
 
 Expected: `OK`.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add skills/external-review/scripts/external-reviewer.py
@@ -1523,7 +1523,7 @@ git commit -m "feat(external-reviewer): round-1 prompt requires stable F<n> find
 - Modify: `skills/external-review/scripts/external-reviewer.py` (`parse_args`, `make_prompt`, `main`)
 - Create: `skills/external-review/tests/test_mode.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # skills/external-review/tests/test_mode.py
@@ -1554,7 +1554,7 @@ def test_resolve_mode_incremental_round_1_raises():
         er.resolve_mode("incremental", round_num=1)
 ```
 
-- [ ] **Step 2: Run the tests; confirm they fail**
+- [x] **Step 2: Run the tests; confirm they fail**
 
 ```bash
 python3 -m pytest skills/external-review/tests/test_mode.py -v
@@ -1562,7 +1562,7 @@ python3 -m pytest skills/external-review/tests/test_mode.py -v
 
 Expected: 4 failures.
 
-- [ ] **Step 3: Add the resolver and flag**
+- [x] **Step 3: Add the resolver and flag**
 
 In `parse_args()`:
 
@@ -1586,7 +1586,7 @@ def resolve_mode(mode: str, *, round_num: int) -> str:
     return mode
 ```
 
-- [ ] **Step 4: Run the tests; confirm they pass**
+- [x] **Step 4: Run the tests; confirm they pass**
 
 ```bash
 python3 -m pytest skills/external-review/tests/test_mode.py -v
@@ -1594,7 +1594,7 @@ python3 -m pytest skills/external-review/tests/test_mode.py -v
 
 Expected: 4 passed.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add skills/external-review/scripts/external-reviewer.py skills/external-review/tests/test_mode.py
@@ -1607,7 +1607,7 @@ git commit -m "feat(external-reviewer): --mode flag + resolve_mode(round_num)"
 - Modify: `skills/external-review/scripts/external-reviewer.py` (`make_prompt`, add `build_incremental_preamble`)
 - Create: `skills/external-review/tests/test_incremental_prompt.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # skills/external-review/tests/test_incremental_prompt.py
@@ -1654,7 +1654,7 @@ def test_incremental_preamble_with_waiver_text(tmp_path):
     assert "MISSING — explicitly waived" in preamble
 ```
 
-- [ ] **Step 2: Run the tests; confirm they fail**
+- [x] **Step 2: Run the tests; confirm they fail**
 
 ```bash
 python3 -m pytest skills/external-review/tests/test_incremental_prompt.py -v
@@ -1662,7 +1662,7 @@ python3 -m pytest skills/external-review/tests/test_incremental_prompt.py -v
 
 Expected: 2 failures.
 
-- [ ] **Step 3: Add the preamble builder**
+- [x] **Step 3: Add the preamble builder**
 
 ```python
 def build_incremental_preamble(
@@ -1731,7 +1731,7 @@ Resolution report for prior round:
 """
 ```
 
-- [ ] **Step 4: Wire the preamble into `make_prompt`**
+- [x] **Step 4: Wire the preamble into `make_prompt`**
 
 Update `make_prompt`'s signature and body:
 
@@ -1789,7 +1789,7 @@ And in `main()`, replace the existing `prompt_text = make_prompt(...)` block wit
 
 (Note: `resolution_waiver` is computed later in `main()`; if not yet bound here, default to `False`. The conditional above handles that. Reorder so `resolution_waiver` is computed before this block — move the resolution-attached/waiver computation up immediately after the gate logic.)
 
-- [ ] **Step 5: Run the tests**
+- [x] **Step 5: Run the tests**
 
 ```bash
 python3 -m pytest skills/external-review/tests/test_incremental_prompt.py -v
@@ -1798,7 +1798,7 @@ python3 -m pytest skills/external-review/tests/ -v
 
 Expected: all passed.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add skills/external-review/scripts/external-reviewer.py skills/external-review/tests/test_incremental_prompt.py
@@ -3064,3 +3064,18 @@ Plus the post-review fix commits:
 Both commits passed in-loop spec compliance and code-quality reviews via subagents before landing.
 
 **Final test result:** `python3 -m pytest skills/external-review/tests/` → `47 passed`.
+
+## Slice 4 closeout note (2026-05-14)
+
+**Commits comprising Slice 4:**
+- `79db11f` Task 4.1 — round-1 prompt contract requires stable `F<n>` finding IDs and inline severity tags
+- `3082d30` Task 4.2 — `--mode {auto,broad,incremental}` flag + `resolve_mode(round_num)` resolver
+- `2d01435` Task 4.3 — incremental-round prompt body (`build_incremental_preamble`) wired into `make_prompt`
+
+**Final test result:** `python3 -m pytest skills/external-review/tests/` → `57 passed`.
+
+**Pre-flight branch check:** permanently overridden for this work per human-partner direction. The plan's pre-flight gate says "stop if on `main`"; the human partner authorised all Slice-1-through-Slice-4 work directly on `main` in this personal fork. This override is recorded once here and applies to the rest of the redesign work.
+
+**Post-slice review (round 1, S4 chain):** verdict `revise` with 3 findings (1 blocking). Resolution at `docs/reviewer/external-reviewer-redesign-S4-post-slice/r1-resolution.md`. F1 (dirty/untracked artefacts) and F2 (plan stale) fixed by this commit; F3 (on `main`) waived as per the standing override above.
+
+**Unrelated dirty files (out of Slice 4 scope, intentionally left untouched):** `CLAUDE.md`, `skills/executing-plans/SKILL.md`, `skills/finishing-a-development-branch/SKILL.md`, `skills/subagent-driven-development/SKILL.md`, `skills/tasklist-discipline/SKILL.md` (authorised by the human partner to remain across Slice 1–4 closeouts).
