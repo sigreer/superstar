@@ -430,5 +430,22 @@ def parse_verdict(text: str) -> tuple[str | None, bool]:
     return raw, True
 
 
+HEADING_FINDING_RE = re.compile(r"^##\s+F\d+\b", re.MULTILINE)
+BULLET_FINDING_RE = re.compile(r"^\s*[-*]?\s*\**F\d+\**[:\s\-]", re.MULTILINE)
+BLOCKING_MARKER_RE = re.compile(r"(?:^|\s)\(blocking\)|^severity\s*:\s*blocking", re.IGNORECASE | re.MULTILINE)
+
+
+def parse_findings(text: str) -> tuple[int | None, int | None]:
+    if not text or text.strip() == "" or "reviewer crashed" in text.lower():
+        return None, None
+    heading_count = len(HEADING_FINDING_RE.findall(text))
+    if heading_count > 0:
+        n = heading_count
+    else:
+        n = len(BULLET_FINDING_RE.findall(text))
+    blocking = len(BLOCKING_MARKER_RE.findall(text))
+    return n, blocking
+
+
 if __name__ == "__main__":
     raise SystemExit(main())
