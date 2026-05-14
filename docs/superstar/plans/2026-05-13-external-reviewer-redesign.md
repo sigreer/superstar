@@ -66,7 +66,7 @@ git commit -m "scaffold: tests dir for external-reviewer redesign"
 - Create: `skills/external-review/tests/test_manifest.py`
 - Modify: `skills/external-review/scripts/external-reviewer.py`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `skills/external-review/tests/test_manifest.py`:
 
@@ -114,7 +114,7 @@ def test_read_manifest_rejects_newer_schema(tmp_path):
         external_reviewer.read_manifest(path)
 ```
 
-- [ ] **Step 2: Run the tests; confirm they fail**
+- [x] **Step 2: Run the tests; confirm they fail**
 
 ```bash
 python3 -m pytest skills/external-review/tests/test_manifest.py -v
@@ -122,7 +122,7 @@ python3 -m pytest skills/external-review/tests/test_manifest.py -v
 
 Expected: 3 failures (`read_manifest`, `write_manifest`, `ManifestSchemaTooNew` all undefined).
 
-- [ ] **Step 3: Add manifest helpers to the script**
+- [x] **Step 3: Add manifest helpers to the script**
 
 Append to `skills/external-review/scripts/external-reviewer.py` (after the existing module-level constants, before `repo_root()`):
 
@@ -152,7 +152,7 @@ def write_manifest(path: Path, data: dict) -> None:
     path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 ```
 
-- [ ] **Step 4: Run the tests; confirm they pass**
+- [x] **Step 4: Run the tests; confirm they pass**
 
 ```bash
 python3 -m pytest skills/external-review/tests/test_manifest.py -v
@@ -160,7 +160,7 @@ python3 -m pytest skills/external-review/tests/test_manifest.py -v
 
 Expected: 3 passed.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add skills/external-review/scripts/external-reviewer.py skills/external-review/tests/test_manifest.py
@@ -173,7 +173,7 @@ git commit -m "feat(external-reviewer): chain.json read/write helpers with schem
 - Create: `skills/external-review/tests/test_verdict.py`
 - Modify: `skills/external-review/scripts/external-reviewer.py`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `skills/external-review/tests/test_verdict.py`:
 
@@ -224,7 +224,7 @@ def test_verdict_missing_returns_invalid():
     assert valid is False
 ```
 
-- [ ] **Step 2: Run the tests; confirm they fail**
+- [x] **Step 2: Run the tests; confirm they fail**
 
 ```bash
 python3 -m pytest skills/external-review/tests/test_verdict.py -v
@@ -232,7 +232,7 @@ python3 -m pytest skills/external-review/tests/test_verdict.py -v
 
 Expected: 6 failures (`parse_verdict` undefined).
 
-- [ ] **Step 3: Add the verdict parser**
+- [x] **Step 3: Add the verdict parser**
 
 Append to `skills/external-review/scripts/external-reviewer.py`:
 
@@ -256,7 +256,7 @@ def parse_verdict(text: str) -> tuple[str | None, bool]:
 
 Note: regex prefers `ready with small edits` over `ready` because of ordering in the alternation.
 
-- [ ] **Step 4: Run the tests; confirm they pass**
+- [x] **Step 4: Run the tests; confirm they pass**
 
 ```bash
 python3 -m pytest skills/external-review/tests/test_verdict.py -v
@@ -264,7 +264,7 @@ python3 -m pytest skills/external-review/tests/test_verdict.py -v
 
 Expected: 6 passed.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add skills/external-review/scripts/external-reviewer.py skills/external-review/tests/test_verdict.py
@@ -277,7 +277,7 @@ git commit -m "feat(external-reviewer): parse_verdict with markdown/case toleran
 - Create: `skills/external-review/tests/test_findings.py`
 - Modify: `skills/external-review/scripts/external-reviewer.py`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `skills/external-review/tests/test_findings.py`:
 
@@ -318,7 +318,7 @@ def test_unparseable_returns_none():
     assert blocking is None
 ```
 
-- [ ] **Step 2: Run the tests; confirm they fail**
+- [x] **Step 2: Run the tests; confirm they fail**
 
 ```bash
 python3 -m pytest skills/external-review/tests/test_findings.py -v
@@ -326,7 +326,7 @@ python3 -m pytest skills/external-review/tests/test_findings.py -v
 
 Expected: 4 failures.
 
-- [ ] **Step 3: Add the parser**
+- [x] **Step 3: Add the parser**
 
 Append to `skills/external-review/scripts/external-reviewer.py`:
 
@@ -348,7 +348,7 @@ def parse_findings(text: str) -> tuple[int | None, int | None]:
     return n, blocking
 ```
 
-- [ ] **Step 4: Run the tests; confirm they pass**
+- [x] **Step 4: Run the tests; confirm they pass**
 
 ```bash
 python3 -m pytest skills/external-review/tests/test_findings.py -v
@@ -356,7 +356,7 @@ python3 -m pytest skills/external-review/tests/test_findings.py -v
 
 Expected: 4 passed.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add skills/external-review/scripts/external-reviewer.py skills/external-review/tests/test_findings.py
@@ -369,7 +369,7 @@ git commit -m "feat(external-reviewer): parse_findings (heading + bullet, blocki
 - Create: `skills/external-review/tests/test_round_number.py`
 - Modify: `skills/external-review/scripts/external-reviewer.py` (`next_round_number`)
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `skills/external-review/tests/test_round_number.py`:
 
@@ -401,7 +401,7 @@ def test_legacy_dir_no_manifest_falls_back_to_filename_scan(tmp_path):
     assert er.next_round_number(d) == 3
 ```
 
-- [ ] **Step 2: Run the tests; confirm they fail**
+- [x] **Step 2: Run the tests; confirm they fail**
 
 ```bash
 python3 -m pytest skills/external-review/tests/test_round_number.py -v
@@ -409,7 +409,7 @@ python3 -m pytest skills/external-review/tests/test_round_number.py -v
 
 Expected: test 2 fails (no manifest awareness), tests 1 and 3 may pass if current behavior already handles them.
 
-- [ ] **Step 3: Update `next_round_number`**
+- [x] **Step 3: Update `next_round_number`**
 
 Replace the existing function:
 
@@ -423,7 +423,7 @@ def next_round_number(chain_dir: Path) -> int:
     return len(list(chain_dir.glob("r*-*-request.md"))) + 1
 ```
 
-- [ ] **Step 4: Run the tests**
+- [x] **Step 4: Run the tests**
 
 ```bash
 python3 -m pytest skills/external-review/tests/test_round_number.py -v
@@ -431,7 +431,7 @@ python3 -m pytest skills/external-review/tests/test_round_number.py -v
 
 Expected: 3 passed.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add skills/external-review/scripts/external-reviewer.py skills/external-review/tests/test_round_number.py
@@ -444,7 +444,7 @@ git commit -m "feat(external-reviewer): next_round_number consults chain.json"
 - Create: `skills/external-review/tests/test_legacy_migration.py`
 - Modify: `skills/external-review/scripts/external-reviewer.py`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `skills/external-review/tests/test_legacy_migration.py`:
 
@@ -483,7 +483,7 @@ def test_synthesize_manifest_from_legacy_files(tmp_path):
     assert r2["response"] is None  # only request file existed
 ```
 
-- [ ] **Step 2: Run the tests; confirm they fail**
+- [x] **Step 2: Run the tests; confirm they fail**
 
 ```bash
 python3 -m pytest skills/external-review/tests/test_legacy_migration.py -v
@@ -491,7 +491,7 @@ python3 -m pytest skills/external-review/tests/test_legacy_migration.py -v
 
 Expected: 1 failure.
 
-- [ ] **Step 3: Add the synthesizer**
+- [x] **Step 3: Add the synthesizer**
 
 Append to `skills/external-review/scripts/external-reviewer.py`:
 
@@ -547,7 +547,7 @@ def synthesize_legacy_manifest(
     }
 ```
 
-- [ ] **Step 4: Run the tests; confirm they pass**
+- [x] **Step 4: Run the tests; confirm they pass**
 
 ```bash
 python3 -m pytest skills/external-review/tests/test_legacy_migration.py -v
@@ -555,7 +555,7 @@ python3 -m pytest skills/external-review/tests/test_legacy_migration.py -v
 
 Expected: 1 passed.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add skills/external-review/scripts/external-reviewer.py skills/external-review/tests/test_legacy_migration.py
@@ -568,7 +568,7 @@ git commit -m "feat(external-reviewer): synthesize_legacy_manifest from rN-* fil
 - Modify: `skills/external-review/scripts/external-reviewer.py` (`main` function)
 - Create: `skills/external-review/tests/test_main_round_writes_manifest.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `skills/external-review/tests/test_main_round_writes_manifest.py`:
 
@@ -626,7 +626,7 @@ def test_main_writes_manifest_entry(tmp_path, monkeypatch):
     assert manifest["rounds"][0]["verdict"] == "revise"
 ```
 
-- [ ] **Step 2: Run the test; confirm it fails**
+- [x] **Step 2: Run the test; confirm it fails**
 
 ```bash
 python3 -m pytest skills/external-review/tests/test_main_round_writes_manifest.py -v
@@ -634,7 +634,7 @@ python3 -m pytest skills/external-review/tests/test_main_round_writes_manifest.p
 
 Expected: failure — no manifest written by `main()` yet.
 
-- [ ] **Step 3: Update `main()` to manage the manifest**
+- [x] **Step 3: Update `main()` to manage the manifest**
 
 In `skills/external-review/scripts/external-reviewer.py`, locate the `main()` function. After `chain_dir.mkdir(parents=True, exist_ok=True)`, add manifest setup. After the reviewer runs and `write_review_artifact` is called, append the round entry to the manifest and write it back. Replace the body of `main()` from the line `chain_dir = (root / args.output_dir / chain_folder_name(target, args.kind)).resolve()` through the end of `main()` with:
 
@@ -776,7 +776,7 @@ def is_dirty(root: Path) -> bool:
     return bool(out.stdout.strip())
 ```
 
-- [ ] **Step 4: Run the test; confirm it passes**
+- [x] **Step 4: Run the test; confirm it passes**
 
 ```bash
 python3 -m pytest skills/external-review/tests/test_main_round_writes_manifest.py -v
@@ -784,7 +784,7 @@ python3 -m pytest skills/external-review/tests/test_main_round_writes_manifest.p
 
 Expected: 1 passed.
 
-- [ ] **Step 5: Run the full test suite**
+- [x] **Step 5: Run the full test suite**
 
 ```bash
 python3 -m pytest skills/external-review/tests/ -v
@@ -792,7 +792,7 @@ python3 -m pytest skills/external-review/tests/ -v
 
 Expected: all passed.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add skills/external-review/scripts/external-reviewer.py skills/external-review/tests/test_main_round_writes_manifest.py
@@ -2992,12 +2992,18 @@ No spec requirement is unimplemented. All task signatures match across tasks (`p
 - `012e3c1` feat(external-reviewer): synthesize_legacy_manifest from rN-* files
 - `5404a2d` feat(external-reviewer): wire manifest + verdict/finding parsing into main()
 
-Plus the post-review fix commits (this round 1 resolution); see `docs/reviewer/external-reviewer-redesign-post-slice/r1-resolution.md`.
+Plus the post-review fix commits (round 1 resolution at `docs/reviewer/external-reviewer-redesign-post-slice/r1-resolution.md`; round 2 resolution at `docs/reviewer/external-reviewer-redesign-post-slice/r2-resolution.md`).
 
-**Final test result:** `19 passed` (18 baseline + 1 new F3 timing test) — `python3 -m pytest skills/external-review/tests/`.
+**Final test result:** `21 passed` (19 after round 1 + 2 new round-2 parser tests for prose-style findings and crash-phrase-in-quoted-content) — `python3 -m pytest skills/external-review/tests/`.
 
 **Pre-flight override:** the plan's pre-flight branch-check was overridden by user direction; Slice 1 was implemented directly on `main`.
 
-**Script location:** the reviewer bridge now lives at `skills/external-review/scripts/external-reviewer.py`. The previous root-level `scripts/external-reviewer.py` was deleted (the deletion is staged as part of the F1 fix commit).
+**Script location:** the reviewer bridge lives at `skills/external-review/scripts/external-reviewer.py`. The previous root-level `scripts/external-reviewer.py` was deleted as part of round 1's F1 fix.
+
+**Planning artefacts committed during round 2:** `docs/superstar/specs/2026-05-13-external-reviewer-redesign-design.md` (the design spec) and `docs/handoffs/2026-05-13-external-reviewer-redesign-prompt.md` (the coordinator handoff) were intentional Slice 1 deliverables that remained untracked through round 1. They are committed as part of the round 2 F2 fix.
+
+**Round-1 chain.json correction:** after the round-2 parser fix, the round-1 entry in `docs/reviewer/external-reviewer-redesign-post-slice/chain.json` was re-emitted so `findings_count` / `blocking_findings_count` reflect the corrected parse (`3` / `2`). The round-2 entry was already populated correctly using the fixed parser.
+
+**By design — in-flight round artefacts:** the current round's `rN-*-request.md` is created before the reviewer runs but is only recorded in `chain.json` after the reviewer returns. During an in-progress round the request file may appear untracked while no corresponding manifest entry exists yet; this is expected and resolves when the round closes.
 
 **Unrelated dirty files (out of Slice 1 scope, intentionally left untouched):** `CLAUDE.md`, `skills/executing-plans/SKILL.md`, `skills/finishing-a-development-branch/SKILL.md`, `skills/subagent-driven-development/SKILL.md`, `skills/tasklist-discipline/SKILL.md`.
