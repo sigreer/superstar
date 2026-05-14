@@ -1180,12 +1180,24 @@ def main() -> int:
             new_basename = f"r{round_num}-{timestamp}{new_suffix}"
             new_request = chain_dir / f"{new_basename}-request.md"
             new_response = chain_dir / f"{new_basename}-response.md"
+            old_request_rel = rel_or_abs(primary.request_path, root)
+            new_request_rel = rel_or_abs(new_request, root)
             primary.request_path.rename(new_request)
             primary.response_path.rename(new_response)
+            # The response body was written before the rename and embeds the
+            # old `Request:` path. Rewrite that header line so artifacts stay
+            # internally consistent (the response must reference the request
+            # file that actually exists on disk).
+            response_text = new_response.read_text(encoding="utf-8")
+            old_line = f"- Request: `{old_request_rel}`"
+            new_line = f"- Request: `{new_request_rel}`"
+            if old_line in response_text:
+                response_text = response_text.replace(old_line, new_line, 1)
+                new_response.write_text(response_text, encoding="utf-8")
             primary = ReviewerResult(
                 role=primary.role, sweep_index=primary.sweep_index,
                 request_path=new_request, response_path=new_response,
-                review_body=primary.review_body, verdict=primary.verdict,
+                review_body=response_text, verdict=primary.verdict,
                 verdict_valid=primary.verdict_valid, returncode=primary.returncode,
             )
             namespaced = True
