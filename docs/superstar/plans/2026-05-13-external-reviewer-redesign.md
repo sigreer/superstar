@@ -1147,7 +1147,7 @@ git commit -m "feat(external-reviewer): discover and reuse legacy chain folders"
 - Create: `skills/external-review/tests/test_resolution.py`
 - Modify: `skills/external-review/scripts/external-reviewer.py`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 # skills/external-review/tests/test_resolution.py
@@ -1197,7 +1197,7 @@ def test_parse_resolution_unparseable_when_no_headings():
     assert result.findings == {}
 ```
 
-- [ ] **Step 2: Run the tests; confirm they fail**
+- [x] **Step 2: Run the tests; confirm they fail**
 
 ```bash
 python3 -m pytest skills/external-review/tests/test_resolution.py -v
@@ -1205,7 +1205,7 @@ python3 -m pytest skills/external-review/tests/test_resolution.py -v
 
 Expected: 3 failures.
 
-- [ ] **Step 3: Add the parser**
+- [x] **Step 3: Add the parser**
 
 ```python
 from dataclasses import dataclass, field
@@ -1250,7 +1250,7 @@ def parse_resolution(text: str) -> ResolutionParseResult:
     return ResolutionParseResult(status=status, findings=findings, unmatched=unmatched)
 ```
 
-- [ ] **Step 4: Run the tests; confirm they pass**
+- [x] **Step 4: Run the tests; confirm they pass**
 
 ```bash
 python3 -m pytest skills/external-review/tests/test_resolution.py -v
@@ -1258,7 +1258,7 @@ python3 -m pytest skills/external-review/tests/test_resolution.py -v
 
 Expected: 3 passed.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add skills/external-review/scripts/external-reviewer.py skills/external-review/tests/test_resolution.py
@@ -1271,7 +1271,7 @@ git commit -m "feat(external-reviewer): parse_resolution (headings + status line
 - Modify: `skills/external-review/scripts/external-reviewer.py` (`main`, `parse_args`)
 - Create: `skills/external-review/tests/test_resolution_gate.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # skills/external-review/tests/test_resolution_gate.py
@@ -1336,7 +1336,7 @@ def test_spec_round_2_never_gated(tmp_path):
     assert r2.returncode == 0, r2.stderr
 ```
 
-- [ ] **Step 2: Run the tests; confirm they fail**
+- [x] **Step 2: Run the tests; confirm they fail**
 
 ```bash
 python3 -m pytest skills/external-review/tests/test_resolution_gate.py -v
@@ -1344,7 +1344,7 @@ python3 -m pytest skills/external-review/tests/test_resolution_gate.py -v
 
 Expected: 3 failures.
 
-- [ ] **Step 3: Add the flag and the gate**
+- [x] **Step 3: Add the flag and the gate**
 
 In `parse_args()`:
 
@@ -1421,7 +1421,7 @@ And in the JSON emit branch, add fields:
     "resolution_waiver": resolution_waiver,
 ```
 
-- [ ] **Step 4: Run the tests; confirm they pass**
+- [x] **Step 4: Run the tests; confirm they pass**
 
 ```bash
 python3 -m pytest skills/external-review/tests/test_resolution_gate.py -v
@@ -1430,7 +1430,7 @@ python3 -m pytest skills/external-review/tests/ -v
 
 Expected: all passed.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add skills/external-review/scripts/external-reviewer.py skills/external-review/tests/test_resolution_gate.py
@@ -3052,3 +3052,15 @@ Plus the post-review fix commits:
 **Final test result:** `python3 -m pytest skills/external-review/tests/` → `41 passed`.
 
 **Slice 2 tasks 2.1, 2.2, 2.3 are functionally complete.** The post-slice gate is closed by judgment with this commit.
+
+## Slice 3 closeout note (2026-05-14)
+
+**Slice 3 closed by human-partner judgment without external post-slice review.** The external post-slice review step was skipped after Slice 2's experience with self-referential review-during-iteration noise (see Slice 2 round-4 reasoning above).
+
+**Commits comprising Slice 3:**
+- `ea8bac6` S3.1 resolution-doc parser (`parse_resolution`) + tests
+- `c510324` S3.2 resolution-required gate + `--allow-missing-resolution` flag + tests
+
+Both commits passed in-loop spec compliance and code-quality reviews via subagents before landing.
+
+**Final test result:** `python3 -m pytest skills/external-review/tests/` → `47 passed`.
