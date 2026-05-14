@@ -765,5 +765,61 @@ def synthesize_legacy_manifest(
     }
 
 
+class ResolutionParseResult:
+    """Result of parsing a resolution doc. status is one of ok|partial|unparseable."""
+
+    __slots__ = ("status", "findings", "unmatched")
+
+    def __init__(self, status: str, findings: dict | None = None, unmatched: list | None = None):
+        self.status = status
+        self.findings = findings if findings is not None else {}
+        self.unmatched = unmatched if unmatched is not None else []
+
+    def __repr__(self) -> str:
+        return (
+            f"ResolutionParseResult(status={self.status!r}, "
+            f"findings={self.findings!r}, unmatched={self.unmatched!r})"
+        )
+
+    def __eq__(self, other) -> bool:
+        if not isinstance(other, ResolutionParseResult):
+            return NotImplemented
+        return (
+            self.status == other.status
+            and self.findings == other.findings
+            and self.unmatched == other.unmatched
+        )
+
+
+RESOLUTION_HEADING_RE = re.compile(r"^##\s+(F\d+)\b", re.MULTILINE)
+RESOLUTION_STATUS_RE = re.compile(
+    r"^\s*status\s*:\s*(fixed|waived|deferred)\b", re.IGNORECASE | re.MULTILINE
+)
+
+
+def parse_resolution(text: str) -> ResolutionParseResult:
+    headings = list(RESOLUTION_HEADING_RE.finditer(text))
+    if not headings:
+        return ResolutionParseResult(status="unparseable")
+
+    findings: dict = {}
+    unmatched: list = []
+    spans = []
+    for i, m in enumerate(headings):
+        start = m.end()
+        end = headings[i + 1].start() if i + 1 < len(headings) else len(text)
+        spans.append((m.group(1), text[start:end]))
+
+    for fid, body in spans:
+        sm = RESOLUTION_STATUS_RE.search(body)
+        if sm:
+            findings[fid] = sm.group(1).lower()
+        else:
+            unmatched.append(fid)
+
+    status = "ok" if not unmatched else "partial"
+    return ResolutionParseResult(status=status, findings=findings, unmatched=unmatched)
+
+
 if __name__ == "__main__":
     raise SystemExit(main())
