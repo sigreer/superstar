@@ -1070,7 +1070,7 @@ def main() -> int:
             "work_id": manifest.get("work_id"),
             "status": "ok" if primary.returncode == 0 else "failed",
             "returncode": primary.returncode,
-            "verdict": primary.verdict,
+            "verdict": merged_verdict if merged_verdict is not None else primary.verdict,
             "verdict_valid": primary.verdict_valid,
             "findings_count": findings_count,
             "blocking_findings_count": blocking_count,
