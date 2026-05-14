@@ -1815,7 +1815,7 @@ git commit -m "external-reviewer: merged findings excludes non-ok reviewers (rat
 - Modify: `skills/external-review/scripts/external-reviewer.py` (`run_one_reviewer` pre-spawn check)
 - Create: `skills/external-review/tests/test_refusal_coalescing.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # skills/external-review/tests/test_refusal_coalescing.py
@@ -1897,11 +1897,11 @@ def test_refused_at_caps_at_20(tmp_path):
     assert len(head["refused_at"]) <= 20
 ```
 
-- [ ] **Step 2: Verify failure**
+- [x] **Step 2: Verify failure**
 
 Expected: each call appends a new round; manifest grows.
 
-- [ ] **Step 3: Update pre-spawn check to coalesce**
+- [x] **Step 3: Update pre-spawn check to coalesce**
 
 Replace the body of the pre-spawn block (Task 2.5's addition) with the coalescing version. **Critical (r2 fix):** `read_manifest` and `write_manifest` both take a FILE path, not a chain_dir. Signatures: `read_manifest(path: Path) -> dict | None` (line 272) and `write_manifest(path: Path, data: dict) -> None` (line 285). Always pass `chain_dir / "chain.json"`.
 
@@ -1973,14 +1973,14 @@ Replace the body of the pre-spawn block (Task 2.5's addition) with the coalescin
 
 **Note:** Once Slice 4 is wired in, the T2.5 pre-spawn block is fully replaced by this coalescing version. The T2.5 separate implementation is superseded.
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 Expected: 2 passed in `test_refusal_coalescing.py`.
 Plus regression check on `test_subsequent_invocation_refused.py`: should still pass (it only invokes once).
 
 Full suite: 179 passed.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add skills/external-review/scripts/external-reviewer.py \
