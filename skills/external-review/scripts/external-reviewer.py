@@ -319,6 +319,11 @@ def parse_args() -> argparse.Namespace:
         default="docs/reviewer",
         help="Root directory for review chain folders.",
     )
+    parser.add_argument(
+        "--work-id",
+        default=None,
+        help="Stable slice/phase ID (e.g. P2.S3 or P2). Required for post-slice/post-phase.",
+    )
     parser.add_argument("--timeout", type=int, default=900)
     parser.add_argument("--max-lines", type=int, default=600)
     parser.add_argument(
@@ -351,6 +356,13 @@ def is_dirty(root: Path) -> bool:
 
 def main() -> int:
     args = parse_args()
+    if args.kind in ("post-slice", "post-phase") and not args.work_id:
+        print(
+            f"ERROR: --work-id is required for --kind {args.kind}. "
+            "Use the slice ID (e.g. P2.S3) or phase ID (e.g. P2).",
+            file=sys.stderr,
+        )
+        return 2
     root = repo_root()
     target = (root / args.file).resolve() if not Path(args.file).is_absolute() else Path(args.file).resolve()
     if not target.exists():
