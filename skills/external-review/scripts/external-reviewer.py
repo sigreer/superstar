@@ -1515,14 +1515,15 @@ def main() -> int:
         prior_round = prior["round"]
         prior_verdict = prior.get("merged_verdict") or prior.get("verdict")
         prior_valid = prior.get("verdict_valid", True)
-        prior_status = prior.get("status")  # "ok" | "failed" | "unknown" | None
-        prior_was_process_failure = prior_status == "failed"
+        prior_status = prior.get("status")  # "ok" | "failed" | "rate-limited" | "unknown" | None
+        BYPASS_STATUSES = {"failed", "rate-limited"}
+        prior_bypasses_gate = prior_status in BYPASS_STATUSES
         needs_resolution = (
             (prior_verdict == "revise") or (prior_valid is False)
-        ) and not prior_was_process_failure
-        if prior_was_process_failure:
+        ) and not prior_bypasses_gate
+        if prior_bypasses_gate:
             print(
-                f"Note: prior round r{prior_round} was a process failure "
+                f"Note: prior round r{prior_round} status={prior_status} "
                 f"(returncode={prior.get('returncode')}); "
                 "resolution gate bypassed.",
                 file=sys.stderr,
