@@ -1,6 +1,5 @@
 from pathlib import Path
 import os, subprocess, sys, json, importlib.util
-import pytest
 
 SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 sys.path.insert(0, str(SCRIPTS))
@@ -81,7 +80,6 @@ def test_failed_r2_yields_bounded_and_clean_r3_request(tmp_path):
     assert "Reading prompt from stdin..." not in body
 
 
-@pytest.mark.xfail(reason="size guarantee tightens after Slice 2", strict=False)
 def test_r3_request_size_bounded(tmp_path):
     repo = _init(tmp_path)
     r1 = _run(repo, FAKE_R1_LARGE)
