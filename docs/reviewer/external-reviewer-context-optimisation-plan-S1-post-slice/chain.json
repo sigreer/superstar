@@ -167,6 +167,41 @@
       "base_ref": "5c3a967c8a157a7b8805fe0f5ec7ef75d6253865",
       "base_ref_source": "auto",
       "diff_included": true
+    },
+    {
+      "round": 5,
+      "reviewers": [
+        {
+          "role": "primary",
+          "sweep_group": null,
+          "parent_round": 5,
+          "request": "r5-2026-05-14T1602-request.md",
+          "response": "r5-2026-05-14T1602-response.md",
+          "verdict": "ready",
+          "verdict_valid": true,
+          "returncode": 0,
+          "status": "ok"
+        }
+      ],
+      "status": "ok",
+      "returncode": 0,
+      "merged_verdict": "ready",
+      "merged_findings": null,
+      "request": "r5-2026-05-14T1602-request.md",
+      "response": "r5-2026-05-14T1602-response.md",
+      "resolution": "r4-resolution.md",
+      "resolution_parse_status": "ok",
+      "resolution_waiver": false,
+      "head_sha_at_request": "f4749c09f2d1918586787ec777de8fae289aa2ba",
+      "head_sha_after_round": "f4749c09f2d1918586787ec777de8fae289aa2ba",
+      "worktree_dirty_at_request": false,
+      "verdict": "ready",
+      "verdict_valid": true,
+      "findings_count": 4,
+      "blocking_findings_count": 0,
+      "base_ref": "c56de4031861ffc683a07875f26be3e8c37bcde6",
+      "base_ref_source": "auto",
+      "diff_included": true
     }
   ],
   "sweep_checkpoints": {
