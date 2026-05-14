@@ -628,10 +628,27 @@ def write_merged_findings(
     *,
     chain_dir: Path, round_num: int,
     primary: "ReviewerResult", sweeps: list,
-) -> Path:
-    parts = [f"# Merged findings for r{round_num}\n", "## Primary\n", primary.review_body, ""]
-    for s in sweeps:
-        parts += [f"## Sweep {s.sweep_index}\n", _renamespace_finding_ids(s.review_body, s.sweep_index), ""]
+) -> Path | None:
+    """Concatenate successful reviewer bodies into a merged-findings artifact.
+
+    Reviewers with non-zero returncode are excluded entirely — their bodies
+    are stderr tails / failure stubs and would poison downstream parsing.
+    If every reviewer in the round failed, return None and write no file.
+    """
+    ok_reviewers = [r for r in [primary, *sweeps] if r.returncode == 0]
+    if not ok_reviewers:
+        return None
+    parts = [f"# Merged findings for r{round_num}\n"]
+    primary_ok = next((r for r in ok_reviewers if r.role == "primary"), None)
+    if primary_ok is not None:
+        parts += ["## Primary\n", primary_ok.review_body, ""]
+    for s in ok_reviewers:
+        if s.role == "sweep":
+            parts += [
+                f"## Sweep {s.sweep_index}\n",
+                _renamespace_finding_ids(s.review_body, s.sweep_index),
+                "",
+            ]
     path = chain_dir / f"r{round_num}-merged-findings.md"
     path.write_text("\n".join(parts), encoding="utf-8")
     return path
@@ -1116,12 +1133,13 @@ def main() -> int:
             chain_dir=chain_dir, round_num=round_num,
             primary=primary, sweeps=sweeps,
         )
+        # merged_path may be None if every reviewer in the round failed.
         merged_verdict = compute_merged_verdict(reviewer_results)
         if sweep_plan.checkpoint:
             manifest["sweep_checkpoints"][sweep_plan.checkpoint] = "completed"
     else:
         merged_path = None
-        merged_verdict = primary.verdict
+        merged_verdict = primary.verdict if primary.returncode == 0 else None
 
     findings_count, blocking_count = parse_findings(primary.review_body)
 
