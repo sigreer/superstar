@@ -331,17 +331,49 @@ def build_incremental_preamble(
             f"| {r.get('findings_count')} | {r.get('blocking_findings_count')} |"
         )
 
-    prior = prior_rounds[-1] if prior_rounds else None
+    # Walk backward to the last round whose process status is "ok".
+    # Skip rounds with status "failed" (process error, body is stderr-echo)
+    # or "unknown" (legacy entries, untrusted by default).
+    skipped_rounds: list[int] = []
+    trusted = None
+    for r in reversed(prior_rounds):
+        if r.get("status") == "ok":
+            trusted = r
+            break
+        skipped_rounds.append(r["round"])
+    skipped_rounds.reverse()
+
     prior_response_text = ""
-    merged_findings_file = chain_dir / f"r{round_num - 1}-merged-findings.md"
-    if merged_findings_file.exists():
-        prior_response_text = merged_findings_file.read_text(encoding="utf-8")
-        prior_source = "merged findings (authoritative)"
-    elif prior and prior.get("response"):
-        prior_response_text = (chain_dir / prior["response"]).read_text(encoding="utf-8")
-        prior_source = "primary reviewer response"
+    if trusted is not None:
+        merged_findings_file = chain_dir / f"r{trusted['round']}-merged-findings.md"
+        if merged_findings_file.exists():
+            prior_response_text = merged_findings_file.read_text(encoding="utf-8")
+            prior_source = f"merged findings from r{trusted['round']} (authoritative)"
+        elif trusted.get("response"):
+            response_path = chain_dir / trusted["response"]
+            if response_path.exists():
+                prior_response_text = response_path.read_text(encoding="utf-8")
+                prior_source = f"primary reviewer response from r{trusted['round']}"
+            else:
+                prior_source = f"r{trusted['round']} response file missing"
+        else:
+            prior_source = f"r{trusted['round']} has no response on record"
     else:
-        prior_source = "no prior response available"
+        prior_source = "no successful prior round; no prior review available"
+
+    if skipped_rounds:
+        skip_lo = skipped_rounds[0]
+        skip_hi = skipped_rounds[-1]
+        if skip_lo == skip_hi:
+            skip_note = (
+                f"\nNote: round {skip_lo} was a process failure or pre-S1 entry; skipped.\n"
+            )
+        else:
+            skip_note = (
+                f"\nNote: rounds {skip_lo}..{skip_hi} were process failures or "
+                f"pre-S1 entries; skipped.\n"
+            )
+        prior_response_text = skip_note + prior_response_text
 
     resolution_file = chain_dir / f"r{round_num - 1}-resolution.md"
     if resolution_file.exists():
@@ -367,18 +399,21 @@ In incremental mode:
   blocking issues clearly missed in earlier rounds. Do not reopen broad review
   unless prior fixes changed broad architecture.
 
-Review chain summary:
+## Review chain summary
+
 {chr(10).join(summary_rows)}
 
-Prior-round findings ({prior_source}):
+## Prior-round findings
+
+Source: {prior_source}
 
 {prior_response_text}
 
-Resolution report for prior round:
+## Resolution report for prior round
 
 {resolution_text}
 
-Changes since prior round:
+## Changes since prior round
 
 {diff_section or 'Changes since prior round: not available for this round.'}
 """
