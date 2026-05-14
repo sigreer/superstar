@@ -2787,12 +2787,12 @@ Slice 3 acceptance is met when:
 
 After Slice 3 closes:
 
-- [x] **Step 1: Full suite final run**
+- [ ] **Step 1: Full suite final run**
 
 Run: `python3 -m pytest skills/external-review/tests/ -v 2>&1 | tail -30`
 Expected: 100% green. Capture the pass count for the phase-close note.
 
-- [x] **Step 2: Real-chain dry-run (optional but recommended)**
+- [ ] **Step 2: Real-chain dry-run (optional but recommended)**
 
 Against the actual broken multistore chain — pure read-only verification that the new script produces a clean r5 even with the existing poisoned r2-r4 files in place:
 
@@ -2811,7 +2811,7 @@ python3 /home/simon/Dev/sigreer/skills/superstar/skills/external-review/scripts/
 
 Note in the close-out: the actual r5-request size, the verdict (should be a real verdict not a fabricated one), and whether the gate-bypass note appeared on stderr.
 
-- [x] **Step 3: Invoke external-review for post-phase**
+- [ ] **Step 3: Invoke external-review for post-phase**
 
 `superstar:external-review --kind post-phase --file docs/plans/2026-05-14-external-reviewer-context-optimisation-plan.md --context docs/specs/2026-05-14-external-reviewer-context-optimisation-spec.md --review-depth thorough`
 

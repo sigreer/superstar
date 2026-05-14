@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "chain": "external-reviewer-context-optimisation-plan-S3-post-slice",
+  "kind": "post-slice",
+  "target": "docs/plans/2026-05-14-external-reviewer-context-optimisation-plan.md",
+  "work_id": "S3",
+  "legacy_migrated": false,
+  "rounds": [
+    {
+      "round": 1,
+      "reviewers": [
+        {
+          "role": "primary",
+          "sweep_group": null,
+          "parent_round": 1,
+          "request": "r1-2026-05-14T1643-request.md",
+          "response": "r1-2026-05-14T1643-response.md",
+          "verdict": null,
+          "verdict_valid": false,
+          "returncode": 0,
+          "status": "ok"
+        }
+      ],
+      "status": "ok",
+      "returncode": 0,
+      "merged_verdict": null,
+      "merged_findings": null,
+      "request": "r1-2026-05-14T1643-request.md",
+      "response": "r1-2026-05-14T1643-response.md",
+      "resolution": null,
+      "resolution_parse_status": null,
+      "resolution_waiver": false,
+      "head_sha_at_request": "bdf5adf27bebbfeb38af444a4bee10b3486c5e32",
+      "head_sha_after_round": "bdf5adf27bebbfeb38af444a4bee10b3486c5e32",
+      "worktree_dirty_at_request": false,
+      "verdict": null,
+      "verdict_valid": false,
+      "findings_count": 2,
+      "blocking_findings_count": 0,
+      "base_ref": null,
+      "base_ref_source": null,
+      "diff_included": false
+    }
+  ],
+  "sweep_checkpoints": {
+    "first-round": "pending",
+    "final-ready": "pending"
+  }
+}
