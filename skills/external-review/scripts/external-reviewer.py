@@ -1105,27 +1105,52 @@ def run_one_reviewer(
     )
 
 
+def _rv_attr(r, name, default=None):
+    """Read an attribute from either a ReviewerResult dataclass or a dict."""
+    if isinstance(r, dict):
+        return r.get(name, default)
+    return getattr(r, name, default)
+
+
+def _rv_status(r) -> str:
+    """Resolve the status of a reviewer entry.
+
+    - Dicts and objects that explicitly set `status` win.
+    - Otherwise derive from `returncode`: 0 → "ok", non-zero → "failed",
+      None → "failed" (unknown / process never ran cleanly).
+    """
+    explicit = _rv_attr(r, "status", None)
+    if explicit is not None:
+        return explicit
+    rc = _rv_attr(r, "returncode", None)
+    return "ok" if rc == 0 else "failed"
+
+
 def compute_merged_verdict(reviewer_results: list) -> str | None:
     """Merge per-reviewer verdicts per spec §S1.7.
 
-    - If the primary reviewer failed (returncode != 0), return None: the round
-      as a whole has no trustworthy verdict and the top-level status will be
-      `failed`.
-    - Otherwise, aggregate only the reviewers whose process succeeded.
-    - Among the successful reviewers: any `revise` (or invalid verdict text)
-      → revise; any `ready with small edits` → that; all `ready` → ready.
+    - If the primary reviewer's status is not "ok" (failed, rate-limited, etc.),
+      return None: the round as a whole has no trustworthy verdict and the
+      top-level status will be set accordingly.
+    - Otherwise, aggregate only the reviewers whose status == "ok". Rate-limited
+      reviewers are excluded from the merge — they neither vote nor poison the
+      result. The status filter is more precise than a returncode==0 filter
+      because a rate-limited round could in principle exit 0 while still
+      lacking a trustworthy verdict.
+    - Among the ok reviewers: any `revise` (or invalid verdict text) → revise;
+      any `ready with small edits` → that; all `ready` → ready.
     """
-    primary = next((r for r in reviewer_results if r.role == "primary"), None)
-    if primary is not None and primary.returncode != 0:
+    primary = next((r for r in reviewer_results if _rv_attr(r, "role") == "primary"), None)
+    if primary is not None and _rv_status(primary) != "ok":
         return None
-    ok = [r for r in reviewer_results if r.returncode == 0]
+    ok = [r for r in reviewer_results if _rv_status(r) == "ok"]
     if not ok:
         return None
-    if any((not r.verdict_valid) or r.verdict == "revise" for r in ok):
+    if any((not _rv_attr(r, "verdict_valid")) or _rv_attr(r, "verdict") == "revise" for r in ok):
         return "revise"
-    if any(r.verdict == "ready with small edits" for r in ok):
+    if any(_rv_attr(r, "verdict") == "ready with small edits" for r in ok):
         return "ready with small edits"
-    if all(r.verdict == "ready" for r in ok):
+    if all(_rv_attr(r, "verdict") == "ready" for r in ok):
         return "ready"
     return None
 

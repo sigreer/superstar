@@ -78,3 +78,21 @@ def test_preamble_walks_back_past_rate_limited(tmp_path):
     assert "trusted r1 findings" in out
     # Annotation about skipped rounds mentions rate-limited
     assert "rounds 2..2 were" in out or "rate-limited" in out.lower()
+
+
+def test_merged_verdict_excludes_rate_limited_reviewers():
+    """If primary is ok and a sweep is rate-limited, merged verdict comes from primary only."""
+    reviewers = [
+        {"role": "primary", "verdict": "ready", "verdict_valid": True, "returncode": 0, "status": "ok"},
+        {"role": "sweep",   "verdict": None,    "verdict_valid": False, "returncode": None, "status": "rate-limited"},
+    ]
+    merged = er.compute_merged_verdict(reviewers)
+    assert merged == "ready"
+
+
+def test_merged_verdict_all_rate_limited_returns_none():
+    reviewers = [
+        {"role": "primary", "verdict": None, "verdict_valid": False, "returncode": None, "status": "rate-limited"},
+        {"role": "sweep",   "verdict": None, "verdict_valid": False, "returncode": None, "status": "rate-limited"},
+    ]
+    assert er.compute_merged_verdict(reviewers) is None
