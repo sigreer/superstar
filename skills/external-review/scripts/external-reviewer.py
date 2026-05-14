@@ -869,6 +869,32 @@ def write_review_artifact(
     return response_file
 
 
+def write_rate_limited_artifact(
+    *,
+    chain_dir: Path,
+    round_num: int,
+    timestamp: str,
+    reviewer_cmd: str,
+    reset_at: str,
+    raw_stderr_tail: str,
+) -> Path:
+    """Persist a rate-limited round response artifact (<= 8 KB)."""
+    out_path = chain_dir / f"r{round_num}-{timestamp}-response.md"
+    # Cap stderr tail to ~4 KB to keep the whole artifact under 8 KB.
+    stderr_tail_capped = cap_with_elision(raw_stderr_tail or "", max_bytes=4 * 1024)
+    body = (
+        f"# Reviewer rate-limited — r{round_num}\n\n"
+        f"- Status: `rate-limited`\n"
+        f"- Reviewer command: `{reviewer_cmd}`\n"
+        f"- Reset at: `{reset_at}`\n\n"
+        f"Reviewer rate-limited until {reset_at}; rerun after that or use the menu "
+        f"(see SKILL.md → Rate-limit handling).\n\n"
+        f"## Reviewer stderr (tail)\n\n```text\n{stderr_tail_capped}\n```\n"
+    )
+    out_path.write_text(body, encoding="utf-8")
+    return out_path
+
+
 def resolve_mode(mode: str, *, round_num: int) -> str:
     if mode == "incremental" and round_num == 1:
         raise ValueError("--mode incremental is not valid on round 1")
