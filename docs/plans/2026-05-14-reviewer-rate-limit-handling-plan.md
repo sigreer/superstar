@@ -84,7 +84,7 @@ This slice produces pure functions with unit tests. The script's existing behavi
 - Modify: `skills/external-review/scripts/external-reviewer.py` (add module-level helpers near the top, immediately after the existing `cap_with_elision` definition)
 - Create: `skills/external-review/tests/test_state_file.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # skills/external-review/tests/test_state_file.py
@@ -134,12 +134,12 @@ def test_load_state_corrupt_file_fails_open(capsys, tmp_path):
     assert "reviewer-state.json" in captured.err  # warning surfaced
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `python3 -m pytest skills/external-review/tests/test_state_file.py -v`
 Expected: AttributeError — `state_file_path` and `load_state` don't exist.
 
-- [ ] **Step 3: Implement `state_file_path` and `load_state`**
+- [x] **Step 3: Implement `state_file_path` and `load_state`**
 
 In `skills/external-review/scripts/external-reviewer.py`, immediately after the `cap_with_elision` function, add:
 
@@ -171,12 +171,12 @@ def load_state() -> dict:
 
 If `os` or `json` aren't already imported at module top, add them.
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 Run: `python3 -m pytest skills/external-review/tests/test_state_file.py -v`
 Expected: 4 passed.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add skills/external-review/scripts/external-reviewer.py \
@@ -192,7 +192,7 @@ git commit -m "external-reviewer: state file primitive (load with env override, 
 - Modify: `skills/external-review/scripts/external-reviewer.py` (continue in the state-primitives block)
 - Modify: `skills/external-review/tests/test_state_file.py`
 
-- [ ] **Step 1: Write the failing tests** (append to `test_state_file.py`)
+- [x] **Step 1: Write the failing tests** (append to `test_state_file.py`)
 
 ```python
 def test_save_state_creates_parent_dir_0700(tmp_path, monkeypatch):
@@ -223,12 +223,12 @@ def test_save_state_atomic_via_tmp_rename(tmp_path, monkeypatch):
     assert er.load_state()["limits"]["reviewer-agent"]["limited"] is True
 ```
 
-- [ ] **Step 2: Verify they fail**
+- [x] **Step 2: Verify they fail**
 
 Run: `python3 -m pytest skills/external-review/tests/test_state_file.py -v`
 Expected: 3 new tests fail (`save_state` doesn't exist).
 
-- [ ] **Step 3: Implement `save_state`**
+- [x] **Step 3: Implement `save_state`**
 
 Append to the state-primitives block in `external-reviewer.py`:
 
@@ -255,12 +255,12 @@ def save_state(state: dict) -> None:
     os.replace(tmp_path, path)
 ```
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 Run: `python3 -m pytest skills/external-review/tests/test_state_file.py -v`
 Expected: all 7 pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add skills/external-review/scripts/external-reviewer.py \
@@ -276,7 +276,7 @@ git commit -m "external-reviewer: state file atomic save with flock + 0700 paren
 - Modify: `skills/external-review/scripts/external-reviewer.py`
 - Modify: `skills/external-review/tests/test_state_file.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `test_state_file.py`:
 
@@ -311,12 +311,12 @@ def test_get_active_limit_no_entry_returns_none():
     assert er.get_active_limit("reviewer-agent") is None
 ```
 
-- [ ] **Step 2: Verify they fail**
+- [x] **Step 2: Verify they fail**
 
 Run: `python3 -m pytest skills/external-review/tests/test_state_file.py -v`
 Expected: 3 new tests fail (`get_active_limit` doesn't exist).
 
-- [ ] **Step 3: Implement `get_active_limit`**
+- [x] **Step 3: Implement `get_active_limit`**
 
 Append:
 
@@ -346,11 +346,11 @@ def get_active_limit(reviewer_cmd_basename: str) -> dict | None:
 
 Add `import datetime as dt` at module top if not already present.
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 Expected: 10 passed in `test_state_file.py`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add skills/external-review/scripts/external-reviewer.py \
@@ -366,7 +366,7 @@ git commit -m "external-reviewer: state expiry-on-read prunes stale limits"
 - Modify: `skills/external-review/scripts/external-reviewer.py`
 - Create: `skills/external-review/tests/test_rate_limit_detection.py`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 # skills/external-review/tests/test_rate_limit_detection.py
@@ -420,12 +420,12 @@ def test_user_pattern_via_env(monkeypatch):
     assert reset_at is not None and reset_at.hour == 14 and reset_at.minute == 30
 ```
 
-- [ ] **Step 2: Verify they fail**
+- [x] **Step 2: Verify they fail**
 
 Run: `python3 -m pytest skills/external-review/tests/test_rate_limit_detection.py -v`
 Expected: AttributeError — `detect_rate_limit` doesn't exist.
 
-- [ ] **Step 3: Implement `detect_rate_limit`**
+- [x] **Step 3: Implement `detect_rate_limit`**
 
 Append to `external-reviewer.py` (after the state primitives):
 
@@ -484,7 +484,7 @@ def _parse_reset_time(s: str) -> "dt.datetime":
 
 Ensure `re` is imported at module top.
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 Run: `python3 -m pytest skills/external-review/tests/test_rate_limit_detection.py -v`
 Expected: the user-pattern test may parse `14:30` as fallback (since stub `_parse_reset_time` returns fallback). That test's `assert reset_at.hour == 14` will FAIL with the stub. That's expected — Task 1.5 fixes it. Mark this test xfail for now:
@@ -508,7 +508,7 @@ Same change applies to `test_codex_sample_extracts_time_group` — relax to `ass
 
 Re-run: 4 passed.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add skills/external-review/scripts/external-reviewer.py \
@@ -525,7 +525,7 @@ git commit -m "external-reviewer: detect_rate_limit with built-in + env-extensio
 - Create: `skills/external-review/tests/test_reset_time_parser.py`
 - Modify: `skills/external-review/tests/test_rate_limit_detection.py` (strengthen relaxed assertions back to spec)
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 # skills/external-review/tests/test_reset_time_parser.py
@@ -580,12 +580,12 @@ def test_parse_unparseable_falls_back(monkeypatch):
     assert out == dt.datetime(2026, 5, 14, 21, 0, 0)
 ```
 
-- [ ] **Step 2: Verify they fail**
+- [x] **Step 2: Verify they fail**
 
 Run: `python3 -m pytest skills/external-review/tests/test_reset_time_parser.py -v`
 Expected: failures across the board (stub returns fallback for everything; the AM/PM and 24h tests fail on parsing).
 
-- [ ] **Step 3: Implement `_parse_reset_time`**
+- [x] **Step 3: Implement `_parse_reset_time`**
 
 In `external-reviewer.py`, replace the stub:
 
@@ -633,7 +633,7 @@ def _fallback_reset_time() -> "dt.datetime":
     return (_now_local() + dt.timedelta(hours=hours)).replace(second=0, microsecond=0)
 ```
 
-- [ ] **Step 4: Strengthen the relaxed detection tests**
+- [x] **Step 4: Strengthen the relaxed detection tests**
 
 In `skills/external-review/tests/test_rate_limit_detection.py`:
 
@@ -671,7 +671,7 @@ def test_codex_sample_extracts_time_group(monkeypatch):
 
 Import `datetime as dt` at the top of the detection test file.
 
-- [ ] **Step 5: Run all reset/detect tests**
+- [x] **Step 5: Run all reset/detect tests**
 
 Run: `python3 -m pytest skills/external-review/tests/test_reset_time_parser.py skills/external-review/tests/test_rate_limit_detection.py -v`
 Expected: 5 + 4 = 9 passed.
@@ -680,7 +680,7 @@ Run full suite:
 `python3 -m pytest skills/external-review/tests/ -q`
 Expected: 142 baseline + 10 new state-file + 4 detection + 5 parser = 161 passed.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add skills/external-review/scripts/external-reviewer.py \
