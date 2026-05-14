@@ -2981,10 +2981,14 @@ After Slice 7:
 
 - [x] **Step 1: Final test count recorded** in the phase-close commit message.
 - [x] **Step 2: SKILL.md final sanity-read** — confirm "Rate-limit handling" section reads well and table cells render correctly.
-- [x] **Step 3: Invoke `superstar:finishing-a-development-branch`** to integrate the work.
+- [ ] **Step 3: Invoke `superstar:finishing-a-development-branch`** to integrate the work. (Deferred — see TASKLIST waiver below; this fork has no `docs/TASKLIST.md` and the integration step is held until the user explicitly runs it.)
 
 ---
 
 ## Bypass note
 
 External-review gates at slice and phase boundaries are part of the project's normal workflow. If the user has bypassed external-review for this work session (because the reviewer is itself rate-limited, or because that's been explicitly requested), the coordinator skips those invocations and proceeds. Subagents dispatched during implementation MUST receive explicit instructions NOT to invoke `superstar:external-review` for any reason, since they would otherwise auto-apply the gate.
+
+## TASKLIST.md waiver
+
+This repository (sigreer/skills/superstar) intentionally has no `docs/TASKLIST.md`. It is a personal fork — see the top of `CLAUDE.md` which explicitly opts out of upstream contribution conventions. Plan steps that reference TASKLIST.md hygiene therefore do not apply here, and the "Invoke `superstar:finishing-a-development-branch`" step above is deferred until the user explicitly requests integration.
