@@ -811,7 +811,7 @@ git commit -m "feat(external-reviewer): wire manifest + verdict/finding parsing 
 - Modify: `skills/external-review/scripts/external-reviewer.py` (`parse_args`, `main`)
 - Create: `skills/external-review/tests/test_work_id.py`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `skills/external-review/tests/test_work_id.py`:
 
@@ -870,7 +870,7 @@ def test_spec_without_work_id_ok(tmp_path):
     assert r.returncode == 0, r.stderr
 ```
 
-- [ ] **Step 2: Run the tests; confirm they fail**
+- [x] **Step 2: Run the tests; confirm they fail**
 
 ```bash
 python3 -m pytest skills/external-review/tests/test_work_id.py -v
@@ -878,7 +878,7 @@ python3 -m pytest skills/external-review/tests/test_work_id.py -v
 
 Expected: 2 failures (`post-slice`, `post-phase` not enforced); 1 pass.
 
-- [ ] **Step 3: Add `--work-id` to argparse and enforce**
+- [x] **Step 3: Add `--work-id` to argparse and enforce**
 
 In `parse_args()`, add:
 
@@ -902,7 +902,7 @@ In `main()`, immediately after `args = parse_args()`, add:
         return 2
 ```
 
-- [ ] **Step 4: Run the tests; confirm they pass**
+- [x] **Step 4: Run the tests; confirm they pass**
 
 ```bash
 python3 -m pytest skills/external-review/tests/test_work_id.py -v
@@ -910,7 +910,7 @@ python3 -m pytest skills/external-review/tests/test_work_id.py -v
 
 Expected: 3 passed.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add skills/external-review/scripts/external-reviewer.py skills/external-review/tests/test_work_id.py
@@ -923,7 +923,7 @@ git commit -m "feat(external-reviewer): enforce --work-id for post-slice/post-ph
 - Modify: `skills/external-review/scripts/external-reviewer.py` (`chain_folder_name`)
 - Create: `skills/external-review/tests/test_chain_folder_name.py`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 # skills/external-review/tests/test_chain_folder_name.py
@@ -955,7 +955,7 @@ def test_no_work_id_for_spec_unchanged(tmp_path):
     assert er.chain_folder_name(target, "spec", None) == "feature-spec"
 ```
 
-- [ ] **Step 2: Run the tests; confirm they fail**
+- [x] **Step 2: Run the tests; confirm they fail**
 
 ```bash
 python3 -m pytest skills/external-review/tests/test_chain_folder_name.py -v
@@ -963,7 +963,7 @@ python3 -m pytest skills/external-review/tests/test_chain_folder_name.py -v
 
 Expected: 4 failures (signature mismatch — function takes 2 args).
 
-- [ ] **Step 3: Update `chain_folder_name`**
+- [x] **Step 3: Update `chain_folder_name`**
 
 Replace:
 
@@ -985,7 +985,7 @@ chain_dir = (root / args.output_dir / chain_folder_name(target, args.kind, args.
 
 (There are also call sites in the synthesized-manifest branch — update those too, passing `args.work_id`.)
 
-- [ ] **Step 4: Run the tests; confirm they pass**
+- [x] **Step 4: Run the tests; confirm they pass**
 
 ```bash
 python3 -m pytest skills/external-review/tests/test_chain_folder_name.py -v
@@ -994,7 +994,7 @@ python3 -m pytest skills/external-review/tests/ -v
 
 Expected: all passed.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add skills/external-review/scripts/external-reviewer.py skills/external-review/tests/test_chain_folder_name.py
@@ -1007,7 +1007,7 @@ git commit -m "feat(external-reviewer): folder slug encodes work_id with dots re
 - Modify: `skills/external-review/scripts/external-reviewer.py`
 - Create: `skills/external-review/tests/test_legacy_discovery.py`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `skills/external-review/tests/test_legacy_discovery.py`:
 
@@ -1052,7 +1052,7 @@ def test_ambiguous_match_raises(tmp_path):
         er.discover_legacy_chain(root, "feature", "post-slice", "feature-P2-S3-post-slice")
 ```
 
-- [ ] **Step 2: Run the tests; confirm they fail**
+- [x] **Step 2: Run the tests; confirm they fail**
 
 ```bash
 python3 -m pytest skills/external-review/tests/test_legacy_discovery.py -v
@@ -1060,7 +1060,7 @@ python3 -m pytest skills/external-review/tests/test_legacy_discovery.py -v
 
 Expected: 3 failures (`discover_legacy_chain` and `AmbiguousLegacyChain` not defined).
 
-- [ ] **Step 3: Add legacy discovery**
+- [x] **Step 3: Add legacy discovery**
 
 ```python
 class AmbiguousLegacyChain(Exception):
@@ -1119,7 +1119,7 @@ In `main()`, replace the line that computes `chain_dir` (and the immediate `chai
     chain_dir.mkdir(parents=True, exist_ok=True)
 ```
 
-- [ ] **Step 4: Run the tests; confirm they pass**
+- [x] **Step 4: Run the tests; confirm they pass**
 
 ```bash
 python3 -m pytest skills/external-review/tests/test_legacy_discovery.py -v
@@ -1128,7 +1128,7 @@ python3 -m pytest skills/external-review/tests/ -v
 
 Expected: all passed.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add skills/external-review/scripts/external-reviewer.py skills/external-review/tests/test_legacy_discovery.py
@@ -3011,3 +3011,22 @@ Plus the post-review fix commits:
 **By design — in-flight round artefacts:** the current round's `rN-*-request.md` is created before the reviewer runs but is only recorded in `chain.json` after the reviewer returns. During an in-progress round the request file may appear untracked while no corresponding manifest entry exists yet; this is expected and resolves when the round closes.
 
 **Unrelated dirty files (out of Slice 1 scope, intentionally left untouched):** `CLAUDE.md`, `skills/executing-plans/SKILL.md`, `skills/finishing-a-development-branch/SKILL.md`, `skills/subagent-driven-development/SKILL.md`, `skills/tasklist-discipline/SKILL.md`.
+
+## Slice 2 closeout note (2026-05-14)
+
+**Commits comprising Slice 2:**
+- `6700937` feat(external-reviewer): enforce --work-id for post-slice/post-phase
+- `64ecb51` feat(external-reviewer): folder slug encodes work_id with dots replaced
+- `d05056f` feat(external-reviewer): discover and reuse legacy chain folders
+
+**Post-review fix commits (post-slice round 1 in the S2 chain):**
+- `cc07bf5` fix(external-reviewer): persist work_id in manifest; guard legacy match by chain.json absence
+- `8743c63` chore(external-reviewer): migrate misrouted Slice-2 post-slice round to S2 chain
+
+**Final test result:** `36 passed` — `python3 -m pytest skills/external-review/tests/`.
+
+**Chain-routing defect found and fixed during this review.** The original Slice-2 post-slice review was invoked with `--work-id S2` but landed in the existing Slice-1 chain folder (`docs/reviewer/external-reviewer-redesign-post-slice/`) as round 5, because `discover_legacy_chain` matched the bare legacy slug (`<target>-<kind>`) without first checking whether the candidate already contained a `chain.json`. Fix in `cc07bf5`: a candidate folder only qualifies as a legacy chain if it has no `chain.json`. Migration in `8743c63`: the misrouted artefacts were moved to `docs/reviewer/external-reviewer-redesign-S2-post-slice/` as round 1, a fresh `chain.json` was written for the S2 chain, and round 5 was dropped from the Slice-1 chain manifest. The post-slice gate for Slice 2 now lives in the correct work-id-keyed chain folder.
+
+**Slice 2 review round 1 (in the S2 chain):** verdict `revise` with 3 findings (2 blocking). Resolution at `docs/reviewer/external-reviewer-redesign-S2-post-slice/r1-resolution.md`.
+
+**Unrelated dirty files (out of Slice 2 scope, intentionally left untouched):** `CLAUDE.md`, `skills/executing-plans/SKILL.md`, `skills/finishing-a-development-branch/SKILL.md`, `skills/subagent-driven-development/SKILL.md`, `skills/tasklist-discipline/SKILL.md` (authorised by the human partner to remain across Slice 1 and Slice 2 closeouts).
