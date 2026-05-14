@@ -171,6 +171,86 @@ def cap_with_elision(text: str, max_bytes: int = 80 * 1024) -> str:
     return head + marker + tail
 
 
+_BUDGET_SECTIONS = [
+    ("target_preview", r"\n## Target Preview\n", [80 * 80, 40 * 80, 0]),
+    ("diff_body", r"\n## Changes since prior round\n", [50 * 1024, 12 * 1024, 0]),
+    ("resolution_body", r"\n## Resolution report for prior round\n", [20 * 1024, 8 * 1024, 2 * 1024]),
+    ("prior_findings_body", r"\n## Prior-round findings\n", [40 * 1024, 16 * 1024, 8 * 1024]),
+]
+
+
+def _find_section_end(text: str, section_start: int) -> int:
+    """Return the offset where a section ends: next `\\n## ` heading, the
+    sentinel end marker, or end-of-text. Whichever comes first."""
+    import re
+    candidates = []
+    m = re.search(r"\n## ", text[section_start:])
+    if m:
+        candidates.append(section_start + m.start())
+    e = text.find(PROMPT_SENTINEL_END, section_start)
+    if e != -1:
+        candidates.append(e)
+    if not candidates:
+        return len(text)
+    return min(candidates)
+
+
+def apply_budget(text: str, budget_chars: int) -> str:
+    """Trim prunable sections in priority order until `text` fits the budget.
+
+    Preserved (never trimmed):
+      - Sentinel markers
+      - Chain summary table (`## Review chain summary`)
+      - Review-mode preamble + REVIEW_PROMPT contract
+
+    Pruning order (lowest priority dropped first):
+      1. Target Preview        → 80 → 40 → 0 lines
+      2. Diff body             → 50 KB → 12 KB → 0
+      3. Resolution body       → 20 KB → 8 KB → 2 KB
+      4. Prior findings body   → 40 KB → 16 KB → 8 KB
+
+    Appends a `<!-- budget-applied: ... -->` HTML comment immediately before
+    the end sentinel summarising trims.
+    """
+    import re
+    if len(text) <= budget_chars:
+        return text
+
+    out = text
+    trim_log: list[str] = []
+    for name, pattern, levels in _BUDGET_SECTIONS:
+        if len(out) <= budget_chars:
+            break
+        m = re.search(pattern, out)
+        if not m:
+            continue
+        section_start = m.end()
+        for level_bytes in levels:
+            if len(out) <= budget_chars:
+                break
+            section_end = _find_section_end(out, section_start)
+            section_body = out[section_start:section_end]
+            if level_bytes == 0:
+                replacement = f"\n[{name} dropped to fit budget]\n"
+            else:
+                replacement = "\n" + cap_with_elision(section_body, max_bytes=level_bytes) + "\n"
+            if len(replacement) >= len(section_body):
+                continue
+            out = out[:section_start] + replacement + out[section_end:]
+            trim_log.append(f"{name}:{level_bytes}")
+
+    note = (
+        f"\n<!-- budget-applied: budget={budget_chars} "
+        f"trims=[{','.join(trim_log)}] final_size={len(out)} -->\n"
+    )
+    end_idx = out.rfind(PROMPT_SENTINEL_END)
+    if end_idx != -1:
+        out = out[:end_idx] + note + out[end_idx:]
+    else:
+        out = out + note
+    return out
+
+
 SUPPORTED_SCHEMA_VERSION = 1
 
 
@@ -457,6 +537,7 @@ def make_prompt(
     max_lines: int,
     mode: str = "broad",
     incremental_preamble: str | None = None,
+    incremental_budget_chars: int | None = None,
 ) -> str:
     context_display = "\n".join(f"- {rel_or_abs(p, root)}" for p in context) or "- none"
     body = REVIEW_PROMPT.format(
@@ -475,7 +556,10 @@ def make_prompt(
         body += "\n## Context Previews\n\n"
         for ctx in context:
             body += numbered_preview(ctx, root, max_lines=max(80, max_lines // 3))
-    return f"{PROMPT_SENTINEL_START}\n{body}\n{PROMPT_SENTINEL_END}"
+    assembled = f"{PROMPT_SENTINEL_START}\n{body}\n{PROMPT_SENTINEL_END}"
+    if mode == "incremental" and incremental_budget_chars is not None:
+        return apply_budget(assembled, budget_chars=incremental_budget_chars)
+    return assembled
 
 
 def expand_command_template(
@@ -880,6 +964,14 @@ def parse_args() -> argparse.Namespace:
         default="paths",
         help="What to print to stdout after the reviewer finishes.",
     )
+    parser.add_argument(
+        "--incremental-budget-chars",
+        type=int, default=400_000,
+        help="Global cap on assembled prompt size for incremental rounds. "
+             "When exceeded, low-priority sections are trimmed first "
+             "(target preview, diff body, resolution body, prior findings) "
+             "before any user-required content. Default 400000.",
+    )
     return parser.parse_args()
 
 
@@ -1146,6 +1238,7 @@ def main() -> int:
         root=root, target=target, kind=args.kind,
         context=context, max_lines=args.max_lines,
         mode=mode, incremental_preamble=incremental_preamble,
+        incremental_budget_chars=args.incremental_budget_chars,
     )
 
     head_sha_at_request = current_head_sha(root)
@@ -1240,6 +1333,7 @@ def main() -> int:
                     root=root, target=target, kind=args.kind,
                     context=context, max_lines=args.max_lines,
                     mode="broad", incremental_preamble=None,
+                    incremental_budget_chars=args.incremental_budget_chars,
                 )
             sweeps.append(run_one_reviewer(
                 role="sweep", sweep_index=k,
