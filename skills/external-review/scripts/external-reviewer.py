@@ -491,6 +491,61 @@ def is_dirty(root: Path) -> bool:
     return bool(out.stdout.strip())
 
 
+def _cap_lines(text: str, max_lines: int) -> str:
+    lines = text.splitlines()
+    if len(lines) <= max_lines:
+        return text
+    return "\n".join(lines[:max_lines] + [f"[truncated: {len(lines) - max_lines} additional lines]"])
+
+
+def compute_diff_section(
+    root: Path,
+    *,
+    base_ref: str | None,
+    paths: list[str] | None,
+    max_lines: int,
+) -> str:
+    if base_ref is None:
+        return "Changes since prior round: not available for this round (no base ref).\n"
+
+    diff_args = ["git", "-C", str(root), "diff", f"{base_ref}..HEAD"]
+    if paths:
+        diff_args.append("--")
+        diff_args.extend(paths)
+    diff_proc = subprocess.run(diff_args, text=True, capture_output=True)
+    diff_text = diff_proc.stdout
+
+    status = subprocess.run(
+        ["git", "-C", str(root), "status", "--porcelain"],
+        text=True, capture_output=True,
+    ).stdout
+    dirty = bool(status.strip())
+
+    parts = [f"Worktree status: {'dirty' if dirty else 'clean'}", "", "## git diff base..HEAD", ""]
+    parts.append(_cap_lines(diff_text, max_lines))
+
+    if dirty:
+        head_diff = subprocess.run(
+            ["git", "-C", str(root), "diff", "HEAD"] + (["--"] + paths if paths else []),
+            text=True, capture_output=True,
+        ).stdout
+        parts += ["", "## git diff HEAD (uncommitted)", "", _cap_lines(head_diff, max_lines)]
+
+    untracked = [line[3:] for line in status.splitlines() if line.startswith("?? ")]
+    if untracked:
+        parts += ["", "## Untracked files", ""]
+        for rel in untracked:
+            abs_path = root / rel
+            try:
+                content = abs_path.read_text(encoding="utf-8")
+                preview = _cap_lines(content, max_lines)
+                parts += [f"### {rel}", "", "```", preview, "```", ""]
+            except (UnicodeDecodeError, OSError):
+                parts += [f"- {rel} (omitted: binary or unreadable)"]
+
+    return "\n".join(parts) + "\n"
+
+
 def main() -> int:
     args = parse_args()
     if args.kind in ("post-slice", "post-phase") and not args.work_id:
