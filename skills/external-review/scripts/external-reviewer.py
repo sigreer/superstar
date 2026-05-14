@@ -510,6 +510,8 @@ def run_one_reviewer(
     target: Path,
     root: Path,
     namespaced: bool,
+    previous_response: Path | None = None,
+    resolution_file: Path | None = None,
 ) -> ReviewerResult:
     suffix = ""
     if namespaced:
@@ -528,7 +530,7 @@ def run_one_reviewer(
         target_file=target, kind=args.kind,
         prompt_transport=args.prompt_transport, timeout=args.timeout,
         chain_dir=chain_dir, round_num=round_num,
-        previous_response=None, resolution_file=None,
+        previous_response=previous_response, resolution_file=resolution_file,
         session_file=session_file,
     )
     write_review_artifact(
@@ -962,12 +964,28 @@ def main() -> int:
     )
     namespaced = pre_sweep_plan.sweep_count > 0
 
+    # Prior-round artefacts for primary template anchoring (round N+1, S6 contract).
+    # Sweeps remain isolated and continue to receive None.
+    previous_response_path: Path | None = None
+    resolution_for_template: Path | None = None
+    if round_num > 1 and manifest["rounds"]:
+        prior_round_entry = manifest["rounds"][-1]
+        prior_response_name = prior_round_entry.get("response")
+        if prior_response_name:
+            candidate = chain_dir / prior_response_name
+            if candidate.exists():
+                previous_response_path = candidate
+        if resolution_attached:
+            resolution_for_template = resolution_file
+
     try:
         primary = run_one_reviewer(
             role="primary", sweep_index=None,
             chain_dir=chain_dir, round_num=round_num, timestamp=timestamp,
             prompt_text=prompt_text, args=args, target=target, root=root,
             namespaced=namespaced,
+            previous_response=previous_response_path,
+            resolution_file=resolution_for_template,
         )
 
         # Post-run plan: now that primary has a verdict, evaluate final-ready.
