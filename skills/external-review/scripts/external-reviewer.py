@@ -149,6 +149,28 @@ def strip_prompt_echo(text: str) -> str:
     return out
 
 
+def cap_with_elision(text: str, max_bytes: int = 80 * 1024) -> str:
+    """Cap `text` to ~max_bytes, keeping head + tail with an elision marker.
+
+    Returns the original text unchanged if under the cap. Otherwise returns
+    the first 60% + a marker + the last 40% of `max_bytes`. Bytes count is
+    on the encoded UTF-8 length; for purely ASCII content this equals
+    character count.
+    """
+    if not text:
+        return text
+    raw = text.encode("utf-8")
+    if len(raw) <= max_bytes:
+        return text
+    head_bytes = int(max_bytes * 0.6)
+    tail_bytes = max_bytes - head_bytes
+    head = raw[:head_bytes].decode("utf-8", errors="ignore")
+    tail = raw[-tail_bytes:].decode("utf-8", errors="ignore")
+    elided = len(raw) - head_bytes - tail_bytes
+    marker = f"\n\n[… {elided} bytes elided to fit cap of {max_bytes} bytes …]\n\n"
+    return head + marker + tail
+
+
 SUPPORTED_SCHEMA_VERSION = 1
 
 
@@ -347,12 +369,16 @@ def build_incremental_preamble(
     if trusted is not None:
         merged_findings_file = chain_dir / f"r{trusted['round']}-merged-findings.md"
         if merged_findings_file.exists():
-            prior_response_text = merged_findings_file.read_text(encoding="utf-8")
+            prior_response_text = cap_with_elision(
+                merged_findings_file.read_text(encoding="utf-8")
+            )
             prior_source = f"merged findings from r{trusted['round']} (authoritative)"
         elif trusted.get("response"):
             response_path = chain_dir / trusted["response"]
             if response_path.exists():
-                prior_response_text = response_path.read_text(encoding="utf-8")
+                prior_response_text = cap_with_elision(
+                    response_path.read_text(encoding="utf-8")
+                )
                 prior_source = f"primary reviewer response from r{trusted['round']}"
             else:
                 prior_source = f"r{trusted['round']} response file missing"
@@ -377,7 +403,10 @@ def build_incremental_preamble(
 
     resolution_file = chain_dir / f"r{round_num - 1}-resolution.md"
     if resolution_file.exists():
-        resolution_text = resolution_file.read_text(encoding="utf-8")
+        resolution_text = cap_with_elision(
+            resolution_file.read_text(encoding="utf-8"),
+            max_bytes=20 * 1024,  # tighter cap for resolution docs
+        )
     elif resolution_waiver:
         resolution_text = "MISSING — explicitly waived by caller via --allow-missing-resolution"
     elif legacy_first_round:
