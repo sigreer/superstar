@@ -28,8 +28,8 @@ You MUST create a task for each of these items and complete them in order:
 5. **Present design** — in sections scaled to their complexity, get user approval after each section
 6. **Write design doc** — save to `docs/specs/YYYY-MM-DD-<id>-<topic>-design.md` (where `<id>` is the TASKLIST ID per [[tasklist-discipline]], omitted if no TASKLIST.md) and commit. **If no TASKLIST row exists for `<id>` yet, create it first** via [[tasklist-discipline]] (see "Allocating a new ID") — the spec must not be the first artifact carrying the ID.
 7. **Spec self-review** — quick inline check for placeholders, contradictions, ambiguity, scope (see below)
-8. **User reviews written spec** — ask user to review the spec file before proceeding
-9. **Transition to implementation** — invoke writing-plans skill to create implementation plan
+8. **External spec review** — invoke [[external-review]] with `--kind spec` against the written spec; iterate until the verdict is `ready` or `ready with small edits`
+9. **Transition to implementation planning** — invoke writing-plans skill immediately to create the implementation plan. Do not ask the user before implementation planning unless review findings require a product decision or you are genuinely blocked.
 
 ## Process Flow
 
@@ -44,7 +44,7 @@ digraph brainstorming {
     "User approves design?" [shape=diamond];
     "Write design doc" [shape=box];
     "Spec self-review\n(fix inline)" [shape=box];
-    "User reviews spec?" [shape=diamond];
+    "External spec review passes?" [shape=diamond];
     "Invoke writing-plans skill" [shape=doublecircle];
 
     "Explore project context" -> "Visual questions ahead?";
@@ -57,9 +57,9 @@ digraph brainstorming {
     "User approves design?" -> "Present design sections" [label="no, revise"];
     "User approves design?" -> "Write design doc" [label="yes"];
     "Write design doc" -> "Spec self-review\n(fix inline)";
-    "Spec self-review\n(fix inline)" -> "User reviews spec?";
-    "User reviews spec?" -> "Write design doc" [label="changes requested"];
-    "User reviews spec?" -> "Invoke writing-plans skill" [label="approved"];
+    "Spec self-review\n(fix inline)" -> "External spec review passes?";
+    "External spec review passes?" -> "Write design doc" [label="revise"];
+    "External spec review passes?" -> "Invoke writing-plans skill" [label="ready"];
 }
 ```
 
@@ -123,12 +123,12 @@ After writing the spec document, look at it with fresh eyes:
 
 Fix any issues inline. No need to re-review — just fix and move on.
 
-**User Review Gate:**
-After the spec review loop passes, ask the user to review the written spec before proceeding:
+**External Spec Review Gate:**
+After the spec self-review loop passes, invoke `[[external-review]]` with `--kind spec` against the written spec. Pass `docs/TASKLIST.md` as context when present, and iterate until the verdict is `ready` or `ready with small edits`.
 
-> "Spec written and committed to `<path>`. Please review it and let me know if you want to make any changes before we start writing out the implementation plan."
+If the reviewer returns `revise`, apply the findings directly, update the spec, and re-submit. If a finding requires a product decision that was not resolved during brainstorming, ask the user the narrow question needed to unblock the review. Otherwise, continue without pausing.
 
-Wait for the user's response. If they request changes, make them and re-run the spec review loop. Only proceed once the user approves.
+**Communication contract:** Do not ask the user before implementation planning. The validated design conversation already happened before the spec was written; the external reviewer is the post-write gate. Speak to the user only for genuine questions/blockers, or after both the spec and implementation plan have passed external review.
 
 **Implementation:**
 

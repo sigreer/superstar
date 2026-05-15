@@ -136,13 +136,15 @@ If you find issues, fix them inline. No need to re-review — just fix and move 
 
 This skill enforces two **gating** external reviews. Both are mandatory unless the user explicitly waives them.
 
+**Communication contract:** Do not ask the user before these reviews unless blocked by a real ambiguity, missing dependency, or reviewer finding that requires a product decision. Continue automatically from spec review to plan drafting to plan review. Speak to the user only for genuine questions/blockers, or after both the spec and implementation plan have passed external review.
+
 ### 1. Spec review (after spec save, before plan drafting)
 
-If the brainstorming step produced a spec under `docs/specs/`, run `[[external-review]]` with `--kind spec` against that spec **before** starting the plan. Iterate until the verdict is `ready` or `ready with small edits`. During this stage you may apply the reviewer's edits directly — no parallel implementation subagents exist yet.
+If the brainstorming step produced a spec, run `[[external-review]]` with `--kind spec` against that spec **before** starting the plan, whether it lives under `docs/specs/`, `docs/superstar/specs/`, or a user-specified path. Iterate until the verdict is `ready` or `ready with small edits`. During this stage you may apply the reviewer's edits directly — no parallel implementation subagents exist yet. Do not ask the user before this review unless blocked.
 
 ### 2. Plan review (after plan save, before execution handoff)
 
-After saving the plan, run `[[external-review]]` with `--kind plan` against the plan, passing the spec as `--context`. Iterate until the verdict is `ready` or `ready with small edits` before proceeding to the handoff step below.
+After saving the plan, run `[[external-review]]` with `--kind plan` against the plan, passing the spec as `--context`. Iterate until the verdict is `ready` or `ready with small edits` before proceeding to the handoff step below. Do not ask the user before this review unless blocked.
 
 ## Execution Handoff
 

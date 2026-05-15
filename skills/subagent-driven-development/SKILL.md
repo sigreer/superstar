@@ -11,7 +11,7 @@ Execute plan by dispatching fresh subagent per task, with two-stage in-loop revi
 
 **Core principle:** Fresh subagent per task + two-stage in-loop review (spec then quality) + external-review at slice/phase boundaries = high quality, fast iteration.
 
-**Continuous execution:** Do not pause to check in with your human partner between tasks. Execute all tasks from the plan without stopping. The only reasons to stop are: BLOCKED status you cannot resolve, ambiguity that genuinely prevents progress, or all tasks complete. "Should I continue?" prompts and progress summaries waste their time — they asked you to execute the plan, so execute it.
+**Continuous execution:** Do not pause to check in with your human partner between tasks or at review boundaries. Execute the plan through required slice/phase external-review gates without stopping. The only reasons to stop are: BLOCKED status you cannot resolve, ambiguity that genuinely prevents progress, or all plan tasks, required slice/phase external-review gates, status flips, and closeout steps are complete. "Should I continue?" prompts and progress summaries waste their time — they asked you to execute the plan, so execute it.
 
 ## Coordinator Charter
 
@@ -306,6 +306,7 @@ Done!
 | "It's just a one-line change, no need to delegate"                        | Bar is *strictly cheaper than delegating*. When in doubt, delegate.    |
 | "I'll skip post-slice review on this one, it's a small slice"             | No. Slice boundary is a gate. Run `[[external-review]] --kind post-slice`.|
 | "I'll resubmit without the resolution file, the reviewer will figure it out" | No. Post-slice/post-phase round N+1 exits 3 without `r{N-1}-resolution.md` or `--allow-missing-resolution`. |
+| "The plan's final close-out task ran, so I should ask before post-slice review" | No. The slice is not closed until `[[external-review]] --kind post-slice` passes and TASKLIST is flipped afterward. |
 
 **Process reds (also never):**
 - Start implementation on main/master branch without explicit user consent
