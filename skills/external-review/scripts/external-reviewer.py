@@ -1241,7 +1241,13 @@ def run_one_reviewer(
         # parse_verdict extracts from echoed prompt text. See spec §S1.2.
         verdict, valid = None, False
     else:
-        verdict, valid = parse_verdict(body)
+        # Normalise heading-style verdicts (`Overall verdict\n\nready`) before
+        # parsing. parse_verdict's regex requires a `:`/`-` separator, but
+        # reviewers commonly emit the value on the next line as a heading.
+        # Stored review_body stays pristine; only the parse input is rewritten.
+        verdict, valid = parse_verdict(_VERDICT_HEADING_STYLE.sub(
+            lambda m: f"{m.group(1)}: {m.group(2)}", body
+        ))
     return ReviewerResult(
         role=role, sweep_index=sweep_index,
         request_path=request_path, response_path=response_path,
