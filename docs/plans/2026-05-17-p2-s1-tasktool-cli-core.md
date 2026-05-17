@@ -804,6 +804,23 @@ class DateFormatTests(unittest.TestCase):
         with self.assertRaises(ValidationError):
             validate_project(p)
 
+    def test_invalid_calendar_month_rejected(self):
+        p = _project_with_slice()
+        p.phases[0].slices[0].created = "2026-99-99"
+        with self.assertRaises(ValidationError):
+            validate_project(p)
+
+    def test_invalid_calendar_day_rejected(self):
+        p = _project_with_slice()
+        p.phases[0].slices[0].created = "2026-02-31"
+        with self.assertRaises(ValidationError):
+            validate_project(p)
+
+    def test_valid_calendar_date_accepted(self):
+        p = _project_with_slice()
+        p.phases[0].slices[0].created = "2026-02-28"
+        validate_project(p)  # no raise
+
 class PathWarningTests(unittest.TestCase):
     def test_missing_ref_emits_warning(self):
         from tasktool.validate import find_path_warnings
@@ -863,11 +880,12 @@ from tasktool.ids import parse_id, IdParseError
 class ValidationError(ValueError):
     """Raised when the project violates a validation rule."""
 
+import datetime as _dt
+
 _PHASE_RE = re.compile(r"^P\d+$")
 _SLICE_RE = re.compile(r"^S\d+[a-z]?$")
 _TASK_RE = re.compile(r"^T\d+$")
 _CROSS_RE = re.compile(r"^X\d+$")
-_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 def _require(cond: bool, msg: str) -> None:
     if not cond:
@@ -877,9 +895,16 @@ def _check_id(value: str, pattern: re.Pattern[str], scope: str) -> None:
     _require(bool(pattern.match(value)), f"{scope}: malformed id {value!r}")
 
 def _check_date(value: str | None, scope: str, field: str) -> None:
+    """Validate that value parses as a real ISO 8601 calendar date.
+    Rejects shape-only matches like 2026-99-99 or 2026-02-31."""
     if value is None:
         return
-    _require(bool(_DATE_RE.match(value)), f"{scope}.{field}: malformed date {value!r} (expected YYYY-MM-DD)")
+    try:
+        _dt.date.fromisoformat(value)
+    except ValueError as e:
+        raise ValidationError(
+            f"{scope}.{field}: malformed date {value!r} (expected YYYY-MM-DD calendar date): {e}"
+        ) from e
 
 def _check_dates(created: str, closed: str | None, scope: str) -> None:
     _check_date(created, scope, "created")
@@ -1564,13 +1589,18 @@ def cmd_create_slice(
     return new_id
 
 def cmd_create_task(*, repo_root: Path, slice_id: str, title: str) -> str:
+    """In Task 8, only fully-qualified slice IDs (e.g. P1.S2) are accepted.
+    Task 9 extends this to accept unambiguous short IDs by routing through _resolve_id."""
     p = _load(repo_root)
-    qid = _resolve_id(p, slice_id)
-    if parse_id(qid)[0] != "slice":
-        raise CommandError(f"task creation requires a slice id, got {slice_id!r} ({parse_id(qid)[0]})")
-    phase_part, slice_part, _ = split_qualified(qid)
-    phase = next(ph for ph in p.phases if ph.id == phase_part)
-    slc = next(s for s in phase.slices if s.id == slice_part)
+    phase_part, slice_part, _ = split_qualified(slice_id)
+    if phase_part is None or slice_part is None:
+        raise CommandError(f"task creation requires fully-qualified slice id (e.g. P1.S2), got {slice_id!r}")
+    phase = next((ph for ph in p.phases if ph.id == phase_part), None)
+    if phase is None:
+        raise CommandError(f"phase {phase_part} not found")
+    slc = next((s for s in phase.slices if s.id == slice_part), None)
+    if slc is None:
+        raise CommandError(f"slice {phase_part}.{slice_part} not found")
     new_id = next_task_id(p, phase_part, slice_part)
     slc.tasks.append(Task(id=new_id, title=title, created=_today()))
     _save(repo_root, p)
@@ -1757,7 +1787,7 @@ Expected: import errors / attribute errors for the new commands.
 
 - [ ] **Step 3: Extend commands.py**
 
-Append to `tools/tasktool/commands.py`:
+Append to `tools/tasktool/commands.py`. The appended block introduces `_resolve_id` and then redefines `cmd_create_task` to use it; the later definition shadows Task 8's version (this is intentional — Python keeps the last definition). Alternatively, delete the Task 8 `cmd_create_task` before appending if you prefer a single definition in the file.
 
 ```python
 # ───── set / close / block / unblock ─────
@@ -1787,6 +1817,21 @@ def _resolve_id(p: Project, id: str) -> str:
         ph, s, t = matches[0]
         return f"{ph}.{s}.{t}"
     return id
+
+def cmd_create_task(*, repo_root: Path, slice_id: str, title: str) -> str:
+    """Now accepts unambiguous short slice IDs via _resolve_id. Replaces the
+    fully-qualified-only version from Task 8."""
+    p = _load(repo_root)
+    qid = _resolve_id(p, slice_id)
+    if parse_id(qid)[0] != "slice":
+        raise CommandError(f"task creation requires a slice id, got {slice_id!r} ({parse_id(qid)[0]})")
+    phase_part, slice_part, _ = split_qualified(qid)
+    phase = next(ph for ph in p.phases if ph.id == phase_part)
+    slc = next(s for s in phase.slices if s.id == slice_part)
+    new_id = next_task_id(p, phase_part, slice_part)
+    slc.tasks.append(Task(id=new_id, title=title, created=_today()))
+    _save(repo_root, p)
+    return new_id
 
 def _find_item(p: Project, id: str):
     """Returns (container_list, item). Accepts fully-qualified or unambiguous short."""
