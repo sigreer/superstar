@@ -26,6 +26,7 @@
 | `skills/project-setup/scripts/reviewer-agent` | Create | Provider-aware reviewer wrapper template. |
 | `skills/project-setup/SKILL.md` | Modify | Setup checklist points to the safe wrapper template and no-bypass policy. |
 | `skills/external-review/SKILL.md` | Modify | Documents provider flipping, forcing providers, custom commands, sandbox contract. |
+| `~/.local/bin/reviewer-agent` | Replace after tests | Local installed wrapper. Replace once fake wrapper tests and focused bridge tests pass. |
 
 ## Conventions
 
@@ -59,8 +60,11 @@ spec.loader.exec_module(er)
 | Provider flip based on caller | Task 1.1, Task 1.2 |
 | `AGENT_REVIEWER_CMD` remains override | Task 1.1 |
 | Metadata visible in manifest/artifact | Task 3.1 |
-| Docs/project setup updates | Task 5.1, Task 5.2 |
-| Live safety smoke | Task 6.2 |
+| Env-var authority and sweep-index semantics | Task 2.1, Task 2.4 |
+| Stale scratch cleanup guidance | Task 2.4 |
+| Docs/project setup updates | Task 2.4, Task 4.2, Task 5.1 |
+| Replace dangerous installed wrapper promptly | Task 4.3 |
+| Live safety smoke | Task 6.2, Task 6.3 |
 
 ---
 
@@ -458,6 +462,7 @@ def test_reviewer_receives_sandbox_context_env(tmp_path):
     assert seen["AGENT_REVIEWER_ROLE"] == "primary"
     assert seen["AGENT_REVIEWER_PROVIDER"] == "custom"
     assert seen["AGENT_REVIEWER_CALLER"] in {"auto", "unknown", ""}
+    assert seen["AGENT_REVIEWER_SWEEP_INDEX"] == ""
     assert Path(seen["AGENT_REVIEWER_RESPONSE_DIR"]).is_dir()
     assert seen["AGENT_REVIEWER_REQUEST_FILE"].endswith("-request.md")
     assert seen["AGENT_REVIEWER_TARGET_FILE"] == str(repo / "plan.md")
@@ -532,6 +537,7 @@ role_name = "primary" if role == "primary" else f"sweep{sweep_index}"
 response_dir = chain_dir / ".reviewer-output" / f"r{round_num}-{role_name}"
 response_dir.mkdir(parents=True, exist_ok=True)
 scratch_dir = Path(tempfile.mkdtemp(prefix=f"superstar-reviewer-{chain_dir.name}-r{round_num}-{role_name}-"))
+scratch_dir.chmod(0o700)
 provider_resolution = getattr(args, "provider_resolution", ProviderResolution("custom", "unknown", args.reviewer_cmd))
 invocation_context = ReviewerInvocationContext(
     repo_root=root,
@@ -642,6 +648,29 @@ def test_reviewer_scratch_is_removed_by_default(tmp_path):
     assert result.returncode == 0, result.stderr
     scratch = Path(marker.read_text())
     assert not scratch.exists()
+
+
+def test_reviewer_scratch_directory_is_private_0700(tmp_path):
+    repo = _repo(tmp_path)
+    marker = repo / "scratch-mode.txt"
+    reviewer = repo / "fake-reviewer.py"
+    reviewer.write_text(
+        "#!/usr/bin/env python3\n"
+        "import os, pathlib\n"
+        "scratch = pathlib.Path(os.environ['AGENT_REVIEWER_SCRATCH_DIR'])\n"
+        f"pathlib.Path({str(marker)!r}).write_text(oct(scratch.stat().st_mode & 0o777))\n"
+        "print('Overall verdict: ready')\n"
+    )
+    reviewer.chmod(0o755)
+    env = os.environ.copy()
+    env["AGENT_REVIEWER_CMD"] = str(reviewer)
+    env["AGENT_REVIEWER_STATE_FILE"] = str(tmp_path / "state.json")
+    result = subprocess.run(
+        [sys.executable, str(SCRIPTS / "external-reviewer.py"), "review", "--kind", "spec", "--file", "plan.md", "--emit", "json"],
+        cwd=repo, env=env, capture_output=True, text=True, timeout=60,
+    )
+    assert result.returncode == 0, result.stderr
+    assert marker.read_text() == "0o700"
 
 
 def test_keep_reviewer_scratch_preserves_directory(tmp_path):
@@ -825,6 +854,46 @@ Expected: PASS.
 git add skills/external-review/scripts/external-reviewer.py \
         skills/external-review/tests/test_reviewer_invocation_context.py
 git commit -m "external-reviewer: expose sandbox command placeholders"
+```
+
+### Task 2.4: Document env authority and stale scratch cleanup
+
+**Files:**
+- Modify: `skills/external-review/SKILL.md`
+
+- [ ] **Step 1: Add reviewer context contract docs**
+
+In `skills/external-review/SKILL.md`, add this paragraph to the configuration section:
+
+```markdown
+The bridge exports `AGENT_REVIEWER_REPO_ROOT`, `AGENT_REVIEWER_CHAIN_DIR`, `AGENT_REVIEWER_REQUEST_FILE`, `AGENT_REVIEWER_RESPONSE_DIR`, `AGENT_REVIEWER_SCRATCH_DIR`, `AGENT_REVIEWER_TARGET_FILE`, `AGENT_REVIEWER_KIND`, `AGENT_REVIEWER_ROLE`, and `AGENT_REVIEWER_SWEEP_INDEX` for every reviewer process. `AGENT_REVIEWER_SWEEP_INDEX` is always set: empty for primary, numeric for sweeps. These env vars are authoritative; command placeholders are convenience sugar derived from the same values.
+```
+
+Add this cleanup note:
+
+````markdown
+Scratch directories are owner-only and normally removed by the bridge. If a process is killed before cleanup, remove stale dirs with:
+
+```bash
+find "${TMPDIR:-/tmp}" -maxdepth 1 -type d -name 'superstar-reviewer-*' -mtime +1 -prune -exec rm -rf -- {} +
+```
+````
+
+- [ ] **Step 2: Verify the docs contain the semantics**
+
+Run:
+
+```bash
+rg -n "AGENT_REVIEWER_SWEEP_INDEX|authoritative|superstar-reviewer-\\*" skills/external-review/SKILL.md
+```
+
+Expected: all terms are present.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add skills/external-review/SKILL.md
+git commit -m "external-review: document reviewer context contract"
 ```
 
 ---
@@ -1064,6 +1133,8 @@ def test_codex_wrapper_uses_sandbox_and_never_bypass(tmp_path):
     assert "--ephemeral" in argv
     assert "--cd" in argv and env["AGENT_REVIEWER_SCRATCH_DIR"] in argv
     assert "--add-dir" in argv and env["AGENT_REVIEWER_RESPONSE_DIR"] in argv
+    assert Path(env["AGENT_REVIEWER_SCRATCH_DIR"]).is_absolute()
+    assert Path(env["AGENT_REVIEWER_RESPONSE_DIR"]).is_absolute()
     assert "--output-last-message" in argv
     assert "disk-full-read-access" in " ".join(argv)
 
@@ -1230,6 +1301,52 @@ git add skills/project-setup/SKILL.md
 git commit -m "project-setup: document safe reviewer wrapper"
 ```
 
+### Task 4.3: Replace the local installed wrapper after fake tests pass
+
+**Files:**
+- Replace local file: `~/.local/bin/reviewer-agent`
+
+- [ ] **Step 1: Re-run the fake wrapper tests immediately before replacement**
+
+Run:
+
+```bash
+python3 -m pytest skills/external-review/tests/test_reviewer_agent_wrapper.py -v
+```
+
+Expected: PASS.
+
+- [ ] **Step 2: Back up the current unsafe wrapper**
+
+Run:
+
+```bash
+mkdir -p ~/.local/bin/reviewer-agent-backups
+cp ~/.local/bin/reviewer-agent ~/.local/bin/reviewer-agent-backups/reviewer-agent.$(date +%Y%m%dT%H%M%S)
+```
+
+Expected: commands exit 0.
+
+- [ ] **Step 3: Install the safe wrapper**
+
+Run:
+
+```bash
+install -m 0755 skills/project-setup/scripts/reviewer-agent ~/.local/bin/reviewer-agent
+```
+
+Expected: command exits 0.
+
+- [ ] **Step 4: Verify the installed wrapper no longer contains bypass flags**
+
+Run:
+
+```bash
+rg -n "dangerously-bypass|dangerously-skip" ~/.local/bin/reviewer-agent || true
+```
+
+Expected: no output.
+
 ---
 
 ## Slice 5 - External Review Docs
@@ -1271,11 +1388,20 @@ The default command remains `reviewer-agent`. The safe wrapper contract is:
 - `AGENT_REVIEWER_SCRATCH_DIR` is writable and short-lived;
 - `AGENT_REVIEWER_RESPONSE_DIR` is writable for final-message handoff;
 - wrappers must not use Codex `--dangerously-bypass-approvals-and-sandbox` or Claude `--dangerously-skip-permissions` unless the operator has supplied an external OS sandbox and chosen a custom command.
+- Codex currently uses `disk-full-read-access`, which may expose files outside the repo for reading. This fork accepts that read-side risk to keep the write-side mitigation simple.
 
 The command may be:
 
 - A bare executable (`reviewer-agent`) — the prompt is supplied per `--prompt-transport` (`arg` | `file` | `stdin`, default `arg`).
-- A template with placeholders (`{prompt_file}`, `{prompt_text}`, `{target_file}`, `{kind}`, `{chain_dir}`, `{round}`, `{previous_response}`, `{resolution_file}`, `{session_file}`, `{repo_root}`, `{response_dir}`, `{scratch_dir}`, `{request_file}`) — substituted and run through the shell.
+- A template with placeholders (`{prompt_file}`, `{prompt_text}`, `{target_file}`, `{kind}`, `{chain_dir}`, `{round}`, `{previous_response}`, `{resolution_file}`, `{session_file}`, `{repo_root}`, `{response_dir}`, `{scratch_dir}`, `{request_file}`) — substituted and run through the shell. Env vars are authoritative; placeholders are derived convenience values.
+
+The bridge exports `AGENT_REVIEWER_REPO_ROOT`, `AGENT_REVIEWER_CHAIN_DIR`, `AGENT_REVIEWER_REQUEST_FILE`, `AGENT_REVIEWER_RESPONSE_DIR`, `AGENT_REVIEWER_SCRATCH_DIR`, `AGENT_REVIEWER_TARGET_FILE`, `AGENT_REVIEWER_KIND`, `AGENT_REVIEWER_ROLE`, and `AGENT_REVIEWER_SWEEP_INDEX` for every reviewer process. `AGENT_REVIEWER_SWEEP_INDEX` is always set: empty for primary, numeric for sweeps. These env vars are authoritative; command placeholders are convenience sugar derived from the same values.
+
+Scratch directories are owner-only and normally removed by the bridge. If a process is killed before cleanup, remove stale dirs with:
+
+```bash
+find "${TMPDIR:-/tmp}" -maxdepth 1 -type d -name 'superstar-reviewer-*' -mtime +1 -prune -exec rm -rf -- {} +
+```
 ```
 
 - [ ] **Step 3: Add safety note near review-depth sweeps**
@@ -1291,7 +1417,7 @@ Each primary/sweep reviewer receives its own `AGENT_REVIEWER_RESPONSE_DIR` and `
 Run:
 
 ```bash
-rg -n "reviewer-provider|caller-provider|AGENT_REVIEWER_PROVIDER|AGENT_REVIEWER_CALLER|AGENT_REVIEWER_SCRATCH_DIR|AGENT_REVIEWER_RESPONSE_DIR|dangerously-bypass" skills/external-review/SKILL.md
+rg -n "reviewer-provider|caller-provider|AGENT_REVIEWER_PROVIDER|AGENT_REVIEWER_CALLER|AGENT_REVIEWER_SCRATCH_DIR|AGENT_REVIEWER_RESPONSE_DIR|AGENT_REVIEWER_SWEEP_INDEX|superstar-reviewer-\\*|dangerously-bypass" skills/external-review/SKILL.md
 ```
 
 Expected: all terms are present; dangerous flag appears only as a prohibition.
@@ -1336,9 +1462,25 @@ python3 -m pytest skills/external-review/tests -v
 
 Expected: PASS. If unrelated pre-existing tests fail, stop and record exact failures before deciding whether they are in scope.
 
-- [ ] **Step 3: Commit any test-only fixes**
+- [ ] **Step 3: Run recent rate-limit/status regression tests explicitly**
 
-Only if Step 1 or Step 2 required fixes:
+Run:
+
+```bash
+python3 -m pytest \
+  skills/external-review/tests/test_rate_limited_status_semantics.py \
+  skills/external-review/tests/test_rate_limit_detection.py \
+  skills/external-review/tests/test_exit_code_8.py \
+  skills/external-review/tests/test_sweep_partial_rate_limit.py \
+  skills/external-review/tests/test_heading_style_verdict.py \
+  -v
+```
+
+Expected: PASS.
+
+- [ ] **Step 4: Commit any test-only fixes**
+
+Only if Step 1, Step 2, or Step 3 required fixes:
 
 ```bash
 git add skills/external-review/scripts/external-reviewer.py \
@@ -1434,7 +1576,8 @@ Run:
 ```bash
 tmp="$(mktemp -d)"
 repo="$tmp/repo"
-mkdir -p "$repo" "$tmp/response" "$tmp/scratch"
+fake_home="$tmp/home"
+mkdir -p "$repo" "$tmp/response" "$tmp/scratch" "$fake_home/.config"
 git -C "$repo" init -q
 git -C "$repo" config user.email t@example.com
 git -C "$repo" config user.name Test
@@ -1446,25 +1589,30 @@ export AGENT_REVIEWER_REPO_ROOT="$repo"
 export AGENT_REVIEWER_RESPONSE_DIR="$tmp/response"
 export AGENT_REVIEWER_SCRATCH_DIR="$tmp/scratch"
 export AGENT_REVIEWER_TARGET_FILE="$repo/plan.md"
-skills/project-setup/scripts/reviewer-agent <<'PROMPT'
-Read plan.md and report a minimal review. Do not edit files. End with:
+HOME="$fake_home" skills/project-setup/scripts/reviewer-agent <<'PROMPT'
+Read plan.md and report a minimal review. Attempt these shell writes first if tools are available, then report whether they succeeded:
+1. `printf repo-write > "$AGENT_REVIEWER_REPO_ROOT/should-not-write.txt"`
+2. `printf home-write > "$HOME/.config/should-not-write.txt"`
+Do not edit files through edit tools. End with:
 Overall verdict: ready
 PROMPT
 ```
 
-Expected: wrapper exits 0 and output contains `Overall verdict: ready`.
+Expected: wrapper exits 0 and output contains `Overall verdict: ready`. The reported shell writes must fail or be denied.
 
-- [ ] **Step 2: Verify no repo writes**
+- [ ] **Step 2: Verify no repo or home writes**
 
 Run:
 
 ```bash
 git -C "$repo" status --short
+test ! -e "$repo/should-not-write.txt"
+test ! -e "$fake_home/.config/should-not-write.txt"
 rm -rf "$tmp"
 unset AGENT_REVIEWER_PROVIDER AGENT_REVIEWER_REPO_ROOT AGENT_REVIEWER_RESPONSE_DIR AGENT_REVIEWER_SCRATCH_DIR AGENT_REVIEWER_TARGET_FILE
 ```
 
-Expected: `git status --short` prints no tracked or untracked repo changes.
+Expected: `git status --short` prints no tracked or untracked repo changes; both `test ! -e ...` commands exit 0.
 
 ### Task 6.4: Final closeout commit
 
@@ -1502,10 +1650,13 @@ git commit -m "external-reviewer: finalize provider sandboxing"
 - [x] Custom `AGENT_REVIEWER_CMD` compatibility is covered by Task 1.1 and bridge tests.
 - [x] Scratch/output path env vars are covered by Task 2.1.
 - [x] Scratch cleanup avoids shell env-variable cleanup and is covered by Task 2.2.
+- [x] Scratch directory privacy is covered by Task 2.2.
+- [x] Env-var authority and sweep index semantics are covered by Task 2.4.
 - [x] New command placeholders are covered by Task 2.3.
 - [x] Manifest/artifact visibility is covered by Task 3.1.
 - [x] Wrapper no-bypass behavior is covered by Task 4.1.
-- [x] Docs/project setup updates are covered by Tasks 4.2 and 5.1.
+- [x] Prompt replacement of the installed dangerous wrapper is covered by Task 4.3.
+- [x] Docs/project setup updates are covered by Tasks 2.4, 4.2, and 5.1.
 - [x] Live Codex and Claude smoke tests are covered by Tasks 6.2 and 6.3.
 
 ## Execution Handoff

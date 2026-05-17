@@ -70,9 +70,11 @@ AGENT_REVIEWER_ROLE=primary|sweep
 AGENT_REVIEWER_SWEEP_INDEX=
 ```
 
-The bridge creates `AGENT_REVIEWER_RESPONSE_DIR` and `AGENT_REVIEWER_SCRATCH_DIR` before spawning the reviewer. The response directory is private to one reviewer invocation, not the chain root, so a sandbox that grants directory-level write access does not expose existing request/response artifacts.
+`AGENT_REVIEWER_SWEEP_INDEX` is always set: empty string for the primary reviewer, `"1"`, `"2"`, etc. for sweep reviewers. The environment variables are authoritative. Command placeholders are shell-template sugar derived from the same values, so custom wrappers should prefer env vars when both are available.
 
-The bridge removes `AGENT_REVIEWER_SCRATCH_DIR` after the subprocess exits unless `--keep-reviewer-scratch` is set. Cleanup must use the Python `TemporaryDirectory`/`shutil.rmtree` path object retained by the parent process, never a shell-expanded environment variable.
+The bridge creates `AGENT_REVIEWER_RESPONSE_DIR` and `AGENT_REVIEWER_SCRATCH_DIR` before spawning the reviewer. The response directory is private to one reviewer invocation, not the chain root, so a sandbox that grants directory-level write access does not expose existing request/response artifacts. Scratch directories are created with `tempfile.mkdtemp()`, which yields owner-only `0700` permissions on Linux.
+
+The bridge removes `AGENT_REVIEWER_SCRATCH_DIR` after the subprocess exits unless `--keep-reviewer-scratch` is set. Cleanup must use the Python `TemporaryDirectory`/`shutil.rmtree` path object retained by the parent process, never a shell-expanded environment variable. If the parent process is killed before cleanup runs, stale `superstar-reviewer-*` scratch dirs may remain; because they are `0700`, this is operational clutter rather than a cross-user exposure. The docs should include a cleanup command such as `find "${TMPDIR:-/tmp}" -maxdepth 1 -type d -name 'superstar-reviewer-*' -mtime +1 -prune -exec rm -rf -- {} +`.
 
 ### 2. New Placeholders
 
@@ -152,6 +154,8 @@ Expected permission model:
 - Session persistence: disabled with `--ephemeral` so the CLI does not need to write reviewer sessions under `~/.codex`.
 
 If a future Codex CLI supports an exact read-only-root plus exact writable-path policy, the wrapper can use that stronger primitive without changing the bridge contract.
+
+Read-side exposure is an accepted residual risk for this fork. `disk-full-read-access` may let the reviewer read files outside the target repo, including secrets under `$HOME`, and then include them in its response. The incident being mitigated was destructive writes; this design deliberately prioritizes removing write authority without making the wrapper more complex. Users who need read confinement can supply a stricter custom wrapper through `AGENT_REVIEWER_CMD`.
 
 ### 5. Claude Reviewer Wrapper
 
@@ -248,6 +252,7 @@ Use fake `codex` and `claude` executables on `PATH` to assert argv without invok
 
 - Codex wrapper never passes `--dangerously-bypass-approvals-and-sandbox`.
 - Codex wrapper passes `--sandbox workspace-write`, `--ask-for-approval never`, `--ephemeral`, `--cd "$AGENT_REVIEWER_SCRATCH_DIR"`, and `--add-dir "$AGENT_REVIEWER_RESPONSE_DIR"`.
+- Codex wrapper passes absolute `--add-dir` and `--cd` paths exactly as supplied, so implementation verifies that the response dir does not need to be a child of the scratch workspace.
 - Claude wrapper passes `--print` and a read-only/plan permission mode.
 - Both wrappers fail fast when required env vars are missing.
 
@@ -266,7 +271,7 @@ Run against a temporary git repo with a fake home/config path:
    - scratch and response writes succeed;
    - bridge receives and persists the final reviewer text.
 
-Run the equivalent Claude smoke test with the installed Claude CLI's actual permission controls.
+Run the equivalent Claude smoke test with the installed Claude CLI's actual permission controls. The Claude smoke test must attempt writes to the reviewed repo and `$HOME/.config`; both must fail or require denied permission.
 
 ## Rollout
 
@@ -275,9 +280,9 @@ Run the equivalent Claude smoke test with the installed Claude CLI's actual perm
 3. Add/update `reviewer-agent` wrapper template in project setup.
 4. Update external-review docs.
 5. Run fake-wrapper tests.
-6. Run one live Codex safety smoke test.
-7. Run one live Claude safety smoke test.
-8. Replace Simon's installed `~/.local/bin/reviewer-agent` only after the fake tests pass.
+6. Replace Simon's installed `~/.local/bin/reviewer-agent` after fake wrapper tests and focused bridge tests pass, because the current installed wrapper is actively dangerous.
+7. Run one live Codex safety smoke test through the replaced wrapper.
+8. Run one live Claude safety smoke test through the replaced wrapper.
 
 ## Acceptance Criteria
 
@@ -286,6 +291,8 @@ Run the equivalent Claude smoke test with the installed Claude CLI's actual perm
 - Explicit `AGENT_REVIEWER_CMD` still works for custom reviewers.
 - Reviewer subprocesses receive repo, scratch, request, target, role, and response path context via environment.
 - Codex reviewer cannot write to the reviewed repository or `$HOME/.config` in the live safety smoke test.
+- Claude reviewer cannot write to the reviewed repository or `$HOME/.config` in the live safety smoke test.
+- Existing rate-limit handling tests and status semantics continue to pass.
 - Existing external-review unit tests continue to pass.
 - New provider/sandbox tests pass.
 
