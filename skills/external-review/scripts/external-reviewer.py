@@ -320,6 +320,64 @@ def get_active_limit(reviewer_cmd_basename: str) -> dict | None:
     return entry
 
 
+@dataclass
+class ProviderResolution:
+    provider: str
+    caller_provider: str
+    command: str
+
+
+class ProviderResolutionError(Exception):
+    pass
+
+
+def detect_caller_provider(env: dict | None = None) -> str:
+    env = env if env is not None else os.environ
+    explicit = env.get("AGENT_REVIEWER_CALLER")
+    if explicit in {"claude", "codex", "unknown"}:
+        return explicit
+    if env.get("CLAUDECODE") or env.get("CLAUDE_CODE"):
+        return "claude"
+    if env.get("CODEX_HOME") or env.get("OPENAI_CODEX"):
+        return "codex"
+    return "unknown"
+
+
+def resolve_reviewer_provider(
+    *,
+    reviewer_provider: str,
+    caller_provider: str,
+    reviewer_cmd: str | None,
+    env: dict | None = None,
+) -> ProviderResolution:
+    env = env if env is not None else os.environ
+    provider = reviewer_provider or env.get("AGENT_REVIEWER_PROVIDER", "auto")
+    caller = caller_provider or detect_caller_provider(env)
+    if caller == "auto":
+        caller = detect_caller_provider(env)
+
+    explicit_cmd = reviewer_cmd or env.get("AGENT_REVIEWER_CMD")
+    if explicit_cmd:
+        return ProviderResolution(provider="custom", caller_provider=caller, command=explicit_cmd)
+
+    if provider == "auto":
+        if caller == "claude":
+            provider = "codex"
+        elif caller == "codex":
+            provider = "claude"
+        else:
+            raise ProviderResolutionError(
+                "Cannot auto-select reviewer: caller provider is unknown. "
+                "Set AGENT_REVIEWER_PROVIDER or AGENT_REVIEWER_CMD."
+            )
+
+    if provider not in {"codex", "claude", "custom"}:
+        raise ProviderResolutionError(f"Unknown reviewer provider: {provider}")
+    if provider == "custom":
+        raise ProviderResolutionError("provider=custom requires AGENT_REVIEWER_CMD or --reviewer-cmd")
+    return ProviderResolution(provider=provider, caller_provider=caller, command="reviewer-agent")
+
+
 def reviewer_cmd_basename() -> str:
     """Return the state-key for the configured reviewer command. Honours
     AGENT_REVIEWER_STATE_KEY override; else uses the first whitespace token of
@@ -1383,7 +1441,7 @@ def plan_sweeps(
     return SweepPlan(sweep_count=0, checkpoint=None)
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Send a document to the configured reviewer.")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -1407,8 +1465,20 @@ def parse_args() -> argparse.Namespace:
     )
     sp_review.add_argument(
         "--reviewer-cmd",
-        default=os.environ.get("AGENT_REVIEWER_CMD", "reviewer-agent"),
-        help="Command or template. Supports {prompt_file}, {prompt_text}, {target_file}, {kind}, {chain_dir}, {round}, {previous_response}, {resolution_file}, {session_file}.",
+        default=os.environ.get("AGENT_REVIEWER_CMD"),
+        help="Custom command or template. When set, provider auto-selection is bypassed. Supports {prompt_file}, {prompt_text}, {target_file}, {kind}, {chain_dir}, {round}, {previous_response}, {resolution_file}, {session_file}, {repo_root}, {response_dir}, {scratch_dir}, {request_file}.",
+    )
+    sp_review.add_argument(
+        "--reviewer-provider",
+        choices=["auto", "codex", "claude", "custom"],
+        default=os.environ.get("AGENT_REVIEWER_PROVIDER", "auto"),
+        help="Reviewer provider to use. Default auto flips based on caller provider.",
+    )
+    sp_review.add_argument(
+        "--caller-provider",
+        choices=["auto", "claude", "codex", "unknown"],
+        default=os.environ.get("AGENT_REVIEWER_CALLER", "auto"),
+        help="Coordinator provider. Default auto detects known harness env vars.",
     )
     sp_review.add_argument(
         "--prompt-transport",
@@ -1510,7 +1580,7 @@ def parse_args() -> argparse.Namespace:
     sp_clear.add_argument("--reviewer-cmd", default=None)
     sp_clear.add_argument("--state-file", default=None)
 
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
 def _git_identity() -> str:
