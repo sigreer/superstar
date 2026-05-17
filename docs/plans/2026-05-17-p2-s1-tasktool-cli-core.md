@@ -3030,6 +3030,38 @@ class ReviewGateE2ETests(unittest.TestCase):
             self.assertEqual(r.returncode, 0, r.stderr)
         finally:
             t.cleanup()
+
+    def test_short_id_unambiguous_in_project_but_chains_collide(self):
+        """The exact F8 regression: the project has only one slice named S1 (so the
+        short ID is unambiguous *in the data*), but a stale historical chain folder
+        `p1-s1-post-slice` exists on disk alongside the current `p2-s1-post-slice`.
+        Pre-fix, `close S1` tokenised to the short 's1' and matched both chain folders.
+        Post-fix, the resolved qualified id `P2.S1` tokenises to 'p2-s1' which matches
+        only the correct chain."""
+        t = _CliTmp()
+        try:
+            run_cli("init", "--project", "demo", cwd=t.root)
+            # Project currently knows only about P2 / P2.S1.
+            run_cli("create", "phase", "--title", "p1-historical", cwd=t.root)
+            # Mark P1 done immediately so the project effectively has one active slice.
+            # (We don't create a P1 slice — only P1 the phase, so S1 in the project is unambiguous.)
+            run_cli("create", "phase", "--title", "p2-current", cwd=t.root)
+            run_cli("create", "slice", "P2", "--title", "current s", cwd=t.root)
+            # Both chains exist on disk.
+            for name in ("p1-s1-post-slice", "p2-s1-post-slice"):
+                chain = t.root / "docs/reviewer" / name
+                chain.mkdir(parents=True)
+                (chain / "chain.json").write_text(
+                    '{"rounds":[{"round":1,"merged_verdict":"ready","status":"ok"}]}',
+                    encoding="utf-8",
+                )
+            # `close S1` resolves to P2.S1 (the only S1 in the data), then the gate
+            # searches with token 'p2-s1' and finds exactly one chain. Pre-fix this
+            # would have searched with 's1' and matched both → spurious ambiguity.
+            r = run_cli("close", "S1", cwd=t.root)
+            self.assertEqual(r.returncode, 0, r.stderr)
+        finally:
+            t.cleanup()
 ```
 
 - [ ] **Step 2: Run full test suite**

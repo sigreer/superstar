@@ -1,0 +1,35 @@
+1. Findings
+
+F1. RESOLVED — Test commands consistently include `PYTHONPATH=tools`.
+
+F2. RESOLVED — `init --project` remains optional and the CLI acceptance flow covers init/create/show.
+
+F3. RESOLVED — `_resolve_id()` and short-ID behavior are covered for note/create paths and ambiguity rejection.
+
+F4. RESOLVED — Date validation now enforces strict `YYYY-MM-DD` shape before `date.fromisoformat()`, and tests reject `20260228` / `2026-W09-6`: [plan:824](/home/simon/Dev/sigreer/skills/superstar/docs/plans/2026-05-17-p2-s1-tasktool-cli-core.md:824), [plan:902](/home/simon/Dev/sigreer/skills/superstar/docs/plans/2026-05-17-p2-s1-tasktool-cli-core.md:902), [plan:911](/home/simon/Dev/sigreer/skills/superstar/docs/plans/2026-05-17-p2-s1-tasktool-cli-core.md:911).
+
+F5. RESOLVED — Global flags and `--no-stage` handling remain covered.
+
+F6. RESOLVED — Task 13 and final full-suite commands use explicit discovery with `PYTHONPATH=tools`.
+
+F7. RESOLVED — Task ordering still defines `_resolve_id()` before later short-ID-dependent command replacements.
+
+F8. Severity: minor — The code fix resolves the short-ID review-gate bug, but the added regression test does not actually exercise the original failing scenario. `_find_item()` now returns the qualified ID and `cmd_set()` / `cmd_close()` pass `qid` to `_apply_review_gate()`, which addresses the defect: [plan:1856](/home/simon/Dev/sigreer/skills/superstar/docs/plans/2026-05-17-p2-s1-tasktool-cli-core.md:1856), [plan:1916](/home/simon/Dev/sigreer/skills/superstar/docs/plans/2026-05-17-p2-s1-tasktool-cli-core.md:1916), [plan:1935](/home/simon/Dev/sigreer/skills/superstar/docs/plans/2026-05-17-p2-s1-tasktool-cli-core.md:1935). However, `test_short_id_close_resolves_to_qualified_for_gate()` creates both `P1.S1` and `P2.S1`, so `close S1` correctly fails as ambiguous before the review gate, while `close P2.S1` uses a fully qualified ID and would not have reproduced the old short-ID aliasing bug: [plan:3003](/home/simon/Dev/sigreer/skills/superstar/docs/plans/2026-05-17-p2-s1-tasktool-cli-core.md:3003). Add a case with only current `P2.S1` in `tasklist.json`, plus historical `docs/reviewer/p1-s1-post-slice` and valid `p2-s1-post-slice`, then run `close S1`.
+
+2. Open questions / assumptions
+
+- I’m treating the F8 implementation as resolved because the planned command code now consistently propagates the qualified ID into reviewer-gate discovery.
+- I’m treating the remaining F8 issue as an acceptance-gate gap, not a design blocker.
+
+3. Suggested document edits
+
+- Replace or supplement the F8 regression test so `S1` is unambiguous in the project but collides with historical reviewer-chain names outside the project’s current ID graph.
+- Keep the existing ambiguous `S1` assertion if desired, but don’t label it as the F8 regression coverage.
+
+4. Verification gaps / commands
+
+- `PYTHONPATH=tools python3 -m unittest tools.tasktool.tests.test_validate -v`
+- `PYTHONPATH=tools python3 -m unittest tools.tasktool.tests.test_commands -v`
+- `PYTHONPATH=tools python3 -m unittest discover -s tools/tasktool/tests -v`
+
+5. Overall verdict: ready with small edits
