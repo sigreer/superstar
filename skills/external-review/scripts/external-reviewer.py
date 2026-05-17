@@ -2341,6 +2341,9 @@ def main() -> int:
                 "verdict_valid": r.verdict_valid,
                 "returncode": r.returncode,
                 "status": _rv_status(r),
+                "provider": _rv_attr(r, "provider", "custom"),
+                "caller_provider": _rv_attr(r, "caller_provider", "unknown"),
+                "sandbox": _rv_attr(r, "sandbox", None),
             }
             for r in reviewer_results
         ],
