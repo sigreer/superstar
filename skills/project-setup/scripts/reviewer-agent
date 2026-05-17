@@ -27,8 +27,8 @@ case "$provider" in
     output_file="$AGENT_REVIEWER_RESPONSE_DIR/last-message.md"
     codex exec \
       --sandbox workspace-write \
-      --ask-for-approval never \
       --ephemeral \
+      --skip-git-repo-check \
       --cd "$AGENT_REVIEWER_SCRATCH_DIR" \
       --add-dir "$AGENT_REVIEWER_RESPONSE_DIR" \
       -c 'sandbox_permissions=["disk-full-read-access"]' \

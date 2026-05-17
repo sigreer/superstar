@@ -55,7 +55,6 @@ def test_codex_wrapper_uses_sandbox_and_never_bypass(tmp_path):
     assert argv[:1] == ["exec"]
     assert "--dangerously-bypass-approvals-and-sandbox" not in argv
     assert "--sandbox" in argv and "workspace-write" in argv
-    assert "--ask-for-approval" in argv and "never" in argv
     assert "--ephemeral" in argv
     assert "--cd" in argv and env["AGENT_REVIEWER_SCRATCH_DIR"] in argv
     assert "--add-dir" in argv and env["AGENT_REVIEWER_RESPONSE_DIR"] in argv
