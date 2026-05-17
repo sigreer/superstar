@@ -258,9 +258,13 @@ tasktool render [--format markdown]
 tasktool next-id (--kind phase | --kind slice --phase <id> | --kind task --slice <id> | --kind cross)
     Print what ID the next create would allocate. Used by external tools (e.g., reviewer chain folder creation that needs an ID before the artifact exists).
 
-tasktool validate
-    Runs all validation rules. Exit 0 on clean, 1 on errors, prints findings as text or JSON
-    (--format json).
+tasktool validate [--format text|json] [--strict-format] [--normalise]
+    Runs all validation rules. Exit 0 on clean, 1 on errors. Findings as text or JSON.
+    --strict-format additionally checks that the file is byte-for-byte identical to the
+    canonical serialisation (§8.1) — used by the pre-commit hook.
+    --normalise rewrites the file into canonical format after successful validation —
+    used by the TASKTOOL_RAW=1 editor workflow (§8.3) to make a hand-edited file
+    hook-acceptable.
 ```
 
 ### 7.5 Global flags
