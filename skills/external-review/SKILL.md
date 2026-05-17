@@ -32,10 +32,37 @@ Four checkpoints, mapped to `--kind`:
 
 ## Configuration
 
-The reviewer command is read from `AGENT_REVIEWER_CMD` (env) or `--reviewer-cmd` (flag). Default is `reviewer-agent`. The command may be:
+By default the bridge chooses the opposite reviewer provider from the caller:
+
+| Caller | Default reviewer |
+|---|---|
+| Claude | Codex |
+| Codex | Claude |
+
+Provider selection is controlled by `--reviewer-provider auto|codex|claude|custom` or `AGENT_REVIEWER_PROVIDER`. Caller detection is controlled by `--caller-provider auto|claude|codex|unknown` or `AGENT_REVIEWER_CALLER`. If both are `auto` and the caller cannot be detected, the bridge fails closed and asks for an explicit provider or command.
+
+The reviewer command is still overrideable via `AGENT_REVIEWER_CMD` or `--reviewer-cmd`. Any explicit reviewer command is treated as `custom` and bypasses provider auto-selection. Custom wrappers are responsible for their own sandboxing.
+
+The default command remains `reviewer-agent`. The safe wrapper contract is:
+
+- reviewed repo is readable but not writable;
+- `AGENT_REVIEWER_SCRATCH_DIR` is writable and short-lived;
+- `AGENT_REVIEWER_RESPONSE_DIR` is writable for final-message handoff;
+- wrappers must not use Codex `--dangerously-bypass-approvals-and-sandbox` or Claude `--dangerously-skip-permissions` unless the operator has supplied an external OS sandbox and chosen a custom command.
+- Codex currently uses `disk-full-read-access`, which may expose files outside the repo for reading. This fork accepts that read-side risk to keep the write-side mitigation simple.
+
+The command may be:
 
 - A bare executable (`reviewer-agent`) — the prompt is supplied per `--prompt-transport` (`arg` | `file` | `stdin`, default `arg`).
-- A template with placeholders (`{prompt_file}`, `{prompt_text}`, `{target_file}`, `{kind}`) — substituted and run through the shell.
+- A template with placeholders (`{prompt_file}`, `{prompt_text}`, `{target_file}`, `{kind}`, `{chain_dir}`, `{round}`, `{previous_response}`, `{resolution_file}`, `{session_file}`, `{repo_root}`, `{response_dir}`, `{scratch_dir}`, `{request_file}`) — substituted and run through the shell. Env vars are authoritative; placeholders are derived convenience values.
+
+The bridge exports `AGENT_REVIEWER_REPO_ROOT`, `AGENT_REVIEWER_CHAIN_DIR`, `AGENT_REVIEWER_REQUEST_FILE`, `AGENT_REVIEWER_RESPONSE_DIR`, `AGENT_REVIEWER_SCRATCH_DIR`, `AGENT_REVIEWER_TARGET_FILE`, `AGENT_REVIEWER_KIND`, `AGENT_REVIEWER_ROLE`, and `AGENT_REVIEWER_SWEEP_INDEX` for every reviewer process. `AGENT_REVIEWER_SWEEP_INDEX` is always set: empty for primary, numeric for sweeps. These env vars are authoritative; command placeholders are convenience sugar derived from the same values.
+
+Scratch directories are owner-only and normally removed by the bridge. If a process is killed before cleanup, remove stale dirs with:
+
+```bash
+find "${TMPDIR:-/tmp}" -maxdepth 1 -type d -name 'superstar-reviewer-*' -mtime +1 -prune -exec rm -rf -- {} +
+```
 
 If `reviewer-agent` is missing, `[[project-setup]]` will offer to install/configure it. If the command emits no `Overall verdict`, treat the round as `revise` and ask the reviewer to honour the response contract on the next round.
 
@@ -176,6 +203,8 @@ Verdict values: `ready`, `ready with small edits`, `revise` (or `null` if unpars
 Sweep reviewers do not see the primary reviewer's findings on their first pass (anti-anchoring). Findings are merged into `r{N}-merged-findings.md`, and `merged_verdict` is computed over reviewers whose `status` is `"ok"` (failed sweeps are excluded — see the truth table above): `revise` if any ok reviewer is `revise` or has `verdict_valid: false`; `ready with small edits` if any ok reviewer is `ready with small edits` and the rest are `ready`; `ready` only if every ok reviewer is `ready`. If the primary reviewer fails, the round is recorded as a process failure (`merged_verdict: null`) regardless of sweeps.
 
 Checkpoint state (`first-round`, `final-ready`) is persisted in `chain.json` so sweeps fire once per chain.
+
+Each primary/sweep reviewer receives its own `AGENT_REVIEWER_RESPONSE_DIR` and `AGENT_REVIEWER_SCRATCH_DIR`, so parallel reviewer roles cannot overwrite one another's scratch/output files.
 
 ## Resolution artifact
 
