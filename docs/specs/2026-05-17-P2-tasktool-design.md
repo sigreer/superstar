@@ -88,6 +88,7 @@ A Python stdlib CLI (`tasktool`) reads and writes a per-project `docs/tasklist.j
   "closed": null,
   "spec_path": "docs/specs/2026-05-17-P2-tasktool-design.md",
   "plan_path": null,
+  "phase_reviewer_chain": null,
   "notes": "",
   "slices": [ /* Slice[] */ ]
 }
@@ -150,7 +151,9 @@ Inline follow-ons that used to be unstructured bullets become first-class tasks 
 
 `done | in_progress | blocked | ready`
 
-Stored as a plain string. Emoji is a render concern. `blocked` requires a non-null `blocked_on` (validator enforces this). `done` requires a non-null `closed` date (validator enforces).
+Stored as a plain string. Emoji is a render concern. `done` requires a non-null `closed` date (validator enforces).
+
+**Blocking is slice-scoped.** Only slices carry `blocked_on` and may take status `blocked`. Phases, tasks, and cross-cutting items use `ready | in_progress | done` only. Rationale: at the granularity of phases and tasks, "blocked" conflates with "waiting" and "deferred" without adding signal; at the slice boundary it has a clear meaning (a unit of work that cannot proceed until another finishes). The validator rejects `blocked` status on phases/tasks/cross-cutting and rejects a non-null `blocked_on` on the same. The `tasktool block` / `unblock` commands accept only slice IDs and error otherwise.
 
 ### 6.7 Dates
 
@@ -210,12 +213,15 @@ tasktool set <id> --status (ready|in_progress|blocked|done)
     Validates transition (e.g., done requires closed date — auto-stamped if not given).
 
 tasktool close <id> [--refs PATH[,PATH...]] [--closed-date YYYY-MM-DD] [--note TEXT]
+                    [--reviewer-chain PATH] [--skip-review-gate]
     Convenience: sets status=done, stamps closed (today by default), appends refs and note.
+    Enforces the review gate (§8.2) for slice and phase IDs; see that section for behaviour and overrides.
 
-tasktool block <id> --on (<id>|external:TEXT)
+tasktool block <slice-id> --on (<slice-id>|external:TEXT)
+    Slices only. Errors on phase, task, or cross-cutting IDs.
 
-tasktool unblock <id>
-    Clears blocked_on, sets status back to ready (or in_progress if --resume).
+tasktool unblock <slice-id>
+    Clears blocked_on, sets status back to ready (or in_progress if --resume). Slices only.
 
 tasktool note <id> --append TEXT | --replace TEXT
 
@@ -223,9 +229,11 @@ tasktool ref <id> (--add PATH | --remove PATH)
 
 tasktool title <id> --set TEXT
 
-tasktool archive-phase <phase-id>
-    Refuses unless every slice in the phase is done. Moves the phase to archived_phases[]
-    and writes a one-line summary to docs/archived-tasks/P{n}-<slug>.md.
+tasktool archive-phase <phase-id> [--reviewer-chain PATH] [--skip-review-gate]
+    Refuses unless every slice in the phase is done AND the phase's post-phase review gate
+    is satisfied (§8.2). Moves the phase to archived_phases[] and writes a markdown summary
+    (with the full phase JSON in a fenced code block, to enable a future tasktool unarchive)
+    to docs/archived-tasks/P{n}-<slug>.md.
 ```
 
 ### 7.4 Read
@@ -265,12 +273,37 @@ Installed per-project; template lives at `tools/tasktool/templates/pre-commit-ta
 
 Behaviour:
 
-1. If `docs/tasklist.json` is staged, check that the change was produced by the CLI:
-   - Mechanism: the CLI writes the file with a trailing newline plus a hash sentinel computed over the JSON body. The hook re-computes and rejects if mismatched.
-   - Escape hatch: `TASKTOOL_RAW=1` env var bypasses the sentinel check. Documented as break-glass for emergency edits.
-2. Always run `tasktool validate --format json`. Non-zero exit blocks the commit; output is printed verbatim.
+1. If `docs/tasklist.json` is staged, check that the file matches the CLI's canonical serialisation of its own content:
+   - Mechanism: `tasktool validate --strict-format`. This loads the JSON, re-serialises it with the CLI's canonical formatter (UTF-8, `json.dumps(..., indent=2, sort_keys=True, ensure_ascii=False)` plus a single trailing newline), and compares byte-for-byte against the file on disk. Mismatch → exit non-zero. The file remains pure JSON at all times — no embedded sentinels — preserving the direct-consumer contract in §5.3.
+   - The CLI's write path uses the same canonical formatter, so any file produced by `tasktool` passes the check trivially.
+   - Escape hatch: `TASKTOOL_RAW=1 $EDITOR docs/tasklist.json && tasktool validate --normalise` rewrites the edited file through the canonical formatter, after which the hook accepts it. The escape hatch is the user explicitly choosing to normalise; there is no bypass that lets non-canonical bytes through.
+2. Always run `tasktool validate --format json` (full validation, not just format). Non-zero exit blocks the commit; output is printed verbatim.
 
-### 8.2 No raw-edit subcommand
+### 8.2 Review-gate enforcement (close & archive-phase)
+
+`tasktool` enforces the post-slice and post-phase external-review gates, not just data integrity. This is a deliberate scope expansion past "data validator" — without it, the skill-prose gate is bypassable simply by calling `tasktool close` without running `external-review` first, and the conformity win is incomplete.
+
+**Slice close (`tasktool close <slice-id>`):**
+
+1. Resolve the post-slice reviewer chain folder:
+   - If `--reviewer-chain PATH` is given, use it.
+   - Otherwise, auto-discover: `docs/reviewer/<slice-id-dotless>-post-slice/` or any folder under `docs/reviewer/` whose name matches the slice ID and ends in `-post-slice`. Multiple matches → error; zero matches → error (unless `--skip-review-gate`).
+2. Read `chain.json` from the chain folder. Refuse unless the latest round's `merged_verdict` (falling back to primary `verdict` if no merge) is `ready` or `ready with small edits`.
+3. On success, persist the chain folder path into the slice's `reviewer_chain` field.
+4. `--skip-review-gate` bypasses steps 1–3 with a stderr warning ("review gate skipped for <id>"). Recorded in the slice's `notes` field with a timestamp so the bypass is auditable.
+
+**Phase archive (`tasktool archive-phase <phase-id>`):**
+
+1. Refuse unless every slice in the phase has `status: done`.
+2. Resolve the post-phase reviewer chain folder (same discovery rules with suffix `-post-phase`; field on Phase is `phase_reviewer_chain`).
+3. Refuse unless the latest round's verdict is `ready` or `ready with small edits`.
+4. `--skip-review-gate` behaves as above; the bypass is recorded in the archive's notes.
+
+**The data model adds a `phase_reviewer_chain` field on Phase** (mirrors `reviewer_chain` on Slice). Update §6.2 accordingly when implementing.
+
+The CLI is now the single chokepoint for both data shape and workflow gating. The `tasklist-discipline` skill no longer needs to remind agents "run external-review before close" — `tasktool close` will refuse without it.
+
+### 8.3 No raw-edit subcommand
 
 The CLI intentionally exposes no `tasktool edit --raw` or similar. The friction-ful escape hatch is `TASKTOOL_RAW=1 $EDITOR docs/tasklist.json && tasktool validate`. This is by design: removing a low-friction path keeps agents on the sanctioned commands.
 
@@ -317,10 +350,8 @@ For other projects: same sequence after the global shim is installed.
 
 ## 12. Risks & open questions
 
-- **Risk: hash-sentinel approach to hook enforcement is fragile.** If git normalises line endings, or a different tool re-writes the file, the sentinel breaks. Mitigation: compute the sentinel over the parsed JSON content (whitespace-insensitive), not the byte stream. Alternative considered: hook re-runs the CLI's `validate --strict-format` which checks that the file matches what `tasktool` would write given its content (a normalisation check). The alternative may be simpler; revisit during S1.
 - **Risk: AGS sidebar Python import path.** Depends on how the installer makes `tasktool` importable. Likely a symlink into a user site-packages dir, or a PYTHONPATH addition in the AGS launcher. To be confirmed during S1 against the actual AGS environment.
 - **Risk: agents bypass the CLI by editing JSON directly anyway.** The hook catches commits but not in-session edits. Mitigation: the skill rewrite is explicit; the validator output names what changed. Worst case, add a file-watcher or `tasktool diff` to spot un-CLI-attributed changes.
-- **Open question: archive format.** Should archived phases live in `docs/archived-tasks/P{n}-<slug>.json` (machine-readable) or `.md` (human-readable)? Current convention is `.md`. Proposal: keep `.md` for the archive (write a generated markdown view), but also retain the full phase JSON inside the archive file as a fenced code block, so a future `tasktool unarchive` is possible. Decide during plan.
 - **Open question: AGS read API.** Is `import tasktool; tasktool.brief(...)` the right surface, or should AGS shell out to `tasktool brief --format json`? Probably both work; settle during S1.
 
 ## 13. Acceptance

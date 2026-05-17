@@ -1,0 +1,100 @@
+{
+  "schema_version": 1,
+  "chain": "p2-tasktool-design-spec",
+  "kind": "spec",
+  "target": "docs/specs/2026-05-17-P2-tasktool-design.md",
+  "work_id": null,
+  "legacy_migrated": false,
+  "rounds": [
+    {
+      "round": 1,
+      "reviewers": [
+        {
+          "role": "primary",
+          "sweep_group": null,
+          "parent_round": 1,
+          "request": "r1-2026-05-17T1952-request.md",
+          "response": "r1-2026-05-17T1952-response.md",
+          "verdict": null,
+          "verdict_valid": false,
+          "returncode": 1,
+          "status": "failed",
+          "provider": "codex",
+          "caller_provider": "claude",
+          "sandbox": {
+            "repo_root": "/home/simon/Dev/sigreer/skills/superstar",
+            "scratch_dir": "/tmp/superstar-reviewer-p2-tasktool-design-spec-r1-primary-jocgtlm_",
+            "response_dir": "docs/reviewer/p2-tasktool-design-spec/.reviewer-output/r1-primary",
+            "mode": "workspace-write-with-read-access"
+          }
+        }
+      ],
+      "status": "failed",
+      "returncode": 1,
+      "merged_verdict": null,
+      "merged_findings": null,
+      "request": "r1-2026-05-17T1952-request.md",
+      "response": "r1-2026-05-17T1952-response.md",
+      "resolution": null,
+      "resolution_parse_status": null,
+      "resolution_waiver": false,
+      "head_sha_at_request": "b0bc398d9ab46830ad20f35e1a4186496c11fefa",
+      "head_sha_after_round": "b0bc398d9ab46830ad20f35e1a4186496c11fefa",
+      "worktree_dirty_at_request": true,
+      "verdict": null,
+      "verdict_valid": false,
+      "findings_count": 0,
+      "blocking_findings_count": 0,
+      "base_ref": null,
+      "base_ref_source": null,
+      "diff_included": false
+    },
+    {
+      "round": 2,
+      "reviewers": [
+        {
+          "role": "primary",
+          "sweep_group": null,
+          "parent_round": 2,
+          "request": "r2-2026-05-17T1952-request.md",
+          "response": "r2-2026-05-17T1952-response.md",
+          "verdict": null,
+          "verdict_valid": false,
+          "returncode": 0,
+          "status": "ok",
+          "provider": "codex",
+          "caller_provider": "claude",
+          "sandbox": {
+            "repo_root": "/home/simon/Dev/sigreer/skills/superstar",
+            "scratch_dir": "/tmp/superstar-reviewer-p2-tasktool-design-spec-r2-primary-v2uwofy8",
+            "response_dir": "docs/reviewer/p2-tasktool-design-spec/.reviewer-output/r2-primary",
+            "mode": "workspace-write-with-read-access"
+          }
+        }
+      ],
+      "status": "ok",
+      "returncode": 0,
+      "merged_verdict": null,
+      "merged_findings": null,
+      "request": "r2-2026-05-17T1952-request.md",
+      "response": "r2-2026-05-17T1952-response.md",
+      "resolution": null,
+      "resolution_parse_status": null,
+      "resolution_waiver": false,
+      "head_sha_at_request": "b0bc398d9ab46830ad20f35e1a4186496c11fefa",
+      "head_sha_after_round": "b0bc398d9ab46830ad20f35e1a4186496c11fefa",
+      "worktree_dirty_at_request": true,
+      "verdict": null,
+      "verdict_valid": false,
+      "findings_count": 3,
+      "blocking_findings_count": 1,
+      "base_ref": "b0bc398d9ab46830ad20f35e1a4186496c11fefa",
+      "base_ref_source": "auto",
+      "diff_included": true
+    }
+  ],
+  "sweep_checkpoints": {
+    "first-round": "pending",
+    "final-ready": "pending"
+  }
+}
