@@ -28,8 +28,10 @@ import json
 import os
 import re
 import shlex
+import shutil
 import subprocess
 import sys
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -889,6 +891,10 @@ def expand_command_template(
     previous_response: Path | None,
     resolution_file: Path | None,
     session_file: Path,
+    repo_root: Path | None = None,
+    response_dir: Path | None = None,
+    scratch_dir: Path | None = None,
+    request_file: Path | None = None,
 ) -> str:
     values = {
         "prompt_file": shlex.quote(str(prompt_file)),
@@ -900,6 +906,10 @@ def expand_command_template(
         "previous_response": shlex.quote(str(previous_response)) if previous_response else "",
         "resolution_file": shlex.quote(str(resolution_file)) if resolution_file else "",
         "session_file": shlex.quote(str(session_file)),
+        "repo_root": shlex.quote(str(repo_root)) if repo_root else "",
+        "response_dir": shlex.quote(str(response_dir)) if response_dir else "",
+        "scratch_dir": shlex.quote(str(scratch_dir)) if scratch_dir else "",
+        "request_file": shlex.quote(str(request_file)) if request_file else "",
     }
     return template.format(**values)
 
@@ -918,7 +928,15 @@ def run_reviewer(
     previous_response: Path | None,
     resolution_file: Path | None,
     session_file: Path,
+    repo_root: Path | None = None,
+    response_dir: Path | None = None,
+    scratch_dir: Path | None = None,
+    request_file: Path | None = None,
+    extra_env: dict | None = None,
 ) -> subprocess.CompletedProcess[str]:
+    run_env = os.environ.copy()
+    if extra_env:
+        run_env.update(extra_env)
     if "{" in command_template and "}" in command_template:
         command = expand_command_template(
             command_template,
@@ -931,6 +949,10 @@ def run_reviewer(
             previous_response=previous_response,
             resolution_file=resolution_file,
             session_file=session_file,
+            repo_root=repo_root,
+            response_dir=response_dir,
+            scratch_dir=scratch_dir,
+            request_file=request_file,
         )
         return subprocess.run(
             command,
@@ -938,6 +960,7 @@ def run_reviewer(
             text=True,
             capture_output=True,
             timeout=timeout,
+            env=run_env,
         )
 
     argv = shlex.split(command_template)
@@ -957,6 +980,7 @@ def run_reviewer(
         text=True,
         capture_output=True,
         timeout=timeout,
+        env=run_env,
     )
 
 
@@ -970,6 +994,8 @@ def write_review_artifact(
     response_file: Path,
     round_num: int,
     result: subprocess.CompletedProcess[str],
+    provider: str = "custom",
+    sandbox_summary: str = "custom command; bridge-provided scratch/output context",
 ) -> Path:
     # Sentinel-strip both streams in full BEFORE any size cap or tail operation.
     stdout = strip_prompt_echo(result.stdout or "").strip()
@@ -983,6 +1009,8 @@ def write_review_artifact(
         f"- Target: `{rel_or_abs(target, root)}`",
         f"- Request: `{rel_or_abs(prompt_file, root)}`",
         f"- Reviewer command: `{command_template}`",
+        f"- Reviewer provider: `{provider}`",
+        f"- Sandbox: {sandbox_summary}",
         f"- Status: `{status}`",
         "",
         "---",
@@ -1102,6 +1130,39 @@ class ReviewerResult:
     verdict_valid: bool
     returncode: int
     status: str | None = None   # "ok" | "failed" | "rate-limited"; None → derive from returncode
+    provider: str = "custom"
+    caller_provider: str = "unknown"
+    sandbox: dict | None = None
+
+
+@dataclass
+class ReviewerInvocationContext:
+    repo_root: Path
+    chain_dir: Path
+    request_file: Path
+    response_dir: Path
+    scratch_dir: Path
+    target_file: Path
+    kind: str
+    role: str
+    sweep_index: int | None
+    provider: str
+    caller_provider: str
+
+    def env(self) -> dict:
+        return {
+            "AGENT_REVIEWER_REPO_ROOT": str(self.repo_root),
+            "AGENT_REVIEWER_CHAIN_DIR": str(self.chain_dir),
+            "AGENT_REVIEWER_REQUEST_FILE": str(self.request_file),
+            "AGENT_REVIEWER_RESPONSE_DIR": str(self.response_dir),
+            "AGENT_REVIEWER_SCRATCH_DIR": str(self.scratch_dir),
+            "AGENT_REVIEWER_TARGET_FILE": str(self.target_file),
+            "AGENT_REVIEWER_KIND": self.kind,
+            "AGENT_REVIEWER_ROLE": self.role,
+            "AGENT_REVIEWER_SWEEP_INDEX": "" if self.sweep_index is None else str(self.sweep_index),
+            "AGENT_REVIEWER_PROVIDER": self.provider,
+            "AGENT_REVIEWER_CALLER": self.caller_provider,
+        }
 
 
 def run_one_reviewer(
@@ -1214,105 +1275,147 @@ def run_one_reviewer(
             raw_stderr_tail=active.get("raw_stderr_tail", ""),
         )
 
-    result = run_reviewer(
-        command_template=args.reviewer_cmd,
-        prompt_file=request_path, prompt_text=prompt_text,
-        target_file=target, kind=args.kind,
-        prompt_transport=args.prompt_transport, timeout=args.timeout,
-        chain_dir=chain_dir, round_num=round_num,
-        previous_response=previous_response, resolution_file=resolution_file,
-        session_file=session_file,
+    role_name = "primary" if role == "primary" else f"sweep{sweep_index}"
+    response_dir = chain_dir / ".reviewer-output" / f"r{round_num}-{role_name}"
+    response_dir.mkdir(parents=True, exist_ok=True)
+    scratch_dir = Path(tempfile.mkdtemp(
+        prefix=f"superstar-reviewer-{chain_dir.name}-r{round_num}-{role_name}-"
+    ))
+    scratch_dir.chmod(0o700)
+    provider_resolution = getattr(
+        args, "provider_resolution",
+        ProviderResolution("custom", "unknown", getattr(args, "reviewer_cmd", "reviewer-agent")),
     )
-    # Rate-limit detection — runs only on non-zero exit
-    if result.returncode != 0:
-        matched, reset_at, pattern_name = detect_rate_limit(result.stderr or "")
-        if matched:
-            reset_at_iso = (reset_at or _fallback_reset_time()).isoformat(timespec="seconds")
-            key = reviewer_cmd_basename()
-            entry = {
-                "limited": True,
-                "limited_at": _now_local().isoformat(timespec="seconds"),
-                "reset_at": reset_at_iso,
-                "reset_source": f"regex:{pattern_name}" if pattern_name else "fallback",
-                "raw_stderr_tail": (result.stderr or "")[-2048:],
-                "chain": chain_dir.name,
-                "round": round_num,
-            }
+    invocation_context = ReviewerInvocationContext(
+        repo_root=root,
+        chain_dir=chain_dir,
+        request_file=request_path,
+        response_dir=response_dir,
+        scratch_dir=scratch_dir,
+        target_file=target,
+        kind=args.kind,
+        role=role,
+        sweep_index=sweep_index,
+        provider=provider_resolution.provider,
+        caller_provider=provider_resolution.caller_provider,
+    )
+    sandbox_info = {
+        "repo_root": str(root),
+        "scratch_dir": str(scratch_dir),
+        "response_dir": rel_or_abs(response_dir, root),
+        "mode": (
+            "custom" if invocation_context.provider == "custom"
+            else "workspace-write-with-read-access" if invocation_context.provider == "codex"
+            else "plan-read-only"
+        ),
+    }
 
-            def _record_limit(state, _entry=entry, _key=key):
-                state["limits"][_key] = _entry
+    try:
+        result = run_reviewer(
+            command_template=args.reviewer_cmd,
+            prompt_file=request_path, prompt_text=prompt_text,
+            target_file=target, kind=args.kind,
+            prompt_transport=args.prompt_transport, timeout=args.timeout,
+            chain_dir=chain_dir, round_num=round_num,
+            previous_response=previous_response, resolution_file=resolution_file,
+            session_file=session_file,
+            repo_root=root,
+            response_dir=response_dir,
+            scratch_dir=scratch_dir,
+            request_file=request_path,
+            extra_env=invocation_context.env(),
+        )
+        # Rate-limit detection — runs only on non-zero exit
+        if result.returncode != 0:
+            matched, reset_at, pattern_name = detect_rate_limit(result.stderr or "")
+            if matched:
+                reset_at_iso = (reset_at or _fallback_reset_time()).isoformat(timespec="seconds")
+                key = reviewer_cmd_basename()
+                entry = {
+                    "limited": True,
+                    "limited_at": _now_local().isoformat(timespec="seconds"),
+                    "reset_at": reset_at_iso,
+                    "reset_source": f"regex:{pattern_name}" if pattern_name else "fallback",
+                    "raw_stderr_tail": (result.stderr or "")[-2048:],
+                    "chain": chain_dir.name,
+                    "round": round_num,
+                }
 
-            update_state(_record_limit)
-            artifact_path = write_rate_limited_artifact(
-                chain_dir=chain_dir, round_num=round_num, timestamp=timestamp,
-                reviewer_cmd=key, reset_at=reset_at_iso,
-                raw_stderr_tail=result.stderr or "",
-            )
-            if role == "sweep":
-                # Spec §7.4/§7.5: a rate-limited sweep does NOT abort the round.
-                # The primary may have produced a valid verdict; the sweep is
-                # excluded from merged verdict (Task 3.3/3.4) and recorded as
-                # status="rate-limited" in the round-entry by the caller.
-                # State is already persisted above so subsequent runs refuse
-                # pre-spawn. Do NOT append a chain.json round entry here —
-                # that's done once by main() after all reviewers finish.
-                return ReviewerResult(
-                    role=role, sweep_index=sweep_index,
-                    request_path=request_path, response_path=artifact_path,
-                    review_body="", verdict=None, verdict_valid=False,
-                    returncode=result.returncode, status="rate-limited",
+                def _record_limit(state, _entry=entry, _key=key):
+                    state["limits"][_key] = _entry
+
+                update_state(_record_limit)
+                artifact_path = write_rate_limited_artifact(
+                    chain_dir=chain_dir, round_num=round_num, timestamp=timestamp,
+                    reviewer_cmd=key, reset_at=reset_at_iso,
+                    raw_stderr_tail=result.stderr or "",
                 )
-            # F3: chain.json is guaranteed to exist (Task 2.0 eager-write).
-            _manifest_path = chain_dir / "chain.json"
-            _manifest = read_manifest(_manifest_path)
-            new_round = {
-                "round": round_num,
-                "status": "rate-limited",
-                "returncode": None,
-                "verdict": None,
-                "verdict_valid": False,
-                "merged_verdict": None,
-                "reset_at": reset_at_iso,
-                "reviewer_cmd": key,
-                "request": request_path.name,
-                "response": artifact_path.name,
-                "limited_at": _now_local().isoformat(timespec="seconds"),
-            }
-            _manifest["rounds"].append(new_round)
-            write_manifest(_manifest_path, _manifest)
-            raise ReviewerRateLimited(
-                reviewer_cmd=key, reset_at=reset_at_iso,
-                reset_source=f"regex:{pattern_name}" if pattern_name else "fallback",
-                chain=chain_dir.name, round_num=round_num,
-                request_path=str(request_path),
-                raw_stderr_tail=result.stderr or "",
-            )
-    write_review_artifact(
-        root=root, target=target, kind=args.kind,
-        command_template=args.reviewer_cmd,
-        prompt_file=request_path, response_file=response_path,
-        round_num=round_num, result=result,
-    )
-    body = response_path.read_text(encoding="utf-8")
-    if result.returncode != 0:
-        # Process failures cannot produce a valid verdict, regardless of what
-        # parse_verdict extracts from echoed prompt text. See spec §S1.2.
-        verdict, valid = None, False
-    else:
-        # Normalise heading-style verdicts (`Overall verdict\n\nready`) before
-        # parsing. parse_verdict's regex requires a `:`/`-` separator, but
-        # reviewers commonly emit the value on the next line as a heading.
-        # Stored review_body stays pristine; only the parse input is rewritten.
-        verdict, valid = parse_verdict(_VERDICT_HEADING_STYLE.sub(
-            lambda m: f"{m.group(1)}: {m.group(2)}", body
-        ))
-    return ReviewerResult(
-        role=role, sweep_index=sweep_index,
-        request_path=request_path, response_path=response_path,
-        review_body=body, verdict=verdict, verdict_valid=valid,
-        returncode=result.returncode,
-        status="ok" if result.returncode == 0 else "failed",
-    )
+                if role == "sweep":
+                    return ReviewerResult(
+                        role=role, sweep_index=sweep_index,
+                        request_path=request_path, response_path=artifact_path,
+                        review_body="", verdict=None, verdict_valid=False,
+                        returncode=result.returncode, status="rate-limited",
+                        provider=invocation_context.provider,
+                        caller_provider=invocation_context.caller_provider,
+                        sandbox=sandbox_info,
+                    )
+                _manifest_path = chain_dir / "chain.json"
+                _manifest = read_manifest(_manifest_path)
+                new_round = {
+                    "round": round_num,
+                    "status": "rate-limited",
+                    "returncode": None,
+                    "verdict": None,
+                    "verdict_valid": False,
+                    "merged_verdict": None,
+                    "reset_at": reset_at_iso,
+                    "reviewer_cmd": key,
+                    "request": request_path.name,
+                    "response": artifact_path.name,
+                    "limited_at": _now_local().isoformat(timespec="seconds"),
+                }
+                _manifest["rounds"].append(new_round)
+                write_manifest(_manifest_path, _manifest)
+                raise ReviewerRateLimited(
+                    reviewer_cmd=key, reset_at=reset_at_iso,
+                    reset_source=f"regex:{pattern_name}" if pattern_name else "fallback",
+                    chain=chain_dir.name, round_num=round_num,
+                    request_path=str(request_path),
+                    raw_stderr_tail=result.stderr or "",
+                )
+        write_review_artifact(
+            root=root, target=target, kind=args.kind,
+            command_template=args.reviewer_cmd,
+            prompt_file=request_path, response_file=response_path,
+            round_num=round_num, result=result,
+            provider=invocation_context.provider,
+            sandbox_summary=(
+                "custom command; bridge-provided scratch/output context"
+                if invocation_context.provider == "custom"
+                else "repo read-only; scratch/output writable"
+            ),
+        )
+        body = response_path.read_text(encoding="utf-8")
+        if result.returncode != 0:
+            verdict, valid = None, False
+        else:
+            verdict, valid = parse_verdict(_VERDICT_HEADING_STYLE.sub(
+                lambda m: f"{m.group(1)}: {m.group(2)}", body
+            ))
+        return ReviewerResult(
+            role=role, sweep_index=sweep_index,
+            request_path=request_path, response_path=response_path,
+            review_body=body, verdict=verdict, verdict_valid=valid,
+            returncode=result.returncode,
+            status="ok" if result.returncode == 0 else "failed",
+            provider=invocation_context.provider,
+            caller_provider=invocation_context.caller_provider,
+            sandbox=sandbox_info,
+        )
+    finally:
+        if not getattr(args, "keep_reviewer_scratch", False):
+            shutil.rmtree(scratch_dir, ignore_errors=True)
 
 
 def _rv_attr(r, name, default=None):
@@ -1556,6 +1659,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--state-file",
         default=None,
         help="Override path to the reviewer state file (rate-limit tracking, etc.).",
+    )
+    sp_review.add_argument(
+        "--keep-reviewer-scratch",
+        action="store_true",
+        help="Preserve the reviewer scratch directory for debugging.",
     )
 
     sp_manual = subparsers.add_parser("manual-approve", help="Mark a chain as manually approved")
@@ -1844,13 +1952,25 @@ def main() -> int:
     # --state-file is global: hoist to env so load_state()/save_state() honour it.
     if getattr(args, "state_file", None):
         os.environ["AGENT_REVIEWER_STATE_FILE"] = args.state_file
-    # --reviewer-cmd is review-only: hoist so reviewer_cmd_basename() picks it
-    # up as the single source of truth for the state key (S1.F2). Only do this
-    # when the value differs from the existing env (i.e. user actually passed
-    # --reviewer-cmd on the CLI vs. argparse just echoing the env default).
-    cli_reviewer_cmd = getattr(args, "reviewer_cmd", None)
-    if cli_reviewer_cmd and cli_reviewer_cmd != os.environ.get("AGENT_REVIEWER_CMD"):
-        os.environ["AGENT_REVIEWER_CMD"] = cli_reviewer_cmd
+    # Provider resolution (review-only): for non-review subcommands, leave
+    # AGENT_REVIEWER_CMD untouched. The provider resolution result becomes the
+    # authoritative reviewer command and is hoisted into the env so
+    # reviewer_cmd_basename() / load_state() see the same key.
+    if args.command == "review":
+        try:
+            args.provider_resolution = resolve_reviewer_provider(
+                reviewer_provider=getattr(args, "reviewer_provider", "auto"),
+                caller_provider=getattr(args, "caller_provider", "auto"),
+                reviewer_cmd=getattr(args, "reviewer_cmd", None),
+                env=os.environ,
+            )
+        except ProviderResolutionError as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            return 2
+        args.reviewer_cmd = args.provider_resolution.command
+        os.environ["AGENT_REVIEWER_CMD"] = args.reviewer_cmd
+        os.environ["AGENT_REVIEWER_PROVIDER"] = args.provider_resolution.provider
+        os.environ["AGENT_REVIEWER_CALLER"] = args.provider_resolution.caller_provider
 
     # Dispatch non-review subcommands BEFORE accessing review-only args
     # (kind, file, context, output_dir).  show-limit/clear-limit don't define

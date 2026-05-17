@@ -130,6 +130,8 @@ After writing the complete plan, look at the spec with fresh eyes and check the 
 
 **3. Type consistency:** Do the types, method signatures, and property names you used in later tasks match what you defined in earlier tasks? A function called `clearLayers()` in Task 3 but `clearFullLayers()` in Task 7 is a bug.
 
+**4. Handoff artifact:** After the plan-review gate passes, confirm `docs/handoffs/<plan-stem>-prompt.md` exists on disk (run `ls`), was filled in (no `{{placeholder}}` strings remain), and was echoed to chat in a fenced block. If any of those three are missing, you skipped the Execution Handoff and must complete it before offering the execution choice.
+
 If you find issues, fix them inline. No need to re-review — just fix and move on. If you find a spec requirement with no task, add the task.
 
 ## External review checkpoints
@@ -150,15 +152,30 @@ After saving the plan, run `[[external-review]]` with `--kind plan` against the 
 
 After both reviews are passed, write a **handoff prompt** for the next session and offer the execution choice.
 
+> **STOP — do not skip ahead to Step C.** Steps A and B produce the cross-session contract; Step C is the in-session menu. The two are not interchangeable. Do not offer the execution choice until `docs/handoffs/<plan-stem>-prompt.md` exists on disk **and** has been echoed to chat in a fenced block. Verify with `ls docs/handoffs/<plan-stem>-prompt.md` before proceeding to C.
+
+### Red flags
+
+| Thought | Reality |
+|---------|---------|
+| "I'll just offer the execution choice — the next session will figure out the rest." | No. The handoff doc is the cross-session contract. Without it, the next session reconstructs from scratch. |
+| "The plan header already mentions `subagent-driven-development`, so a separate handoff is redundant." | No. The header names a skill; the handoff prompt names paths, IDs, and the reviewer chain. They are additive, not duplicative. |
+| "Steps A/B are infrastructure — only Step C is user-visible." | The handoff file IS the user-visible payoff for the *next* session. Skipping A/B silently breaks that session. |
+
 ### Step A — Write the handoff prompt
 
 Copy `handoff-prompt.template.md` (next to this SKILL) to `docs/handoffs/<plan-stem>-prompt.md` and fill in the placeholders: phase/slice ID, project name, absolute repo path, spec path, plan path, reviewer chain folder name. Commit it alongside the plan.
+
+**Template resolution.** The template ships at `skills/writing-plans/handoff-prompt.template.md` inside this plugin. If that relative path doesn't resolve from your working directory, fall back to `$CLAUDE_PLUGIN_DIR/skills/writing-plans/handoff-prompt.template.md` (when running inside a Claude Code plugin context).
 
 ### Step B — Echo the handoff to chat
 
 Print the filled-in handoff prompt to chat in a fenced block, plus the absolute path to the committed file, so the user can copy it into a new session immediately.
 
 ### Step C — Offer execution choice in-session
+
+**Precondition:** Step A wrote `docs/handoffs/<plan-stem>-prompt.md` and Step B echoed it. If either is missing, return to A — do not print the menu below.
+
 
 **"Plan complete and saved to `docs/plans/<filename>.md`. Handoff prompt saved to `docs/handoffs/<filename>-prompt.md`. Two execution options:**
 
