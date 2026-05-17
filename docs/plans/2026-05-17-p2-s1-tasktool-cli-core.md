@@ -821,6 +821,19 @@ class DateFormatTests(unittest.TestCase):
         p.phases[0].slices[0].created = "2026-02-28"
         validate_project(p)  # no raise
 
+    def test_basic_iso_format_rejected(self):
+        # Python's date.fromisoformat accepts 20260228, but we require dashes.
+        p = _project_with_slice()
+        p.phases[0].slices[0].created = "20260228"
+        with self.assertRaises(ValidationError):
+            validate_project(p)
+
+    def test_week_date_format_rejected(self):
+        p = _project_with_slice()
+        p.phases[0].slices[0].created = "2026-W09-6"
+        with self.assertRaises(ValidationError):
+            validate_project(p)
+
 class PathWarningTests(unittest.TestCase):
     def test_missing_ref_emits_warning(self):
         from tasktool.validate import find_path_warnings
@@ -886,6 +899,7 @@ _PHASE_RE = re.compile(r"^P\d+$")
 _SLICE_RE = re.compile(r"^S\d+[a-z]?$")
 _TASK_RE = re.compile(r"^T\d+$")
 _CROSS_RE = re.compile(r"^X\d+$")
+_DATE_SHAPE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 def _require(cond: bool, msg: str) -> None:
     if not cond:
@@ -895,15 +909,21 @@ def _check_id(value: str, pattern: re.Pattern[str], scope: str) -> None:
     _require(bool(pattern.match(value)), f"{scope}: malformed id {value!r}")
 
 def _check_date(value: str | None, scope: str, field: str) -> None:
-    """Validate that value parses as a real ISO 8601 calendar date.
-    Rejects shape-only matches like 2026-99-99 or 2026-02-31."""
+    """Validate that value matches the literal YYYY-MM-DD shape *and* parses as a real
+    calendar date. The shape check is required because Python 3.11+ `date.fromisoformat`
+    additionally accepts forms like `20260228` (basic) and `2026-W09-6` (week-date), which
+    would break lexical string comparison elsewhere."""
     if value is None:
         return
+    if not _DATE_SHAPE.match(value):
+        raise ValidationError(
+            f"{scope}.{field}: malformed date {value!r} (expected YYYY-MM-DD)"
+        )
     try:
         _dt.date.fromisoformat(value)
     except ValueError as e:
         raise ValidationError(
-            f"{scope}.{field}: malformed date {value!r} (expected YYYY-MM-DD calendar date): {e}"
+            f"{scope}.{field}: invalid calendar date {value!r}: {e}"
         ) from e
 
 def _check_dates(created: str, closed: str | None, scope: str) -> None:
@@ -1834,18 +1854,21 @@ def cmd_create_task(*, repo_root: Path, slice_id: str, title: str) -> str:
     return new_id
 
 def _find_item(p: Project, id: str):
-    """Returns (container_list, item). Accepts fully-qualified or unambiguous short."""
+    """Returns (qid, container_list, item). Accepts fully-qualified or unambiguous short.
+    The returned qid is the fully-qualified form — callers MUST use it for any downstream
+    operation that searches by ID (reviewer-chain discovery in particular), to avoid the
+    short-form aliasing across historical chains."""
     qid = _resolve_id(p, id)
     parsed = parse_id(qid)[0]
     if parsed == "phase":
         for ph in p.phases:
             if ph.id == qid:
-                return p.phases, ph
+                return qid, p.phases, ph
         raise CommandError(f"phase {qid} not found")
     if parsed == "cross":
         for c in p.cross_cutting:
             if c.id == qid:
-                return p.cross_cutting, c
+                return qid, p.cross_cutting, c
         raise CommandError(f"cross-cutting {qid} not found")
     phase_part, slice_part, task_part = split_qualified(qid)
     phase = next((ph for ph in p.phases if ph.id == phase_part), None)
@@ -1858,11 +1881,11 @@ def _find_item(p: Project, id: str):
         task = next((t for t in slc.tasks if t.id == task_part), None)
         if task is None:
             raise CommandError(f"task {qid} not found")
-        return slc.tasks, task
+        return qid, slc.tasks, task
     slc = next((s for s in phase.slices if s.id == slice_part), None)
     if slc is None:
         raise CommandError(f"slice {qid} not found")
-    return phase.slices, slc
+    return qid, phase.slices, slc
 
 def _apply_review_gate(
     repo_root: Path, p: Project, item, id: str, kind_label: str,
@@ -1890,13 +1913,13 @@ def cmd_set(
     reviewer_chain: Path | None = None, skip_review_gate: bool = False,
 ) -> None:
     p = _load(repo_root)
-    _, item = _find_item(p, id)
+    qid, _container, item = _find_item(p, id)
     new_status = Status(status)
-    kind = parse_id(id)[0]
+    kind = parse_id(qid)[0]
     if new_status == Status.BLOCKED and kind != "slice":
-        raise CommandError(f"only slices can be blocked; {id} is a {kind}")
+        raise CommandError(f"only slices can be blocked; {qid} is a {kind}")
     if new_status == Status.DONE and kind in ("slice", "phase"):
-        _apply_review_gate(repo_root, p, item, id, kind, reviewer_chain, skip_review_gate)
+        _apply_review_gate(repo_root, p, item, qid, kind, reviewer_chain, skip_review_gate)
     item.status = new_status
     if new_status == Status.DONE and item.closed is None:
         item.closed = _today()
@@ -1909,14 +1932,14 @@ def cmd_close(
     reviewer_chain: Path | None = None, skip_review_gate: bool = False,
 ) -> None:
     p = _load(repo_root)
-    _, item = _find_item(p, id)
-    kind = parse_id(id)[0]
+    qid, _container, item = _find_item(p, id)
+    kind = parse_id(qid)[0]
     if kind == "task" or kind == "cross":
         pass  # no gate; just close
     elif kind in ("slice", "phase"):
-        _apply_review_gate(repo_root, p, item, id, kind, reviewer_chain, skip_review_gate)
+        _apply_review_gate(repo_root, p, item, qid, kind, reviewer_chain, skip_review_gate)
     else:
-        raise CommandError(f"cannot close {kind} {id}")
+        raise CommandError(f"cannot close {kind} {qid}")
     item.status = Status.DONE
     item.closed = closed_date or _today()
     if refs:
@@ -1931,7 +1954,7 @@ def cmd_block(*, repo_root: Path, slice_id: str, on: str) -> None:
     p = _load(repo_root)
     if not is_slice_id(slice_id):
         raise CommandError(f"block only works on slices; {slice_id} is a {kind_of(slice_id)}")
-    _, item = _find_item(p, slice_id)
+    _qid, _container, item = _find_item(p, slice_id)
     if on.startswith("external:"):
         item.blocked_on = BlockedOn(kind="external", value=on[len("external:"):])
     else:
@@ -1944,7 +1967,7 @@ def cmd_unblock(*, repo_root: Path, slice_id: str, resume: bool = False) -> None
     p = _load(repo_root)
     if not is_slice_id(slice_id):
         raise CommandError(f"unblock only works on slices; {slice_id} is a {kind_of(slice_id)}")
-    _, item = _find_item(p, slice_id)
+    _qid, _container, item = _find_item(p, slice_id)
     item.blocked_on = None
     item.status = Status.IN_PROGRESS if resume else Status.READY
     _save(repo_root, p)
@@ -2024,7 +2047,7 @@ def cmd_note(
     if (append is None) == (replace is None):
         raise CommandError("cmd_note requires exactly one of append/replace")
     p = _load(repo_root)
-    _, item = _find_item(p, id)
+    _qid, _container, item = _find_item(p, id)
     if append is not None:
         item.notes = (item.notes + "\n" + append).strip() if item.notes else append
     else:
@@ -2038,9 +2061,9 @@ def cmd_ref(
     if (add is None) == (remove is None):
         raise CommandError("cmd_ref requires exactly one of add/remove")
     p = _load(repo_root)
-    _, item = _find_item(p, id)
+    qid, _container, item = _find_item(p, id)
     if not hasattr(item, "refs"):
-        raise CommandError(f"{id}: this item kind does not have refs")
+        raise CommandError(f"{qid}: this item kind does not have refs")
     if add is not None and add not in item.refs:
         item.refs.append(add)
     elif remove is not None and remove in item.refs:
@@ -2049,7 +2072,7 @@ def cmd_ref(
 
 def cmd_title(*, repo_root: Path, id: str, new: str) -> None:
     p = _load(repo_root)
-    _, item = _find_item(p, id)
+    _qid, _container, item = _find_item(p, id)
     item.title = new
     _save(repo_root, p)
 ```
@@ -2135,8 +2158,8 @@ def _item_one_line(prefix: str, item) -> str:
 
 def cmd_show(*, repo_root: Path, id: str) -> str:
     p = _load(repo_root)
-    _, item = _find_item(p, id)
-    lines = [f"# {id} — {item.title}", f"status: {item.status.value}"]
+    qid, _container, item = _find_item(p, id)
+    lines = [f"# {qid} — {item.title}", f"status: {item.status.value}"]
     if getattr(item, "closed", None):
         lines.append(f"closed: {item.closed}")
     if getattr(item, "blocked_on", None):
@@ -2973,6 +2996,37 @@ class ReviewGateE2ETests(unittest.TestCase):
             run_cli("create", "phase", "--title", "P", cwd=t.root)
             run_cli("create", "slice", "P1", "--title", "S", cwd=t.root)
             r = run_cli("close", "P1.S1", "--skip-review-gate", cwd=t.root)
+            self.assertEqual(r.returncode, 0, r.stderr)
+        finally:
+            t.cleanup()
+
+    def test_short_id_close_resolves_to_qualified_for_gate(self):
+        """F8 regression: closing a short slice ID must not match historical
+        same-named chains under a different phase."""
+        t = _CliTmp()
+        try:
+            run_cli("init", "--project", "demo", cwd=t.root)
+            # Two phases each with their own S1.
+            run_cli("create", "phase", "--title", "old", cwd=t.root)
+            run_cli("create", "slice", "P1", "--title", "old s", cwd=t.root)
+            run_cli("create", "phase", "--title", "new", cwd=t.root)
+            run_cli("create", "slice", "P2", "--title", "new s", cwd=t.root)
+            # A historical post-slice chain for P1.S1, plus the correct one for P2.S1.
+            for name in ("p1-s1-post-slice", "p2-s1-post-slice"):
+                chain = t.root / "docs/reviewer" / name
+                chain.mkdir(parents=True)
+                (chain / "chain.json").write_text(
+                    '{"rounds":[{"round":1,"merged_verdict":"ready","status":"ok"}]}',
+                    encoding="utf-8",
+                )
+            # `close S1` would be ambiguous (two slices named S1 exist) — expect
+            # an unambiguous-id error, not a phantom multi-chain match.
+            r = run_cli("close", "S1", cwd=t.root)
+            self.assertEqual(r.returncode, 1)
+            self.assertIn("ambiguous", r.stderr.lower())
+            # `close P2.S1` is unambiguous; the qualified id must hit p2-s1-post-slice
+            # exclusively, not also match p1-s1-post-slice.
+            r = run_cli("close", "P2.S1", cwd=t.root)
             self.assertEqual(r.returncode, 0, r.stderr)
         finally:
             t.cleanup()
