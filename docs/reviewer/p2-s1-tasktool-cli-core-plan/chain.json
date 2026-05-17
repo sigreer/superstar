@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "chain": "p2-s1-tasktool-cli-core-plan",
+  "kind": "plan",
+  "target": "docs/plans/2026-05-17-p2-s1-tasktool-cli-core.md",
+  "work_id": "P2.S1",
+  "legacy_migrated": false,
+  "rounds": [
+    {
+      "round": 1,
+      "reviewers": [
+        {
+          "role": "primary",
+          "sweep_group": null,
+          "parent_round": 1,
+          "request": "r1-2026-05-17T2010-request.md",
+          "response": "r1-2026-05-17T2010-response.md",
+          "verdict": "revise",
+          "verdict_valid": true,
+          "returncode": 0,
+          "status": "ok",
+          "provider": "codex",
+          "caller_provider": "claude",
+          "sandbox": {
+            "repo_root": "/home/simon/Dev/sigreer/skills/superstar",
+            "scratch_dir": "/tmp/superstar-reviewer-p2-s1-tasktool-cli-core-plan-r1-primary-of5d980p",
+            "response_dir": "docs/reviewer/p2-s1-tasktool-cli-core-plan/.reviewer-output/r1-primary",
+            "mode": "workspace-write-with-read-access"
+          }
+        }
+      ],
+      "status": "ok",
+      "returncode": 0,
+      "merged_verdict": "revise",
+      "merged_findings": null,
+      "request": "r1-2026-05-17T2010-request.md",
+      "response": "r1-2026-05-17T2010-response.md",
+      "resolution": null,
+      "resolution_parse_status": null,
+      "resolution_waiver": false,
+      "head_sha_at_request": "3cc1b6988e48acb7ec8873cdbd02160e953d8582",
+      "head_sha_after_round": "3cc1b6988e48acb7ec8873cdbd02160e953d8582",
+      "worktree_dirty_at_request": true,
+      "verdict": "revise",
+      "verdict_valid": true,
+      "findings_count": 6,
+      "blocking_findings_count": 2,
+      "base_ref": null,
+      "base_ref_source": null,
+      "diff_included": false
+    }
+  ],
+  "sweep_checkpoints": {
+    "first-round": "pending",
+    "final-ready": "pending"
+  }
+}

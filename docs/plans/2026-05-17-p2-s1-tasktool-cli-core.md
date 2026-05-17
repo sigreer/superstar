@@ -48,7 +48,7 @@ Not touched in this slice: `tools/tasktool/templates/pre-commit-tasktool` (S3), 
 
 - **TDD:** every task writes the failing test, runs it red, implements the minimum, runs it green, commits. Commits per task, not per step.
 - **Commit message prefix:** `P2.S1:` followed by an imperative one-liner.
-- **Run tests via:** `python3 -m unittest discover -s tools/tasktool/tests -v`.
+- **Run tests via:** `PYTHONPATH=tools python3 -m unittest discover -s tools/tasktool/tests -v`. The `tools/` directory must be on `PYTHONPATH` because the package lives at `tools/tasktool/`. Once the installer (Task 15) has been run, the shim sets `PYTHONPATH` automatically — but the raw command shown in every test gate is what an agent will run before installing.
 - **No third-party deps.** If you reach for `pytest`, `pydantic`, `click`, stop — stdlib only.
 - **Python style:** dataclasses with `slots=True`; `from __future__ import annotations` everywhere; type hints required on public functions.
 
@@ -109,7 +109,9 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 PKG_DIR = REPO_ROOT / "tools"
 
 def run_cli(*args: str, cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
-    env = {"PYTHONPATH": str(PKG_DIR), "PATH": "/usr/bin:/bin"}
+    import os
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(PKG_DIR) + os.pathsep + env.get("PYTHONPATH", "")
     return subprocess.run(
         [sys.executable, "-m", "tasktool", *args],
         capture_output=True, text=True, cwd=cwd or REPO_ROOT, env=env,
@@ -128,7 +130,7 @@ class SmokeTests(unittest.TestCase):
 
 - [ ] **Step 3: Run tests**
 
-Run: `python3 -m unittest discover -s tools/tasktool/tests -v`
+Run: `PYTHONPATH=tools python3 -m unittest discover -s tools/tasktool/tests -v`
 Expected: 2 tests pass.
 
 - [ ] **Step 4: Commit**
@@ -216,7 +218,7 @@ class SplitTests(unittest.TestCase):
 
 - [ ] **Step 2: Run tests, verify all fail**
 
-Run: `python3 -m unittest tools.tasktool.tests.test_ids -v`
+Run: `PYTHONPATH=tools python3 -m unittest tools.tasktool.tests.test_ids -v`
 Expected: ImportError or all-red.
 
 - [ ] **Step 3: Implement ids.py**
@@ -304,7 +306,7 @@ def split_qualified(value: str) -> tuple[str | None, str | None, str | None]:
 
 - [ ] **Step 4: Run tests, verify green**
 
-Run: `python3 -m unittest tools.tasktool.tests.test_ids -v`
+Run: `PYTHONPATH=tools python3 -m unittest tools.tasktool.tests.test_ids -v`
 Expected: all 17 tests pass.
 
 - [ ] **Step 5: Commit**
@@ -385,7 +387,7 @@ class ConstructionTests(unittest.TestCase):
 
 - [ ] **Step 2: Run, verify red**
 
-Run: `python3 -m unittest tools.tasktool.tests.test_model -v`
+Run: `PYTHONPATH=tools python3 -m unittest tools.tasktool.tests.test_model -v`
 
 - [ ] **Step 3: Implement model.py**
 
@@ -476,7 +478,7 @@ class Project:
 
 - [ ] **Step 4: Run tests green**
 
-Run: `python3 -m unittest tools.tasktool.tests.test_model -v`
+Run: `PYTHONPATH=tools python3 -m unittest tools.tasktool.tests.test_model -v`
 Expected: 8 tests pass.
 
 - [ ] **Step 5: Commit**
@@ -569,7 +571,7 @@ class DiskIOTests(unittest.TestCase):
 
 - [ ] **Step 2: Run, verify red**
 
-Run: `python3 -m unittest tools.tasktool.tests.test_serialize -v`
+Run: `PYTHONPATH=tools python3 -m unittest tools.tasktool.tests.test_serialize -v`
 
 - [ ] **Step 3: Implement serialize.py**
 
@@ -677,7 +679,7 @@ def save_project(p: Project, path: Path) -> None:
 
 - [ ] **Step 4: Run tests green**
 
-Run: `python3 -m unittest tools.tasktool.tests.test_serialize -v`
+Run: `PYTHONPATH=tools python3 -m unittest tools.tasktool.tests.test_serialize -v`
 Expected: 6 tests pass.
 
 - [ ] **Step 5: Commit**
@@ -789,6 +791,35 @@ class DateOrderTests(unittest.TestCase):
         with self.assertRaises(ValidationError):
             validate_project(p)
 
+class DateFormatTests(unittest.TestCase):
+    def test_malformed_created_rejected(self):
+        p = _project_with_slice()
+        p.phases[0].slices[0].created = "17-05-2026"
+        with self.assertRaises(ValidationError) as ctx:
+            validate_project(p)
+        self.assertIn("date", str(ctx.exception).lower())
+
+    def test_malformed_closed_rejected(self):
+        p = _project_with_slice(status=Status.DONE, closed="not-a-date")
+        with self.assertRaises(ValidationError):
+            validate_project(p)
+
+class PathWarningTests(unittest.TestCase):
+    def test_missing_ref_emits_warning(self):
+        from tasktool.validate import find_path_warnings
+        p = _project_with_slice(refs=["nonexistent.md"])
+        with tempfile.TemporaryDirectory() as td:
+            warnings = find_path_warnings(p, Path(td))
+        self.assertTrue(any("nonexistent.md" in w for w in warnings))
+
+    def test_existing_ref_no_warning(self):
+        from tasktool.validate import find_path_warnings
+        p = _project_with_slice(refs=["a.md"])
+        with tempfile.TemporaryDirectory() as td:
+            (Path(td) / "a.md").write_text("", encoding="utf-8")
+            warnings = find_path_warnings(p, Path(td))
+        self.assertEqual(warnings, [])
+
 class StrictFormatTests(unittest.TestCase):
     def test_canonical_passes(self):
         p = Project(project="demo")
@@ -816,7 +847,7 @@ class StrictFormatTests(unittest.TestCase):
 
 - [ ] **Step 2: Run red**
 
-Run: `python3 -m unittest tools.tasktool.tests.test_validate -v`
+Run: `PYTHONPATH=tools python3 -m unittest tools.tasktool.tests.test_validate -v`
 
 - [ ] **Step 3: Implement validate.py**
 
@@ -836,6 +867,7 @@ _PHASE_RE = re.compile(r"^P\d+$")
 _SLICE_RE = re.compile(r"^S\d+[a-z]?$")
 _TASK_RE = re.compile(r"^T\d+$")
 _CROSS_RE = re.compile(r"^X\d+$")
+_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 def _require(cond: bool, msg: str) -> None:
     if not cond:
@@ -844,7 +876,14 @@ def _require(cond: bool, msg: str) -> None:
 def _check_id(value: str, pattern: re.Pattern[str], scope: str) -> None:
     _require(bool(pattern.match(value)), f"{scope}: malformed id {value!r}")
 
+def _check_date(value: str | None, scope: str, field: str) -> None:
+    if value is None:
+        return
+    _require(bool(_DATE_RE.match(value)), f"{scope}.{field}: malformed date {value!r} (expected YYYY-MM-DD)")
+
 def _check_dates(created: str, closed: str | None, scope: str) -> None:
+    _check_date(created, scope, "created")
+    _check_date(closed, scope, "closed")
     if closed is not None and closed < created:
         raise ValidationError(f"{scope}: closed {closed} precedes created {created}")
 
@@ -904,6 +943,30 @@ def validate_project(p: Project) -> None:
         seen_cross.add(c.id)
         _check_cross(c, c.id)
 
+def find_path_warnings(p: Project, repo_root: Path) -> list[str]:
+    """Walk every spec_path / plan_path / refs[] and return a list of warning strings
+    for paths that do not exist on disk. Non-fatal — used by `tasktool validate`."""
+    warnings: list[str] = []
+    def _check(rel: str | None, scope: str) -> None:
+        if rel is None:
+            return
+        if not (repo_root / rel).exists():
+            warnings.append(f"{scope}: path does not exist: {rel}")
+    for ph in p.phases:
+        _check(ph.spec_path, f"{ph.id}.spec_path")
+        _check(ph.plan_path, f"{ph.id}.plan_path")
+        for s in ph.slices:
+            _check(s.plan_path, f"{ph.id}.{s.id}.plan_path")
+            for r in s.refs:
+                _check(r, f"{ph.id}.{s.id}.refs")
+            for t in s.tasks:
+                for r in t.refs:
+                    _check(r, f"{ph.id}.{s.id}.{t.id}.refs")
+    for c in p.cross_cutting:
+        for r in c.refs:
+            _check(r, f"{c.id}.refs")
+    return warnings
+
 def strict_format_check(path: Path) -> None:
     """Re-serialise and compare bytes. Raises ValidationError on mismatch."""
     text = path.read_text(encoding="utf-8")
@@ -923,7 +986,7 @@ def normalise_file(path: Path) -> None:
 
 - [ ] **Step 4: Run green**
 
-Run: `python3 -m unittest tools.tasktool.tests.test_validate -v`
+Run: `PYTHONPATH=tools python3 -m unittest tools.tasktool.tests.test_validate -v`
 Expected: all tests pass.
 
 - [ ] **Step 5: Commit**
@@ -1029,7 +1092,7 @@ class CrossAllocTests(unittest.TestCase):
 
 - [ ] **Step 2: Run red**
 
-Run: `python3 -m unittest tools.tasktool.tests.test_allocate -v`
+Run: `PYTHONPATH=tools python3 -m unittest tools.tasktool.tests.test_allocate -v`
 
 - [ ] **Step 3: Implement allocate.py**
 
@@ -1134,7 +1197,7 @@ def next_cross_id(p: Project, repo_root: Path) -> str:
 
 - [ ] **Step 4: Run green**
 
-Run: `python3 -m unittest tools.tasktool.tests.test_allocate -v`
+Run: `PYTHONPATH=tools python3 -m unittest tools.tasktool.tests.test_allocate -v`
 
 - [ ] **Step 5: Commit**
 
@@ -1232,7 +1295,7 @@ class VerdictTests(unittest.TestCase):
 
 - [ ] **Step 2: Run red**
 
-Run: `python3 -m unittest tools.tasktool.tests.test_reviewer_gate -v`
+Run: `PYTHONPATH=tools python3 -m unittest tools.tasktool.tests.test_reviewer_gate -v`
 
 - [ ] **Step 3: Implement reviewer_gate.py**
 
@@ -1305,7 +1368,7 @@ def check_gate(repo_root: Path, work_id: str, kind: str, *, explicit: Path | Non
 
 - [ ] **Step 4: Run green**
 
-Run: `python3 -m unittest tools.tasktool.tests.test_reviewer_gate -v`
+Run: `PYTHONPATH=tools python3 -m unittest tools.tasktool.tests.test_reviewer_gate -v`
 
 - [ ] **Step 5: Commit**
 
@@ -1364,6 +1427,15 @@ class InitTests(unittest.TestCase):
         finally:
             t.cleanup()
 
+    def test_init_without_project_uses_repo_root_name(self):
+        t = _Tmp()
+        try:
+            commands.cmd_init(repo_root=t.root)
+            p = load_project(t.root / "docs/tasklist.json")
+            self.assertEqual(p.project, t.root.name)
+        finally:
+            t.cleanup()
+
 class CreateTests(unittest.TestCase):
     def setUp(self):
         self.t = _Tmp()
@@ -1408,7 +1480,7 @@ class CreateTests(unittest.TestCase):
 
 - [ ] **Step 2: Run red**
 
-Run: `python3 -m unittest tools.tasktool.tests.test_commands -v`
+Run: `PYTHONPATH=tools python3 -m unittest tools.tasktool.tests.test_commands -v`
 
 - [ ] **Step 3: Implement commands.py (init + create only for now)**
 
@@ -1451,12 +1523,15 @@ def _save(repo_root: Path, p: Project) -> None:
 
 # ───── init ─────
 
-def cmd_init(*, repo_root: Path, project: str, north_star: str = "", force: bool = False) -> None:
+def cmd_init(*, repo_root: Path, project: str | None = None, north_star: str = "", force: bool = False) -> None:
+    """Create empty tasklist.json. If `project` is omitted, derive from repo_root.name
+    (matches spec §7.1 syntax `init [--project NAME]`)."""
     path = _tasklist_path(repo_root)
     if path.exists() and not force:
         raise CommandError(f"{path}: already exists. Pass --force to overwrite.")
     path.parent.mkdir(parents=True, exist_ok=True)
-    _save(repo_root, Project(project=project, north_star=north_star, last_reviewed=_today()))
+    project_name = project or repo_root.name
+    _save(repo_root, Project(project=project_name, north_star=north_star, last_reviewed=_today()))
 
 # ───── create ─────
 
@@ -1490,15 +1565,12 @@ def cmd_create_slice(
 
 def cmd_create_task(*, repo_root: Path, slice_id: str, title: str) -> str:
     p = _load(repo_root)
-    phase_part, slice_part, _ = split_qualified(slice_id)
-    if phase_part is None or slice_part is None:
-        raise CommandError(f"task creation requires fully-qualified slice id (e.g. P1.S2), got {slice_id!r}")
-    phase = next((ph for ph in p.phases if ph.id == phase_part), None)
-    if phase is None:
-        raise CommandError(f"phase {phase_part} not found")
-    slc = next((s for s in phase.slices if s.id == slice_part), None)
-    if slc is None:
-        raise CommandError(f"slice {phase_part}.{slice_part} not found")
+    qid = _resolve_id(p, slice_id)
+    if parse_id(qid)[0] != "slice":
+        raise CommandError(f"task creation requires a slice id, got {slice_id!r} ({parse_id(qid)[0]})")
+    phase_part, slice_part, _ = split_qualified(qid)
+    phase = next(ph for ph in p.phases if ph.id == phase_part)
+    slc = next(s for s in phase.slices if s.id == slice_part)
     new_id = next_task_id(p, phase_part, slice_part)
     slc.tasks.append(Task(id=new_id, title=title, created=_today()))
     _save(repo_root, p)
@@ -1514,7 +1586,7 @@ def cmd_create_cross(*, repo_root: Path, title: str) -> str:
 
 - [ ] **Step 4: Run green**
 
-Run: `python3 -m unittest tools.tasktool.tests.test_commands -v`
+Run: `PYTHONPATH=tools python3 -m unittest tools.tasktool.tests.test_commands -v`
 
 - [ ] **Step 5: Commit**
 
@@ -1644,11 +1716,43 @@ class BlockTests(unittest.TestCase):
         s = p.phases[0].slices[0]
         self.assertEqual(s.status, Status.READY)
         self.assertIsNone(s.blocked_on)
+
+class ShortFormResolutionTests(unittest.TestCase):
+    def setUp(self):
+        self.t = _Tmp()
+        commands.cmd_init(repo_root=self.t.root, project="demo")
+        commands.cmd_create_phase(repo_root=self.t.root, title="P1")
+        commands.cmd_create_slice(repo_root=self.t.root, phase_id="P1", title="S1")
+        commands.cmd_create_task(repo_root=self.t.root, slice_id="P1.S1", title="t")
+    def tearDown(self):
+        self.t.cleanup()
+
+    def test_short_slice_unambiguous_resolves(self):
+        # Only one slice in the project — short form S1 should resolve.
+        commands.cmd_note(repo_root=self.t.root, id="S1", append="via short")
+        p = load_project(self.t.root / "docs/tasklist.json")
+        self.assertIn("via short", p.phases[0].slices[0].notes)
+
+    def test_short_task_unambiguous_resolves(self):
+        commands.cmd_note(repo_root=self.t.root, id="T1", append="via short")
+        p = load_project(self.t.root / "docs/tasklist.json")
+        self.assertIn("via short", p.phases[0].slices[0].tasks[0].notes)
+
+    def test_short_slice_ambiguous_rejected(self):
+        commands.cmd_create_phase(repo_root=self.t.root, title="P2")
+        commands.cmd_create_slice(repo_root=self.t.root, phase_id="P2", title="S1")
+        with self.assertRaises(commands.CommandError) as ctx:
+            commands.cmd_note(repo_root=self.t.root, id="S1", append="x")
+        self.assertIn("ambiguous", str(ctx.exception).lower())
+
+    def test_create_task_accepts_short_slice(self):
+        new_id = commands.cmd_create_task(repo_root=self.t.root, slice_id="S1", title="t2")
+        self.assertEqual(new_id, "T2")
 ```
 
 - [ ] **Step 2: Run red**
 
-Run: `python3 -m unittest tools.tasktool.tests.test_commands -v`
+Run: `PYTHONPATH=tools python3 -m unittest tools.tasktool.tests.test_commands -v`
 Expected: import errors / attribute errors for the new commands.
 
 - [ ] **Step 3: Extend commands.py**
@@ -1658,22 +1762,47 @@ Append to `tools/tasktool/commands.py`:
 ```python
 # ───── set / close / block / unblock ─────
 
-def _find_item(p: Project, id: str):
-    """Returns (container_list, item) or raises CommandError. id is fully-qualified or unambiguous short."""
+def _resolve_id(p: Project, id: str) -> str:
+    """Resolve a short ID to its fully-qualified form when unambiguous (spec §7 conventions).
+    Phase and cross IDs need no resolution. Short S/T IDs are accepted only when exactly one
+    matching item exists across the whole project."""
     parsed = parse_id(id)[0]
+    if "." in id or parsed in ("phase", "cross"):
+        return id
+    if parsed == "slice":
+        matches = [(ph.id, s.id) for ph in p.phases for s in ph.slices if s.id == id]
+        if not matches:
+            raise CommandError(f"slice {id} not found")
+        if len(matches) > 1:
+            qids = ", ".join(f"{ph}.{s}" for ph, s in matches)
+            raise CommandError(f"ambiguous short id {id!r}; matches: {qids}. Use fully-qualified form.")
+        return f"{matches[0][0]}.{matches[0][1]}"
+    if parsed == "task":
+        matches = [(ph.id, s.id, t.id) for ph in p.phases for s in ph.slices for t in s.tasks if t.id == id]
+        if not matches:
+            raise CommandError(f"task {id} not found")
+        if len(matches) > 1:
+            qids = ", ".join(f"{ph}.{s}.{t}" for ph, s, t in matches)
+            raise CommandError(f"ambiguous short id {id!r}; matches: {qids}. Use fully-qualified form.")
+        ph, s, t = matches[0]
+        return f"{ph}.{s}.{t}"
+    return id
+
+def _find_item(p: Project, id: str):
+    """Returns (container_list, item). Accepts fully-qualified or unambiguous short."""
+    qid = _resolve_id(p, id)
+    parsed = parse_id(qid)[0]
     if parsed == "phase":
         for ph in p.phases:
-            if ph.id == id:
+            if ph.id == qid:
                 return p.phases, ph
-        raise CommandError(f"phase {id} not found")
+        raise CommandError(f"phase {qid} not found")
     if parsed == "cross":
         for c in p.cross_cutting:
-            if c.id == id:
+            if c.id == qid:
                 return p.cross_cutting, c
-        raise CommandError(f"cross-cutting {id} not found")
-    phase_part, slice_part, task_part = split_qualified(id)
-    if phase_part is None:
-        raise CommandError(f"ambiguous id {id!r}; use fully-qualified form (e.g. P1.S2)")
+        raise CommandError(f"cross-cutting {qid} not found")
+    phase_part, slice_part, task_part = split_qualified(qid)
     phase = next((ph for ph in p.phases if ph.id == phase_part), None)
     if phase is None:
         raise CommandError(f"phase {phase_part} not found")
@@ -1683,11 +1812,11 @@ def _find_item(p: Project, id: str):
             raise CommandError(f"slice {phase_part}.{slice_part} not found")
         task = next((t for t in slc.tasks if t.id == task_part), None)
         if task is None:
-            raise CommandError(f"task {id} not found")
+            raise CommandError(f"task {qid} not found")
         return slc.tasks, task
     slc = next((s for s in phase.slices if s.id == slice_part), None)
     if slc is None:
-        raise CommandError(f"slice {id} not found")
+        raise CommandError(f"slice {qid} not found")
     return phase.slices, slc
 
 def _apply_review_gate(
@@ -1778,7 +1907,7 @@ def cmd_unblock(*, repo_root: Path, slice_id: str, resume: bool = False) -> None
 
 - [ ] **Step 4: Run green**
 
-Run: `python3 -m unittest tools.tasktool.tests.test_commands -v`
+Run: `PYTHONPATH=tools python3 -m unittest tools.tasktool.tests.test_commands -v`
 
 - [ ] **Step 5: Commit**
 
@@ -1882,7 +2011,7 @@ def cmd_title(*, repo_root: Path, id: str, new: str) -> None:
 
 - [ ] **Step 3: Run green**
 
-Run: `python3 -m unittest tools.tasktool.tests.test_commands -v`
+Run: `PYTHONPATH=tools python3 -m unittest tools.tasktool.tests.test_commands -v`
 
 - [ ] **Step 4: Commit**
 
@@ -2049,7 +2178,7 @@ def cmd_next_id(
 
 - [ ] **Step 3: Run green**
 
-Run: `python3 -m unittest tools.tasktool.tests.test_commands -v`
+Run: `PYTHONPATH=tools python3 -m unittest tools.tasktool.tests.test_commands -v`
 
 - [ ] **Step 4: Commit**
 
@@ -2253,16 +2382,21 @@ def cmd_validate(
 ) -> tuple[int, str]:
     from tasktool.validate import (
         validate_project, ValidationError, strict_format_check, normalise_file,
+        find_path_warnings,
     )
     path = _tasklist_path(repo_root)
     if not path.exists():
         return 1, f"{path}: not found"
     errors: list[str] = []
+    warnings: list[str] = []
+    project: Project | None = None
     try:
-        p = load_project(path)
-        validate_project(p)
+        project = load_project(path)
+        validate_project(project)
     except (ValidationError, ValueError) as e:
         errors.append(str(e))
+    if project is not None and not errors:
+        warnings.extend(find_path_warnings(project, repo_root))
     if normalise and not errors:
         try:
             normalise_file(path)
@@ -2276,10 +2410,15 @@ def cmd_validate(
     rc = 0 if not errors else 1
     if format == "json":
         import json as _j
-        return rc, _j.dumps({"ok": rc == 0, "errors": errors}, indent=2)
+        return rc, _j.dumps({"ok": rc == 0, "errors": errors, "warnings": warnings}, indent=2)
+    parts: list[str] = []
+    if warnings:
+        parts.extend(f"warning: {w}" for w in warnings)
     if errors:
-        return rc, "\n".join(errors) + "\n"
-    return rc, "ok\n"
+        parts.extend(errors)
+    elif not warnings:
+        parts.append("ok")
+    return rc, "\n".join(parts) + "\n"
 
 def cmd_schema() -> str:
     from tasktool.schema_gen import dump_schema
@@ -2288,7 +2427,7 @@ def cmd_schema() -> str:
 
 - [ ] **Step 4: Run green**
 
-Run: `python3 -m unittest tools.tasktool.tests.test_commands -v`
+Run: `PYTHONPATH=tools python3 -m unittest tools.tasktool.tests.test_commands -v`
 
 - [ ] **Step 5: Commit**
 
@@ -2348,6 +2487,20 @@ class CliEndToEndTests(unittest.TestCase):
         finally:
             t.cleanup()
 
+    def test_init_without_project_flag_works(self):
+        """Spec acceptance path: `tasktool init && tasktool create phase ...` round-trips."""
+        t = _CliTmp()
+        try:
+            r = run_cli("init", cwd=t.root)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            r = run_cli("create", "phase", "--title", "First", cwd=t.root)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            r = run_cli("show", "P1", cwd=t.root)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertIn("First", r.stdout)
+        finally:
+            t.cleanup()
+
     def test_schema_is_valid_json(self):
         r = run_cli("schema")
         self.assertEqual(r.returncode, 0, r.stderr)
@@ -2378,10 +2531,17 @@ def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="tasktool")
     parser.add_argument("--project-root", type=Path, default=None,
                         help="Project root (default: walk up from cwd)")
+    parser.add_argument("--quiet", action="store_true",
+                        help="Suppress non-error output. Accepted but minimally used in S1; reserved for richer logging in later slices.")
+    parser.add_argument("--verbose", action="store_true",
+                        help="Verbose output. Same caveat as --quiet for S1.")
+    parser.add_argument("--no-stage", action="store_true",
+                        help="Skip `git add` after mutating writes (default: best-effort stage).")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     p_init = sub.add_parser("init")
-    p_init.add_argument("--project", required=True)
+    p_init.add_argument("--project", default=None,
+                        help="project name (defaults to repo_root directory name)")
     p_init.add_argument("--north-star", default="")
     p_init.add_argument("--force", action="store_true")
 
@@ -2468,6 +2628,8 @@ def main(argv: list[str]) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
     root = args.project_root or _find_repo_root(Path.cwd())
+    # Plumb --no-stage into the commands module's process-global toggle.
+    commands.STAGE_AFTER_WRITE = not args.no_stage
 
     try:
         if args.cmd == "init":
@@ -2538,7 +2700,7 @@ def main(argv: list[str]) -> int:
 
 - [ ] **Step 3: Run green**
 
-Run: `python3 -m unittest tools.tasktool.tests -v`
+Run: `PYTHONPATH=tools python3 -m unittest discover -s tools/tasktool/tests -v`
 Expected: all tests pass.
 
 - [ ] **Step 4: Commit**
@@ -2589,6 +2751,25 @@ class GitStageTests(unittest.TestCase):
             self.assertTrue((t.root / "docs/tasklist.json").exists())
         finally:
             t.cleanup()
+
+    def test_no_stage_skips_git_add(self):
+        t = _Tmp()
+        try:
+            _sp.run(["git", "init", "-q"], cwd=t.root, check=True)
+            _sp.run(["git", "config", "user.email", "t@t"], cwd=t.root, check=True)
+            _sp.run(["git", "config", "user.name", "t"], cwd=t.root, check=True)
+            commands.STAGE_AFTER_WRITE = False
+            try:
+                commands.cmd_init(repo_root=t.root, project="demo")
+            finally:
+                commands.STAGE_AFTER_WRITE = True
+            staged = _sp.run(
+                ["git", "diff", "--cached", "--name-only"],
+                cwd=t.root, capture_output=True, text=True, check=True,
+            ).stdout
+            self.assertNotIn("docs/tasklist.json", staged)
+        finally:
+            t.cleanup()
 ```
 
 - [ ] **Step 2: Implement the helper**
@@ -2598,8 +2779,14 @@ Modify `_save` in `commands.py`:
 ```python
 import subprocess as _subprocess
 
+# Process-global toggle for `--no-stage`. Set by cli.main() before dispatch.
+STAGE_AFTER_WRITE: bool = True
+
 def _git_stage(repo_root: Path, path: Path) -> None:
-    """Best-effort `git add`. Silent on any failure (not a git repo, git missing, etc.)."""
+    """Best-effort `git add`. Silent on any failure (not a git repo, git missing, etc.).
+    Skipped entirely when STAGE_AFTER_WRITE is False (e.g. --no-stage)."""
+    if not STAGE_AFTER_WRITE:
+        return
     try:
         _subprocess.run(
             ["git", "add", "--", str(path.relative_to(repo_root))],
@@ -2618,7 +2805,7 @@ def _save(repo_root: Path, p: Project) -> None:
 
 - [ ] **Step 3: Run green**
 
-Run: `python3 -m unittest tools.tasktool.tests.test_commands -v`
+Run: `PYTHONPATH=tools python3 -m unittest tools.tasktool.tests.test_commands -v`
 
 - [ ] **Step 4: Commit**
 
@@ -2748,7 +2935,7 @@ class ReviewGateE2ETests(unittest.TestCase):
 
 - [ ] **Step 2: Run full test suite**
 
-Run: `python3 -m unittest discover -s tools/tasktool/tests -v`
+Run: `PYTHONPATH=tools python3 -m unittest discover -s tools/tasktool/tests -v`
 Expected: every test (across all modules) passes.
 
 - [ ] **Step 3: Commit**
@@ -2766,7 +2953,7 @@ git commit -m "P2.S1: end-to-end review-gate integration tests"
 
 - [ ] **Step 1: Run the full suite one more time**
 
-Run: `python3 -m unittest discover -s tools/tasktool/tests -v`
+Run: `PYTHONPATH=tools python3 -m unittest discover -s tools/tasktool/tests -v`
 Expected: all green; note the count of tests passing in the post-impl notes you'll add when closing.
 
 - [ ] **Step 2: Test the installed shim end-to-end (optional but recommended)**
