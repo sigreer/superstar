@@ -209,8 +209,12 @@ tasktool create cross --title TEXT
 ### 7.3 Mutate
 
 ```
-tasktool set <id> --status (ready|in_progress|blocked|done)
-    Validates transition (e.g., done requires closed date — auto-stamped if not given).
+tasktool set <id> --status (ready|in_progress|blocked|done) [--reviewer-chain PATH] [--skip-review-gate]
+    Validates transition. For tasks and cross-cutting items, --status done auto-stamps
+    closed and writes immediately. For slices and phases, --status done routes through
+    the same review-gate machinery as `close` / `archive-phase` (§8.2) — the gate cannot
+    be bypassed by reaching for `set` instead of `close`. `blocked` is rejected on
+    non-slice IDs (§6.6).
 
 tasktool close <id> [--refs PATH[,PATH...]] [--closed-date YYYY-MM-DD] [--note TEXT]
                     [--reviewer-chain PATH] [--skip-review-gate]
@@ -305,7 +309,7 @@ The CLI is now the single chokepoint for both data shape and workflow gating. Th
 
 ### 8.3 No raw-edit subcommand
 
-The CLI intentionally exposes no `tasktool edit --raw` or similar. The friction-ful escape hatch is `TASKTOOL_RAW=1 $EDITOR docs/tasklist.json && tasktool validate`. This is by design: removing a low-friction path keeps agents on the sanctioned commands.
+The CLI intentionally exposes no `tasktool edit --raw` or similar. The friction-ful path for emergency hand-edits is `TASKTOOL_RAW=1 $EDITOR docs/tasklist.json && tasktool validate --normalise` (re-canonicalises the edited file so the hook accepts it). `TASKTOOL_RAW=1` is not a hook bypass — see §8.1 — it is a flag for the editor convenience workflow that signals the user is intentionally editing raw JSON. The hook still demands canonical bytes either way. This is by design: removing a low-friction path keeps agents on the sanctioned commands.
 
 ## 9. Skill integration
 
@@ -315,7 +319,7 @@ The skill shrinks substantially. Replaces prose-encoded rules with:
 
 - A short conceptual primer (phases / slices / tasks / cross-cutting; stable IDs; close-in-place; phase archive).
 - A command cheatsheet pointing at `tasktool --help` for full surface.
-- The gating rules (post-slice / post-phase external review before close) — unchanged, since those are workflow rules, not data rules.
+- The gating concepts (post-slice / post-phase external review before close). The rules themselves move into the CLI — `tasktool close` and `archive-phase` refuse without a passing reviewer chain (§8.2). The skill describes *why* the gate exists; the CLI enforces it.
 - The agent's start-of-work primer call: "Run `tasktool brief <id>` when entering a slice; do not read the JSON directly."
 
 Removed from the skill: ID-allocation prose (CLI does it), status emoji/tag table (render concern), date format rules (CLI does it), the orphan-scan procedure (`tasktool next-id` does it).
@@ -346,7 +350,7 @@ For other projects: same sequence after the global shim is installed.
 - **Unit tests** for the data model, validators, ID allocation, status transitions, parsers. Stdlib `unittest`.
 - **CLI integration tests** that invoke `tasktool` as a subprocess against a temp directory; assert exit codes, stdout, and resulting JSON state.
 - **Importer fixture tests**: a handful of real-world TASKLIST.md examples (this repo's once it exists, plus a synthetic edge-case file with all emoji/status combinations) round-trip through `import` → `render` and the output is compared for semantic equivalence.
-- **Hook test**: synthetic git repo with the hook installed; commits that hand-edit the JSON are rejected; commits via the CLI succeed; `TASKTOOL_RAW=1` override works.
+- **Hook test**: synthetic git repo with the hook installed; commits with non-canonical bytes in `docs/tasklist.json` are rejected; commits via the CLI succeed; `TASKTOOL_RAW=1 ... && tasktool validate --normalise` round-trip produces a hook-passing commit.
 
 ## 12. Risks & open questions
 
