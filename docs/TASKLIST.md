@@ -49,11 +49,9 @@ Pre-existing phase, reconstructed from `docs/specs/`, `docs/plans/`, and `docs/r
 
 Spec: [`docs/specs/2026-05-17-P2-tasktool-design.md`](specs/2026-05-17-P2-tasktool-design.md). Plan: _pending_.
 
-Slices will be allocated by the implementation plan. Anticipated shape (subject to change in `writing-plans`):
-
-- ☐ **S1** CLI core: data model, init/create/set/close/show/list/validate/schema, tests.
-- ☐ **S2** Importer, render, brief; migrate this repo from TASKLIST.md to tasklist.json.
-- ☐ **S3** Rewrite `tasklist-discipline` skill; install pre-commit hook; touch up sibling skills.
+- ☐ **S1** CLI core: data model, canonical serializer, allocation, validation, reviewer-gate, and the create/set/close/block/note/ref/title/show/list/validate/schema/next-id/init commands. Plan: [`docs/plans/2026-05-17-p2-s1-tasktool-cli-core.md`](plans/2026-05-17-p2-s1-tasktool-cli-core.md).
+- ☐ **S2** Importer, render, brief, archive-phase; migrate this repo from `TASKLIST.md` to `tasklist.json`. Plan: _pending — written after S1 ships._
+- ☐ **S3** Rewrite `tasklist-discipline` skill; install pre-commit hook; touch up sibling skills (`writing-plans`, `external-review`, `project-setup`, `brainstorming`, `subagent-driven-development`). Plan: _pending — written after S2 ships._
 
 ---
 
