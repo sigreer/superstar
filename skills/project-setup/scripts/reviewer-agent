@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+provider="${AGENT_REVIEWER_PROVIDER:-}"
+if [[ -z "$provider" || "$provider" == "custom" ]]; then
+  provider="codex"
+fi
+
+required=(
+  AGENT_REVIEWER_REPO_ROOT
+  AGENT_REVIEWER_RESPONSE_DIR
+  AGENT_REVIEWER_SCRATCH_DIR
+  AGENT_REVIEWER_TARGET_FILE
+)
+
+for key in "${required[@]}"; do
+  if [[ -z "${!key:-}" ]]; then
+    echo "reviewer-agent: missing required env var: $key" >&2
+    exit 2
+  fi
+done
+
+mkdir -p "$AGENT_REVIEWER_RESPONSE_DIR" "$AGENT_REVIEWER_SCRATCH_DIR"
+
+case "$provider" in
+  codex)
+    output_file="$AGENT_REVIEWER_RESPONSE_DIR/last-message.md"
+    codex exec \
+      --sandbox workspace-write \
+      --ask-for-approval never \
+      --ephemeral \
+      --cd "$AGENT_REVIEWER_SCRATCH_DIR" \
+      --add-dir "$AGENT_REVIEWER_RESPONSE_DIR" \
+      -c 'sandbox_permissions=["disk-full-read-access"]' \
+      --output-last-message "$output_file" \
+      -
+    if [[ -s "$output_file" ]]; then
+      cat "$output_file"
+    fi
+    ;;
+  claude)
+    claude --print \
+      --permission-mode plan \
+      --add-dir "$AGENT_REVIEWER_REPO_ROOT" \
+      --add-dir "$AGENT_REVIEWER_RESPONSE_DIR"
+    ;;
+  *)
+    echo "reviewer-agent: unknown AGENT_REVIEWER_PROVIDER: $provider" >&2
+    exit 2
+    ;;
+esac

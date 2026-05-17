@@ -30,8 +30,10 @@ For each check the skill must report **status** (`present` / `missing` / `partia
 | 5 | `docs/reviewer/` directory                               | Directory exists (chain folders land here).                            | `mkdir -p docs/reviewer` and add a `.gitkeep`.                               |
 | 6 | `docs/archived-tasks/` directory                         | Directory exists (phase-close target).                                 | `mkdir -p docs/archived-tasks` and add a `.gitkeep`.                         |
 | 7 | `scripts/external-reviewer.py`                           | Either present at the repo root, or `AGENT_REVIEWER_CMD` is set.       | Copy from `skills/external-review/scripts/external-reviewer.py`, `chmod +x`. |
-| 8 | Reviewer command available                               | `AGENT_REVIEWER_CMD` (env) is set, or the default `reviewer-agent` is on `PATH`. | Print the exact env-var or wrapper-install instruction; do **not** install third-party tools without confirmation. |
+| 8 | Reviewer command available                               | `AGENT_REVIEWER_CMD` (env) is set, or the default `reviewer-agent` is on `PATH`. | Print the exact command to install `skills/project-setup/scripts/reviewer-agent` to a user-chosen bin dir, or the exact `AGENT_REVIEWER_CMD` override. Do **not** install third-party tools or edit shell config without confirmation. The wrapper must not use provider bypass/no-sandbox flags. |
 | 9 | CLAUDE.md mentions superstar planning discipline | The repo's CLAUDE.md (or AGENTS.md / GEMINI.md) references the skill set. | Append a small "Planning & implementation discipline" block referencing `brainstorming`, `writing-plans`, `subagent-driven-development`, `external-review`, `tasklist-discipline`. |
+
+**Safe reviewer wrapper.** The bundled template at `skills/project-setup/scripts/reviewer-agent` is the default recommendation. It expects `external-reviewer.py` to pass `AGENT_REVIEWER_PROVIDER`, `AGENT_REVIEWER_REPO_ROOT`, `AGENT_REVIEWER_RESPONSE_DIR`, `AGENT_REVIEWER_SCRATCH_DIR`, and `AGENT_REVIEWER_TARGET_FILE`. Do not recommend wrappers that call Codex with `--dangerously-bypass-approvals-and-sandbox` or Claude with `--dangerously-skip-permissions`.
 
 ## The process
 
