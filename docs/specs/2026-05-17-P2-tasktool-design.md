@@ -1,13 +1,13 @@
 # P2 — tasktool: JSON-backed task management CLI
 
-**Status:** spec, awaiting external review
+**Status:** implemented (P2.S1, P2.S2, P2.S3 closed; post-phase review in progress 2026-05-18)
 **Author:** Simon Greer (with AI brainstorming)
 **Date:** 2026-05-17
-**TASKLIST entry:** `P2` in [`docs/TASKLIST.md`](../TASKLIST.md)
+**TASKLIST entry:** `P2` in [`docs/tasklist.json`](../tasklist.json) — view via `tasktool show P2`
 
 ## 1. Problem
 
-`docs/TASKLIST.md` is the canonical project tracker in superstar's workflow. The format is enforced by prose (the `tasklist-discipline` skill), not by code:
+`docs/TASKLIST.md` was the canonical project tracker in superstar's workflow before this phase. The format was enforced by prose (the `tasklist-discipline` skill), not by code:
 
 - Stable P/S/T/X IDs, never renumbered.
 - Status emoji set (`✅` / `🚧` / `⏸` / `☐`) paired with status tags (`DONE YYYY-MM-DD`, `IN PROGRESS`, `BLOCKED on …`, `READY`).
@@ -209,12 +209,14 @@ tasktool create cross --title TEXT
 ### 7.3 Mutate
 
 ```
-tasktool set <id> --status (ready|in_progress|blocked|done) [--reviewer-chain PATH] [--skip-review-gate]
+tasktool set <id> --status (ready|in_progress|done) [--reviewer-chain PATH] [--skip-review-gate]
     Validates transition. For tasks and cross-cutting items, --status done auto-stamps
     closed and writes immediately. For slices and phases, --status done routes through
     the same review-gate machinery as `close` / `archive-phase` (§8.2) — the gate cannot
-    be bypassed by reaching for `set` instead of `close`. `blocked` is rejected on
-    non-slice IDs (§6.6).
+    be bypassed by reaching for `set` instead of `close`. **Implementation note:**
+    `blocked` is deliberately not a value of `set --status`; routing all block/unblock
+    transitions through `tasktool block` / `tasktool unblock` keeps the dependency
+    metadata (`blocked_on`, audit trail) under a single command surface (§6.6).
 
 tasktool close <id> [--refs PATH[,PATH...]] [--closed-date YYYY-MM-DD] [--note TEXT]
                     [--reviewer-chain PATH] [--skip-review-gate]
@@ -358,9 +360,9 @@ For other projects: same sequence after the global shim is installed.
 
 ## 12. Risks & open questions
 
-- **Risk: AGS sidebar Python import path.** Depends on how the installer makes `tasktool` importable. Likely a symlink into a user site-packages dir, or a PYTHONPATH addition in the AGS launcher. To be confirmed during S1 against the actual AGS environment.
-- **Risk: agents bypass the CLI by editing JSON directly anyway.** The hook catches commits but not in-session edits. Mitigation: the skill rewrite is explicit; the validator output names what changed. Worst case, add a file-watcher or `tasktool diff` to spot un-CLI-attributed changes.
-- **Open question: AGS read API.** Is `import tasktool; tasktool.brief(...)` the right surface, or should AGS shell out to `tasktool brief --format json`? Probably both work; settle during S1.
+- **Risk: AGS sidebar Python import path.** Depends on how the installer makes `tasktool` importable. **Resolved (post-implementation, 2026-05-18):** `tools/tasktool/install.sh` installs a shim at `~/.local/bin/tasktool` and exposes the package via `PYTHONPATH=tools/`. AGS widgets that want in-process access can do `sys.path.insert(0, '<repo>/tools'); import tasktool.commands as t; t.load_project(...)`. The shim path also satisfies CLI consumers.
+- **Risk: agents bypass the CLI by editing JSON directly anyway.** The hook catches commits but not in-session edits. **Mitigation in place:** P2.S3 installed a per-project pre-commit hook (`tools/tasktool/templates/pre-commit-tasktool`) that refuses non-canonical bytes, orphan spec/plan filenames, and any commit that touches `docs/TASKLIST.md`. In-session edits remain possible but cannot land on disk via git without normalisation.
+- **Open question: AGS read API.** Is `import tasktool; tasktool.brief(...)` the right surface, or should AGS shell out to `tasktool brief --format json`? **Deferred to AGS integration work (out of scope for P2):** both work — the package exposes `commands.cmd_brief` for in-process callers, and `tasktool brief --format json` is supported for shell-out. Pick per call site when AGS widgets are wired in.
 
 ## 13. Acceptance
 

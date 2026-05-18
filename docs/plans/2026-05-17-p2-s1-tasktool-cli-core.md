@@ -1,6 +1,6 @@
 # P2.S1 — tasktool CLI core Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superstar:subagent-driven-development (recommended) or superstar:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superstar:subagent-driven-development (recommended) or superstar:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Build the Python stdlib CLI core for `tasktool` — data model, canonical serializer, validation, ID allocation, reviewer-gate, and the mutation/read commands. End state: `tasktool init && tasktool create phase --title "..." && tasktool show P1` round-trips cleanly, `tasktool validate --strict-format` blocks non-canonical commits.
 
@@ -63,7 +63,7 @@ Not touched in this slice: `tools/tasktool/templates/pre-commit-tasktool` (S3), 
 - Create: `tools/tasktool/tests/__init__.py`
 - Create: `tools/tasktool/tests/test_cli_integration.py`
 
-- [ ] **Step 1: Create empty package skeleton**
+- [x] **Step 1: Create empty package skeleton**
 
 ```python
 # tools/tasktool/__init__.py
@@ -95,7 +95,7 @@ def main(argv: list[str]) -> int:
 # tools/tasktool/tests/__init__.py
 ```
 
-- [ ] **Step 2: Write the smoke test**
+- [x] **Step 2: Write the smoke test**
 
 ```python
 # tools/tasktool/tests/test_cli_integration.py
@@ -128,12 +128,12 @@ class SmokeTests(unittest.TestCase):
         self.assertEqual(result.returncode, 2)
 ```
 
-- [ ] **Step 3: Run tests**
+- [x] **Step 3: Run tests**
 
 Run: `PYTHONPATH=tools python3 -m unittest discover -s tools/tasktool/tests -v`
 Expected: 2 tests pass.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add tools/tasktool/
@@ -148,7 +148,7 @@ git commit -m "P2.S1: scaffold tasktool package and smoke test"
 - Create: `tools/tasktool/ids.py`
 - Create: `tools/tasktool/tests/test_ids.py`
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 ```python
 # tools/tasktool/tests/test_ids.py
@@ -216,12 +216,12 @@ class SplitTests(unittest.TestCase):
         self.assertEqual(split_qualified("S3"), (None, "S3", None))
 ```
 
-- [ ] **Step 2: Run tests, verify all fail**
+- [x] **Step 2: Run tests, verify all fail**
 
 Run: `PYTHONPATH=tools python3 -m unittest tools.tasktool.tests.test_ids -v`
 Expected: ImportError or all-red.
 
-- [ ] **Step 3: Implement ids.py**
+- [x] **Step 3: Implement ids.py**
 
 ```python
 # tools/tasktool/ids.py
@@ -304,12 +304,12 @@ def split_qualified(value: str) -> tuple[str | None, str | None, str | None]:
     return tuple(m.groups())  # type: ignore[return-value]
 ```
 
-- [ ] **Step 4: Run tests, verify green**
+- [x] **Step 4: Run tests, verify green**
 
 Run: `PYTHONPATH=tools python3 -m unittest tools.tasktool.tests.test_ids -v`
 Expected: all 17 tests pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tools/tasktool/ids.py tools/tasktool/tests/test_ids.py
@@ -324,7 +324,7 @@ git commit -m "P2.S1: ID parsing and qualification"
 - Create: `tools/tasktool/model.py`
 - Create: `tools/tasktool/tests/test_model.py`
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 ```python
 # tools/tasktool/tests/test_model.py
@@ -385,11 +385,11 @@ class ConstructionTests(unittest.TestCase):
         self.assertEqual(b.value, "vendor X")
 ```
 
-- [ ] **Step 2: Run, verify red**
+- [x] **Step 2: Run, verify red**
 
 Run: `PYTHONPATH=tools python3 -m unittest tools.tasktool.tests.test_model -v`
 
-- [ ] **Step 3: Implement model.py**
+- [x] **Step 3: Implement model.py**
 
 ```python
 # tools/tasktool/model.py
@@ -476,12 +476,12 @@ class Project:
     archived_phases: list[ArchivedPhase] = field(default_factory=list)
 ```
 
-- [ ] **Step 4: Run tests green**
+- [x] **Step 4: Run tests green**
 
 Run: `PYTHONPATH=tools python3 -m unittest tools.tasktool.tests.test_model -v`
 Expected: 8 tests pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tools/tasktool/model.py tools/tasktool/tests/test_model.py
@@ -496,7 +496,7 @@ git commit -m "P2.S1: data model dataclasses"
 - Create: `tools/tasktool/serialize.py`
 - Create: `tools/tasktool/tests/test_serialize.py`
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 ```python
 # tools/tasktool/tests/test_serialize.py
@@ -569,11 +569,11 @@ class DiskIOTests(unittest.TestCase):
             self.assertEqual(on_disk, dumps_canonical(p))
 ```
 
-- [ ] **Step 2: Run, verify red**
+- [x] **Step 2: Run, verify red**
 
 Run: `PYTHONPATH=tools python3 -m unittest tools.tasktool.tests.test_serialize -v`
 
-- [ ] **Step 3: Implement serialize.py**
+- [x] **Step 3: Implement serialize.py**
 
 ```python
 # tools/tasktool/serialize.py
@@ -677,12 +677,12 @@ def save_project(p: Project, path: Path) -> None:
     tmp.replace(path)
 ```
 
-- [ ] **Step 4: Run tests green**
+- [x] **Step 4: Run tests green**
 
 Run: `PYTHONPATH=tools python3 -m unittest tools.tasktool.tests.test_serialize -v`
 Expected: 6 tests pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tools/tasktool/serialize.py tools/tasktool/tests/test_serialize.py
@@ -697,7 +697,7 @@ git commit -m "P2.S1: canonical JSON serializer with atomic write"
 - Create: `tools/tasktool/validate.py`
 - Create: `tools/tasktool/tests/test_validate.py`
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 ```python
 # tools/tasktool/tests/test_validate.py
@@ -875,11 +875,11 @@ class StrictFormatTests(unittest.TestCase):
             strict_format_check(path)  # now passes
 ```
 
-- [ ] **Step 2: Run red**
+- [x] **Step 2: Run red**
 
 Run: `PYTHONPATH=tools python3 -m unittest tools.tasktool.tests.test_validate -v`
 
-- [ ] **Step 3: Implement validate.py**
+- [x] **Step 3: Implement validate.py**
 
 ```python
 # tools/tasktool/validate.py
@@ -1029,12 +1029,12 @@ def normalise_file(path: Path) -> None:
     save_project(p, path)
 ```
 
-- [ ] **Step 4: Run green**
+- [x] **Step 4: Run green**
 
 Run: `PYTHONPATH=tools python3 -m unittest tools.tasktool.tests.test_validate -v`
 Expected: all tests pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tools/tasktool/validate.py tools/tasktool/tests/test_validate.py
@@ -1049,7 +1049,7 @@ git commit -m "P2.S1: validation rules + strict-format + normalise"
 - Create: `tools/tasktool/allocate.py`
 - Create: `tools/tasktool/tests/test_allocate.py`
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 ```python
 # tools/tasktool/tests/test_allocate.py
@@ -1135,11 +1135,11 @@ class CrossAllocTests(unittest.TestCase):
             self.assertEqual(next_cross_id(p, Path(td)), "X1")
 ```
 
-- [ ] **Step 2: Run red**
+- [x] **Step 2: Run red**
 
 Run: `PYTHONPATH=tools python3 -m unittest tools.tasktool.tests.test_allocate -v`
 
-- [ ] **Step 3: Implement allocate.py**
+- [x] **Step 3: Implement allocate.py**
 
 ```python
 # tools/tasktool/allocate.py
@@ -1240,11 +1240,11 @@ def next_cross_id(p: Project, repo_root: Path) -> str:
     return f"X{n}"
 ```
 
-- [ ] **Step 4: Run green**
+- [x] **Step 4: Run green**
 
 Run: `PYTHONPATH=tools python3 -m unittest tools.tasktool.tests.test_allocate -v`
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tools/tasktool/allocate.py tools/tasktool/tests/test_allocate.py
@@ -1259,7 +1259,7 @@ git commit -m "P2.S1: orphan-aware ID allocation"
 - Create: `tools/tasktool/reviewer_gate.py`
 - Create: `tools/tasktool/tests/test_reviewer_gate.py`
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 ```python
 # tools/tasktool/tests/test_reviewer_gate.py
@@ -1338,11 +1338,11 @@ class VerdictTests(unittest.TestCase):
                 check_gate(root, "P2.S1", "post-slice")
 ```
 
-- [ ] **Step 2: Run red**
+- [x] **Step 2: Run red**
 
 Run: `PYTHONPATH=tools python3 -m unittest tools.tasktool.tests.test_reviewer_gate -v`
 
-- [ ] **Step 3: Implement reviewer_gate.py**
+- [x] **Step 3: Implement reviewer_gate.py**
 
 ```python
 # tools/tasktool/reviewer_gate.py
@@ -1411,11 +1411,11 @@ def check_gate(repo_root: Path, work_id: str, kind: str, *, explicit: Path | Non
     return GatePass(chain=chain, verdict=verdict)
 ```
 
-- [ ] **Step 4: Run green**
+- [x] **Step 4: Run green**
 
 Run: `PYTHONPATH=tools python3 -m unittest tools.tasktool.tests.test_reviewer_gate -v`
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tools/tasktool/reviewer_gate.py tools/tasktool/tests/test_reviewer_gate.py
@@ -1430,7 +1430,7 @@ git commit -m "P2.S1: reviewer-gate chain discovery and verdict check"
 - Create: `tools/tasktool/commands.py`
 - Create: `tools/tasktool/tests/test_commands.py`
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 ```python
 # tools/tasktool/tests/test_commands.py
@@ -1523,11 +1523,11 @@ class CreateTests(unittest.TestCase):
         self.assertEqual(new_id, "X1")
 ```
 
-- [ ] **Step 2: Run red**
+- [x] **Step 2: Run red**
 
 Run: `PYTHONPATH=tools python3 -m unittest tools.tasktool.tests.test_commands -v`
 
-- [ ] **Step 3: Implement commands.py (init + create only for now)**
+- [x] **Step 3: Implement commands.py (init + create only for now)**
 
 ```python
 # tools/tasktool/commands.py
@@ -1634,11 +1634,11 @@ def cmd_create_cross(*, repo_root: Path, title: str) -> str:
     return new_id
 ```
 
-- [ ] **Step 4: Run green**
+- [x] **Step 4: Run green**
 
 Run: `PYTHONPATH=tools python3 -m unittest tools.tasktool.tests.test_commands -v`
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tools/tasktool/commands.py tools/tasktool/tests/test_commands.py
@@ -1653,7 +1653,7 @@ git commit -m "P2.S1: init + create commands"
 - Modify: `tools/tasktool/commands.py`
 - Modify: `tools/tasktool/tests/test_commands.py`
 
-- [ ] **Step 1: Add failing tests**
+- [x] **Step 1: Add failing tests**
 
 Append to `tools/tasktool/tests/test_commands.py`:
 
@@ -1800,12 +1800,12 @@ class ShortFormResolutionTests(unittest.TestCase):
         self.assertEqual(new_id, "T2")
 ```
 
-- [ ] **Step 2: Run red**
+- [x] **Step 2: Run red**
 
 Run: `PYTHONPATH=tools python3 -m unittest tools.tasktool.tests.test_commands -v`
 Expected: import errors / attribute errors for the new commands.
 
-- [ ] **Step 3: Extend commands.py**
+- [x] **Step 3: Extend commands.py**
 
 Append to `tools/tasktool/commands.py`. The appended block introduces `_resolve_id` and then redefines `cmd_create_task` to use it; the later definition shadows Task 8's version (this is intentional — Python keeps the last definition). Alternatively, delete the Task 8 `cmd_create_task` before appending if you prefer a single definition in the file.
 
@@ -1973,11 +1973,11 @@ def cmd_unblock(*, repo_root: Path, slice_id: str, resume: bool = False) -> None
     _save(repo_root, p)
 ```
 
-- [ ] **Step 4: Run green**
+- [x] **Step 4: Run green**
 
 Run: `PYTHONPATH=tools python3 -m unittest tools.tasktool.tests.test_commands -v`
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tools/tasktool/commands.py tools/tasktool/tests/test_commands.py
@@ -1992,7 +1992,7 @@ git commit -m "P2.S1: set/close/block/unblock with review gate"
 - Modify: `tools/tasktool/commands.py`
 - Modify: `tools/tasktool/tests/test_commands.py`
 
-- [ ] **Step 1: Add failing tests**
+- [x] **Step 1: Add failing tests**
 
 Append to test file:
 
@@ -2033,7 +2033,7 @@ class NoteRefTitleTests(unittest.TestCase):
         self.assertEqual(p.phases[0].slices[0].title, "renamed")
 ```
 
-- [ ] **Step 2: Run red, then implement**
+- [x] **Step 2: Run red, then implement**
 
 Append to `commands.py`:
 
@@ -2077,11 +2077,11 @@ def cmd_title(*, repo_root: Path, id: str, new: str) -> None:
     _save(repo_root, p)
 ```
 
-- [ ] **Step 3: Run green**
+- [x] **Step 3: Run green**
 
 Run: `PYTHONPATH=tools python3 -m unittest tools.tasktool.tests.test_commands -v`
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add tools/tasktool/commands.py tools/tasktool/tests/test_commands.py
@@ -2096,7 +2096,7 @@ git commit -m "P2.S1: note/ref/title commands"
 - Modify: `tools/tasktool/commands.py`
 - Modify: `tools/tasktool/tests/test_commands.py`
 
-- [ ] **Step 1: Add failing tests**
+- [x] **Step 1: Add failing tests**
 
 Append:
 
@@ -2145,7 +2145,7 @@ class NextIdTests(unittest.TestCase):
             t.cleanup()
 ```
 
-- [ ] **Step 2: Run red, then implement**
+- [x] **Step 2: Run red, then implement**
 
 Append to `commands.py`:
 
@@ -2244,11 +2244,11 @@ def cmd_next_id(
     raise CommandError(f"unknown kind {kind}")
 ```
 
-- [ ] **Step 3: Run green**
+- [x] **Step 3: Run green**
 
 Run: `PYTHONPATH=tools python3 -m unittest tools.tasktool.tests.test_commands -v`
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add tools/tasktool/commands.py tools/tasktool/tests/test_commands.py
@@ -2264,7 +2264,7 @@ git commit -m "P2.S1: show/list/next-id commands"
 - Modify: `tools/tasktool/commands.py`
 - Modify: `tools/tasktool/tests/test_commands.py`
 
-- [ ] **Step 1: Add failing tests**
+- [x] **Step 1: Add failing tests**
 
 Append:
 
@@ -2313,7 +2313,7 @@ class SchemaCmdTests(unittest.TestCase):
         self.assertIn("phases", data["properties"])
 ```
 
-- [ ] **Step 2: Implement schema_gen.py**
+- [x] **Step 2: Implement schema_gen.py**
 
 ```python
 # tools/tasktool/schema_gen.py
@@ -2435,7 +2435,7 @@ def dump_schema() -> str:
     return json.dumps(build_schema(), indent=2, sort_keys=True) + "\n"
 ```
 
-- [ ] **Step 3: Append commands**
+- [x] **Step 3: Append commands**
 
 Append to `commands.py`:
 
@@ -2493,11 +2493,11 @@ def cmd_schema() -> str:
     return dump_schema()
 ```
 
-- [ ] **Step 4: Run green**
+- [x] **Step 4: Run green**
 
 Run: `PYTHONPATH=tools python3 -m unittest tools.tasktool.tests.test_commands -v`
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tools/tasktool/schema_gen.py tools/tasktool/commands.py tools/tasktool/tests/test_commands.py
@@ -2512,7 +2512,7 @@ git commit -m "P2.S1: validate + schema commands"
 - Modify: `tools/tasktool/cli.py`
 - Modify: `tools/tasktool/tests/test_cli_integration.py`
 
-- [ ] **Step 1: Add failing tests**
+- [x] **Step 1: Add failing tests**
 
 Append to `test_cli_integration.py`:
 
@@ -2576,7 +2576,7 @@ class CliEndToEndTests(unittest.TestCase):
         self.assertIn("properties", data)
 ```
 
-- [ ] **Step 2: Run red, then rewrite cli.py**
+- [x] **Step 2: Run red, then rewrite cli.py**
 
 Replace `tools/tasktool/cli.py`:
 
@@ -2766,12 +2766,12 @@ def main(argv: list[str]) -> int:
     return 0
 ```
 
-- [ ] **Step 3: Run green**
+- [x] **Step 3: Run green**
 
 Run: `PYTHONPATH=tools python3 -m unittest discover -s tools/tasktool/tests -v`
 Expected: all tests pass.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add tools/tasktool/cli.py tools/tasktool/tests/test_cli_integration.py
@@ -2788,7 +2788,7 @@ The spec §7 conventions require mutating commands to `git add` the JSON after w
 - Modify: `tools/tasktool/commands.py`
 - Modify: `tools/tasktool/tests/test_commands.py`
 
-- [ ] **Step 1: Add failing test**
+- [x] **Step 1: Add failing test**
 
 Append to `test_commands.py`:
 
@@ -2840,7 +2840,7 @@ class GitStageTests(unittest.TestCase):
             t.cleanup()
 ```
 
-- [ ] **Step 2: Implement the helper**
+- [x] **Step 2: Implement the helper**
 
 Modify `_save` in `commands.py`:
 
@@ -2871,11 +2871,11 @@ def _save(repo_root: Path, p: Project) -> None:
     _git_stage(repo_root, path)
 ```
 
-- [ ] **Step 3: Run green**
+- [x] **Step 3: Run green**
 
 Run: `PYTHONPATH=tools python3 -m unittest tools.tasktool.tests.test_commands -v`
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add tools/tasktool/commands.py tools/tasktool/tests/test_commands.py
@@ -2889,7 +2889,7 @@ git commit -m "P2.S1: best-effort git-stage after mutations"
 **Files:**
 - Create: `tools/tasktool/install.sh`
 
-- [ ] **Step 1: Write installer**
+- [x] **Step 1: Write installer**
 
 ```bash
 #!/usr/bin/env bash
@@ -2931,7 +2931,7 @@ echo "Pointing at $PKG_ROOT/tasktool"
 echo "Self-test passed."
 ```
 
-- [ ] **Step 2: Make executable and dry-run sanity check**
+- [x] **Step 2: Make executable and dry-run sanity check**
 
 ```bash
 chmod +x tools/tasktool/install.sh
@@ -2940,7 +2940,7 @@ bash -n tools/tasktool/install.sh
 echo "syntax ok"
 ```
 
-- [ ] **Step 3: Commit (do NOT actually run the installer here — that's an end-of-slice step)**
+- [x] **Step 3: Commit (do NOT actually run the installer here — that's an end-of-slice step)**
 
 ```bash
 git add tools/tasktool/install.sh
@@ -2954,7 +2954,7 @@ git commit -m "P2.S1: installer script for ~/.local/bin/tasktool shim"
 **Files:**
 - Modify: `tools/tasktool/tests/test_cli_integration.py`
 
-- [ ] **Step 1: Add a end-to-end test that exercises the review gate**
+- [x] **Step 1: Add a end-to-end test that exercises the review gate**
 
 Append:
 
@@ -3064,12 +3064,12 @@ class ReviewGateE2ETests(unittest.TestCase):
             t.cleanup()
 ```
 
-- [ ] **Step 2: Run full test suite**
+- [x] **Step 2: Run full test suite**
 
 Run: `PYTHONPATH=tools python3 -m unittest discover -s tools/tasktool/tests -v`
 Expected: every test (across all modules) passes.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add tools/tasktool/tests/test_cli_integration.py
@@ -3082,12 +3082,12 @@ git commit -m "P2.S1: end-to-end review-gate integration tests"
 
 **Files:** read-only inspection across the slice
 
-- [ ] **Step 1: Run the full suite one more time**
+- [x] **Step 1: Run the full suite one more time**
 
 Run: `PYTHONPATH=tools python3 -m unittest discover -s tools/tasktool/tests -v`
 Expected: all green; note the count of tests passing in the post-impl notes you'll add when closing.
 
-- [ ] **Step 2: Test the installed shim end-to-end (optional but recommended)**
+- [x] **Step 2: Test the installed shim end-to-end (optional but recommended)**
 
 ```bash
 bash tools/tasktool/install.sh
@@ -3095,7 +3095,7 @@ tasktool --help
 tasktool schema | python3 -m json.tool > /dev/null && echo "schema ok"
 ```
 
-- [ ] **Step 3: Verify the spec ↔ code surface match**
+- [x] **Step 3: Verify the spec ↔ code surface match**
 
 Spot-check by listing CLI subcommands and reconciling against §7 of the spec:
 
@@ -3108,7 +3108,7 @@ python3 -m tasktool 2>&1 | head -5   # argparse usage line
 
 Items deferred to S2: `import`, `brief`, `render`, `archive-phase`. Make a note that they're intentionally absent in S1's slice-close write-up.
 
-- [ ] **Step 4: Stop here — do not flip the TASKLIST slice yet**
+- [x] **Step 4: Stop here — do not flip the TASKLIST slice yet**
 
 The slice-close itself is performed by the coordinator after `external-review --kind post-slice` returns `ready` / `ready with small edits`. Do not edit `docs/TASKLIST.md` from within the slice work; that's the coordinator's job at slice close.
 

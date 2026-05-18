@@ -1,6 +1,6 @@
 # P2.S2 — tasktool importer / render / brief / archive-phase Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superstar:subagent-driven-development (recommended) or superstar:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superstar:subagent-driven-development (recommended) or superstar:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Add the four S2 commands to `tasktool` (`import`, `render`, `brief`, `archive-phase`), then migrate this repository from `docs/TASKLIST.md` to `docs/tasklist.json`. End state: `docs/TASKLIST.md` is deleted, `docs/tasklist.json` is the canonical tracker, `tasktool render` reproduces a semantically-equivalent markdown view on demand, and `tasktool brief P2.S2` returns the start-of-work primer for the next agent that picks up work in this phase.
 
@@ -90,7 +90,7 @@ class ParseResult:
 
 The parser is **forgiving**: it never raises on malformed input. Anything it cannot interpret becomes a warning (line number + offending text). The caller decides whether to abort.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # tools/tasktool/tests/test_importer.py
@@ -133,12 +133,12 @@ class TestImporterPhase(unittest.TestCase):
         self.assertEqual(ph.closed, "2026-05-17")  # required for validator pass
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `PYTHONPATH=tools python3 -m unittest tools.tasktool.tests.test_importer -v`
 Expected: FAIL with `ModuleNotFoundError: No module named 'tasktool.importer'`.
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 ```python
 # tools/tasktool/importer.py
@@ -224,12 +224,12 @@ def parse_tasklist_md(text: str) -> ParseResult:
     return ParseResult(project=project, warnings=warnings)
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `PYTHONPATH=tools python3 -m unittest tools.tasktool.tests.test_importer -v`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tools/tasktool/importer.py tools/tasktool/tests/test_importer.py
@@ -253,7 +253,7 @@ Slice bullets look like:
 
 The slice line contains: emoji, ID (`S\d+[a-z]?`), tag in backticks (optional for `READY`), then title text, optional inline `Plan: [...]` link, optional trailing prose.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # add to test_importer.py
@@ -286,11 +286,11 @@ Note: the test asserts `P2.S3` because that's what the tag says. Adjust the fixt
 
 Correct the test fixture: change the third bullet to `\`BLOCKED on P2.S3\`` (without the `a`) so the assertion is self-consistent. The slice ID itself is `S3a`; what it's blocked on is `P2.S3`.
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Expected: FAIL — no slice parsing yet.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Add to `importer.py`:
 
@@ -339,11 +339,11 @@ if sm and current_phase is not None:
     continue
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tools/tasktool/importer.py tools/tasktool/tests/test_importer.py
@@ -362,7 +362,7 @@ Cross-cutting block is introduced by `## Cross-cutting` and contains bullets sha
 
 Unmatched lines under a known section are silently ignored *unless* they look like a bullet (`-` at start) — those become warnings.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # add to test_importer.py
@@ -404,11 +404,11 @@ class TestImporterMisc(unittest.TestCase):
         )
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Expected: FAIL — no cross-cutting parsing, no warnings collection.
 
-- [ ] **Step 3: Implementation**
+- [x] **Step 3: Implementation**
 
 Add to `importer.py`:
 
@@ -438,11 +438,11 @@ In `parse_tasklist_md`, track an `in_cross` flag toggled by `CROSS_HEADER_RE`. W
 
 This makes Task 12's migration check unambiguous: P1 stays in `phases[]` with `status: done` and a historical note; nothing is moved to `archived_phases[]` during the migration.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tools/tasktool/importer.py tools/tasktool/tests/test_importer.py
@@ -467,7 +467,7 @@ git commit -m "P2.S2: importer — cross-cutting and warnings"
 4. If `--dry-run`, print the canonical JSON (via `dumps_canonical`) and the warnings to stdout, do NOT touch disk.
 5. Otherwise, refuse if `docs/tasklist.json` already exists unless `--force` is passed. On success, write canonically (via `_save`, which also runs `validate_project`) and print the warnings to stderr.
 
-- [ ] **Step 1: Write the failing CLI integration test**
+- [x] **Step 1: Write the failing CLI integration test**
 
 ```python
 # add to test_cli_integration.py
@@ -491,11 +491,11 @@ def test_import_dry_run(self):
     self.assertIn('"id": "P2"', out)
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Expected: FAIL — `tasktool import` is not a known command.
 
-- [ ] **Step 3: Implementation**
+- [x] **Step 3: Implementation**
 
 In `commands.py`:
 
@@ -551,12 +551,12 @@ elif args.cmd == "import":
 
 In `__init__.py`, add `from tasktool.importer import parse_tasklist_md` to the imports and `"parse_tasklist_md"` to `__all__`.
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `PYTHONPATH=tools python3 -m unittest discover -s tools/tasktool/tests -v`
 Expected: all tests pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tools/tasktool/commands.py tools/tasktool/cli.py tools/tasktool/__init__.py tools/tasktool/tests/test_cli_integration.py
@@ -573,7 +573,7 @@ git commit -m "P2.S2: tasktool import command"
 
 `render.render_project(p: Project) -> str` produces a markdown document approximating the original `TASKLIST.md` shape. It is **not byte-identical** to the hand-written original — that's the explicit non-goal in spec §3. Section ordering, ID-allocation prose, and the "How to use this map" footer are dropped. Only essential content is rendered: project header, last-reviewed line, North Star (if set), per-phase sections, cross-cutting section, archived-phases section.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # tools/tasktool/tests/test_render.py
@@ -608,11 +608,11 @@ class TestRender(unittest.TestCase):
         self.assertIn("- ☐ **X1**", out)
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Expected: FAIL — `tasktool.render` does not exist.
 
-- [ ] **Step 3: Implementation**
+- [x] **Step 3: Implementation**
 
 ```python
 # tools/tasktool/render.py
@@ -675,12 +675,12 @@ def render_project(p: Project) -> str:
     return "\n".join(lines).rstrip() + "\n"
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `PYTHONPATH=tools python3 -m unittest tools.tasktool.tests.test_render -v`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tools/tasktool/render.py tools/tasktool/tests/test_render.py
@@ -697,7 +697,7 @@ git commit -m "P2.S2: render module"
 - Modify: `tools/tasktool/__init__.py`
 - Modify: `tools/tasktool/tests/test_cli_integration.py`
 
-- [ ] **Step 1: Write the failing CLI test**
+- [x] **Step 1: Write the failing CLI test**
 
 ```python
 def test_render_outputs_markdown(self):
@@ -708,11 +708,11 @@ def test_render_outputs_markdown(self):
     self.assertIn("## P1 — Demo phase", out)
 ```
 
-- [ ] **Step 2: Verify it fails**
+- [x] **Step 2: Verify it fails**
 
 Expected: FAIL — `render` is not a subcommand.
 
-- [ ] **Step 3: Implementation**
+- [x] **Step 3: Implementation**
 
 In `commands.py`:
 
@@ -740,12 +740,12 @@ elif args.cmd == "render":
 
 Re-export `render_project` from `__init__.py`.
 
-- [ ] **Step 4: Verify it passes**
+- [x] **Step 4: Verify it passes**
 
 Run: `PYTHONPATH=tools python3 -m unittest discover -s tools/tasktool/tests -v`
 Expected: all green.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tools/tasktool/commands.py tools/tasktool/cli.py tools/tasktool/__init__.py tools/tasktool/tests/test_cli_integration.py
@@ -767,7 +767,7 @@ git commit -m "P2.S2: tasktool render command"
 - **For a task (`P2.S1.T3`)**: header, task status + notes, parent slice one-liner. (Edge case; not the primary use case.)
 - **For a cross (`X1`)**: header, status, refs, notes.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # tools/tasktool/tests/test_brief.py
@@ -810,11 +810,11 @@ class TestBrief(unittest.TestCase):
         self.assertIn("S2  [in_progress]", out)
 ```
 
-- [ ] **Step 2: Verify it fails**
+- [x] **Step 2: Verify it fails**
 
 Expected: FAIL — module does not exist.
 
-- [ ] **Step 3: Implementation**
+- [x] **Step 3: Implementation**
 
 ```python
 # tools/tasktool/brief.py
@@ -901,11 +901,11 @@ def brief(p: Project, qid: str) -> str:
     return "\n".join(lines) + "\n"
 ```
 
-- [ ] **Step 4: Verify it passes**
+- [x] **Step 4: Verify it passes**
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tools/tasktool/brief.py tools/tasktool/tests/test_brief.py
@@ -922,7 +922,7 @@ git commit -m "P2.S2: brief module"
 - Modify: `tools/tasktool/__init__.py`
 - Modify: `tools/tasktool/tests/test_cli_integration.py`
 
-- [ ] **Step 1: Write the failing CLI test**
+- [x] **Step 1: Write the failing CLI test**
 
 ```python
 def test_brief_slice(self):
@@ -938,11 +938,11 @@ def test_brief_slice(self):
     self.assertIn("Task A", out)
 ```
 
-- [ ] **Step 2: Verify it fails**
+- [x] **Step 2: Verify it fails**
 
 Expected: FAIL.
 
-- [ ] **Step 3: Implementation**
+- [x] **Step 3: Implementation**
 
 In `commands.py`:
 
@@ -970,11 +970,11 @@ elif args.cmd == "brief":
 
 Re-export `brief` from `__init__.py`.
 
-- [ ] **Step 4: Verify it passes**
+- [x] **Step 4: Verify it passes**
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tools/tasktool/commands.py tools/tasktool/cli.py tools/tasktool/__init__.py tools/tasktool/tests/test_cli_integration.py
@@ -1004,7 +1004,7 @@ Per spec §7.3 and §8.2:
 
 `<slug>` is generated from the phase title via the rule: lowercase, replace non-alphanumerics with `-`, collapse repeated `-`, trim leading/trailing `-`. Cap at 40 chars.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # add to test_commands.py
@@ -1042,11 +1042,11 @@ def test_archive_phase_refuses_with_open_slices(self):
     self.assertIn("open slices", str(cm.exception).lower())
 ```
 
-- [ ] **Step 2: Verify it fails**
+- [x] **Step 2: Verify it fails**
 
 Expected: FAIL — `cmd_archive_phase` does not exist.
 
-- [ ] **Step 3: Implementation**
+- [x] **Step 3: Implementation**
 
 Add to `commands.py`:
 
@@ -1122,12 +1122,12 @@ def cmd_archive_phase(
     _git_stage(repo_root, archive_path)
 ```
 
-- [ ] **Step 4: Verify it passes**
+- [x] **Step 4: Verify it passes**
 
 Run: `PYTHONPATH=tools python3 -m unittest discover -s tools/tasktool/tests -v`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tools/tasktool/commands.py tools/tasktool/tests/test_commands.py
@@ -1142,7 +1142,7 @@ git commit -m "P2.S2: archive-phase command"
 - Modify: `tools/tasktool/cli.py`
 - Modify: `tools/tasktool/tests/test_cli_integration.py`
 
-- [ ] **Step 1: Write the failing CLI test**
+- [x] **Step 1: Write the failing CLI test**
 
 ```python
 def test_archive_phase_cli(self):
@@ -1160,11 +1160,11 @@ def test_archive_phase_cli(self):
     self.assertEqual(len(md), 1)
 ```
 
-- [ ] **Step 2: Verify it fails**
+- [x] **Step 2: Verify it fails**
 
 Expected: FAIL — `archive-phase` is not a subcommand.
 
-- [ ] **Step 3: Implementation**
+- [x] **Step 3: Implementation**
 
 In `cli.py` `_build_parser`:
 
@@ -1186,11 +1186,11 @@ elif args.cmd == "archive-phase":
     )
 ```
 
-- [ ] **Step 4: Verify it passes**
+- [x] **Step 4: Verify it passes**
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tools/tasktool/cli.py tools/tasktool/tests/test_cli_integration.py
@@ -1206,11 +1206,11 @@ git commit -m "P2.S2: archive-phase CLI"
 
 A targeted fixture file `tools/tasktool/tests/fixtures/TASKLIST_sample.md` exercises every emoji / status / blocking shape so we can detect parser regressions independently of the live `docs/TASKLIST.md`.
 
-- [ ] **Step 1: Create the fixture**
+- [x] **Step 1: Create the fixture**
 
 Create `tools/tasktool/tests/fixtures/TASKLIST_sample.md` containing one phase done, one in-progress, slices with each status (including a `S{n}a` follow-up), one externally-blocked slice, a cross-cutting item, and one bullet that is intentionally malformed (`- this should warn`).
 
-- [ ] **Step 2: Write the test**
+- [x] **Step 2: Write the test**
 
 ```python
 from pathlib import Path
@@ -1233,12 +1233,12 @@ class TestImporterFixture(unittest.TestCase):
         self.assertEqual(ph_ids, [ph.id for ph in round_tripped.project.phases])
 ```
 
-- [ ] **Step 3: Verify it passes**
+- [x] **Step 3: Verify it passes**
 
 Run: `PYTHONPATH=tools python3 -m unittest tools.tasktool.tests.test_importer -v`
 Expected: PASS (or fix the importer/render until it does — this is where parser bugs surface).
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add tools/tasktool/tests/fixtures/TASKLIST_sample.md tools/tasktool/tests/test_importer.py
@@ -1255,7 +1255,7 @@ git commit -m "P2.S2: importer round-trip fixture"
 
 This is a one-shot operation, performed manually with the CLI. No tests — instead, two manual verifications.
 
-- [ ] **Step 1: Dry-run the import**
+- [x] **Step 1: Dry-run the import**
 
 Run:
 
@@ -1265,7 +1265,7 @@ PYTHONPATH=tools python3 -m tasktool import docs/TASKLIST.md --dry-run --project
 
 Read `/tmp/preview-warnings.txt`. Every warning must be a deliberate edit-time concern (e.g. malformed bullet you want to fix) or an artefact of intentionally-unparsed prose (e.g. the "How to use this map" section). If a warning indicates lost data (e.g. a known slice missing), STOP and fix the importer.
 
-- [ ] **Step 2: Inspect the preview JSON**
+- [x] **Step 2: Inspect the preview JSON**
 
 Read `/tmp/preview.json`. Confirm:
 
@@ -1275,7 +1275,7 @@ Read `/tmp/preview.json`. Confirm:
 - `P2.slices[]` contains `S1` (done, closed `2026-05-18`, plan path set), `S2` (ready), `S3` (ready).
 - `S1.reviewer_chain` is `null` in the import (the live file's reviewer chain folder reference is post-impl prose — not machine-parseable in the markdown). After import, run `PYTHONPATH=tools python3 -m tasktool note P2.S1 --append "imported from TASKLIST.md; reviewer chain at docs/reviewer/p2-s1-tasktool-cli-core-P2-S1-post-slice/"` to preserve the history, OR manually populate `reviewer_chain` via the TASKTOOL_RAW=1 editor workflow if that turns out to be the only data we lose in import. Choose at execution time based on what `validate` says.
 
-- [ ] **Step 3: Perform the real import**
+- [x] **Step 3: Perform the real import**
 
 ```bash
 PYTHONPATH=tools python3 -m tasktool import docs/TASKLIST.md --project superstar
@@ -1283,7 +1283,7 @@ PYTHONPATH=tools python3 -m tasktool import docs/TASKLIST.md --project superstar
 
 Expected: writes `docs/tasklist.json`, stages it via `git add`, prints any warnings to stderr.
 
-- [ ] **Step 4: Run validate**
+- [x] **Step 4: Run validate**
 
 ```bash
 PYTHONPATH=tools python3 -m tasktool validate
@@ -1291,7 +1291,7 @@ PYTHONPATH=tools python3 -m tasktool validate
 
 Expected: `ok` (warnings about missing files are OK; errors are not).
 
-- [ ] **Step 5: Compare `tasktool render` against the original**
+- [x] **Step 5: Compare `tasktool render` against the original**
 
 ```bash
 PYTHONPATH=tools python3 -m tasktool render > /tmp/rendered.md
@@ -1300,7 +1300,7 @@ diff -u docs/TASKLIST.md /tmp/rendered.md | less
 
 The diff will be large — that is expected, since `render` is intentionally lossy (no "How to use this map" footer, simpler section ordering). What you are checking for is **semantic equivalence**: every phase header, every slice bullet, every status emoji and tag, and every plan/spec link is present. If any required content is missing, fix the importer or the renderer and re-run from Step 3.
 
-- [ ] **Step 6: Patch up post-import state**
+- [x] **Step 6: Patch up post-import state**
 
 Things the importer cannot recover from prose:
 
@@ -1313,7 +1313,7 @@ Things the importer cannot recover from prose:
 
 After every raw edit, run `tasktool validate --normalise` so the result is hook-acceptable.
 
-- [ ] **Step 7: Verify brief works against the imported data**
+- [x] **Step 7: Verify brief works against the imported data**
 
 ```bash
 PYTHONPATH=tools python3 -m tasktool brief P2.S2
@@ -1321,13 +1321,13 @@ PYTHONPATH=tools python3 -m tasktool brief P2.S2
 
 Expected: prints the slice's status, the parent phase summary, sibling slice statuses, and any open tasks. If the output is empty or wrong, fix and re-import.
 
-- [ ] **Step 8: Delete `docs/TASKLIST.md`**
+- [x] **Step 8: Delete `docs/TASKLIST.md`**
 
 ```bash
 git rm docs/TASKLIST.md
 ```
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add docs/tasklist.json
@@ -1343,7 +1343,7 @@ git commit -m "P2.S2: migrate TASKLIST.md → docs/tasklist.json"
 
 After the file is in place, mark S2's plan link and bring its status to `in_progress` to reflect the active work. This also serves as a smoke test of mutation commands against the imported file.
 
-- [ ] **Step 1: Set plan_path on S2 via the raw-edit escape hatch**
+- [x] **Step 1: Set plan_path on S2 via the raw-edit escape hatch**
 
 `Slice.plan_path` is the field the renderer and `brief` read; `refs[]` is for ad-hoc URLs. There is no S1-shipped CLI command for setting `plan_path` on an existing slice (the field is only writable at `create slice --plan`). Use the documented raw-edit escape hatch from spec §8.3:
 
@@ -1358,13 +1358,13 @@ The `validate --normalise` step canonicalises the file so the pre-commit hook (i
 
 A native `tasktool set-plan <id> --path PATH` command would be nicer, but adding mutation surface is out of scope for S2 (spec §10 step 5 places the skill rewrite + sibling skill touch-ups in S3, and the surface freeze for S2 is intentional). If reviewers later require it, add as a follow-up slice (`S2a`).
 
-- [ ] **Step 2: Set S2 to in_progress**
+- [x] **Step 2: Set S2 to in_progress**
 
 ```bash
 PYTHONPATH=tools python3 -m tasktool set P2.S2 --status in_progress
 ```
 
-- [ ] **Step 3: Verify**
+- [x] **Step 3: Verify**
 
 ```bash
 PYTHONPATH=tools python3 -m tasktool brief P2.S2
@@ -1372,7 +1372,7 @@ PYTHONPATH=tools python3 -m tasktool brief P2.S2
 
 Expected: shows `status: in_progress` and the plan reference.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add docs/tasklist.json
@@ -1383,7 +1383,7 @@ git commit -m "P2.S2: mark slice in_progress in tasklist.json"
 
 ## Task 14: Self-review
 
-- [ ] **Step 1: Spec coverage walk-through**
+- [x] **Step 1: Spec coverage walk-through**
 
 Open `docs/specs/2026-05-17-P2-tasktool-design.md` next to this plan. For each S2-relevant section, point at a task:
 
@@ -1399,7 +1399,7 @@ Open `docs/specs/2026-05-17-P2-tasktool-design.md` next to this plan. For each S
 
 If a section is uncovered, add a task before submitting for review.
 
-- [ ] **Step 2: Run the full suite**
+- [x] **Step 2: Run the full suite**
 
 ```bash
 PYTHONPATH=tools python3 -m unittest discover -s tools/tasktool/tests -v
@@ -1407,7 +1407,7 @@ PYTHONPATH=tools python3 -m unittest discover -s tools/tasktool/tests -v
 
 Expected: all green, count > 139 (S1 baseline).
 
-- [ ] **Step 3: Run `tasktool validate` on the live JSON**
+- [x] **Step 3: Run `tasktool validate` on the live JSON**
 
 ```bash
 PYTHONPATH=tools python3 -m tasktool validate

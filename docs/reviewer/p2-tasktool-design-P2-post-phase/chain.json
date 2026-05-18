@@ -1,0 +1,76 @@
+{
+  "schema_version": 1,
+  "chain": "p2-tasktool-design-P2-post-phase",
+  "kind": "post-phase",
+  "target": "docs/specs/2026-05-17-P2-tasktool-design.md",
+  "work_id": "P2",
+  "legacy_migrated": false,
+  "rounds": [
+    {
+      "round": 1,
+      "reviewers": [
+        {
+          "role": "primary",
+          "sweep_group": null,
+          "parent_round": 1,
+          "request": "r1-2026-05-18T1535-primary-request.md",
+          "response": "r1-2026-05-18T1535-primary-response.md",
+          "verdict": null,
+          "verdict_valid": false,
+          "returncode": 0,
+          "status": "ok",
+          "provider": "codex",
+          "caller_provider": "claude",
+          "sandbox": {
+            "repo_root": "/home/simon/Dev/sigreer/skills/superstar",
+            "scratch_dir": "/tmp/superstar-reviewer-p2-tasktool-design-P2-post-phase-r1-primary-yh1nc0tg",
+            "response_dir": "docs/reviewer/p2-tasktool-design-P2-post-phase/.reviewer-output/r1-primary",
+            "mode": "workspace-write-with-read-access"
+          }
+        },
+        {
+          "role": "sweep",
+          "sweep_group": 1,
+          "parent_round": 1,
+          "request": "r1-2026-05-18T1535-sweep1-request.md",
+          "response": "r1-2026-05-18T1535-sweep1-response.md",
+          "verdict": null,
+          "verdict_valid": false,
+          "returncode": 0,
+          "status": "ok",
+          "provider": "codex",
+          "caller_provider": "claude",
+          "sandbox": {
+            "repo_root": "/home/simon/Dev/sigreer/skills/superstar",
+            "scratch_dir": "/tmp/superstar-reviewer-p2-tasktool-design-P2-post-phase-r1-sweep1-6f86ys7j",
+            "response_dir": "docs/reviewer/p2-tasktool-design-P2-post-phase/.reviewer-output/r1-sweep1",
+            "mode": "workspace-write-with-read-access"
+          }
+        }
+      ],
+      "status": "ok",
+      "returncode": 0,
+      "merged_verdict": "revise",
+      "merged_findings": "r1-merged-findings.md",
+      "request": "r1-2026-05-18T1535-primary-request.md",
+      "response": "r1-2026-05-18T1535-primary-response.md",
+      "resolution": null,
+      "resolution_parse_status": null,
+      "resolution_waiver": false,
+      "head_sha_at_request": "d2fa720ede53b8a964eef3768ca25b6cedf92b48",
+      "head_sha_after_round": "d2fa720ede53b8a964eef3768ca25b6cedf92b48",
+      "worktree_dirty_at_request": true,
+      "verdict": null,
+      "verdict_valid": false,
+      "findings_count": 3,
+      "blocking_findings_count": 2,
+      "base_ref": null,
+      "base_ref_source": null,
+      "diff_included": false
+    }
+  ],
+  "sweep_checkpoints": {
+    "first-round": "completed",
+    "final-ready": "pending"
+  }
+}
