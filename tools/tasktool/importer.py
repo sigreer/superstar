@@ -226,6 +226,10 @@ def parse_tasklist_md(text: str) -> ParseResult:
                 # Stop early if we hit another markdown header.
                 if sl.startswith("## ") or sl.startswith("# "):
                     break
+                # Stop at the first slice bullet so inline Plan: links on
+                # slice lines cannot overwrite a phase's _pending_ plan.
+                if sl.startswith("- "):
+                    break
                 sm = SPEC_RE.search(sl)
                 if sm and phase.spec_path is None:
                     phase.spec_path = sm.group("path")

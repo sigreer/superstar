@@ -49,6 +49,20 @@ class TestImporterPhase(unittest.TestCase):
         self.assertEqual(ph.status, Status.DONE)
         self.assertEqual(ph.closed, "2026-05-17")
 
+    def test_phase_plan_pending_not_overwritten_by_slice_plan(self):
+        PHASE_WITH_PENDING_PLAN_THEN_SLICE = """\
+## P2 — Demo 🚧 `IN PROGRESS`
+
+Spec: [`docs/specs/demo.md`](demo.md). Plan: _pending_.
+
+- ✅ **S1** `DONE 2026-01-01` — Done. Plan: [`docs/plans/p2-s1.md`](p2-s1.md).
+"""
+        r = parse_tasklist_md(PHASE_WITH_PENDING_PLAN_THEN_SLICE)
+        ph = r.project.phases[0]
+        self.assertEqual(ph.spec_path, "docs/specs/demo.md")
+        self.assertIsNone(ph.plan_path)
+        self.assertEqual(ph.slices[0].plan_path, "docs/plans/p2-s1.md")
+
 
 SLICES_BLOCK = """\
 ## P2 — Demo 🚧 `IN PROGRESS`
