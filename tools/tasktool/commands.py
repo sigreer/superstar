@@ -96,24 +96,6 @@ def cmd_create_slice(
     _save(repo_root, p)
     return new_id
 
-def cmd_create_task(*, repo_root: Path, slice_id: str, title: str) -> str:
-    """In Task 8, only fully-qualified slice IDs (e.g. P1.S2) are accepted.
-    Task 9 extends this to accept unambiguous short IDs by routing through _resolve_id."""
-    p = _load(repo_root)
-    phase_part, slice_part, _ = split_qualified(slice_id)
-    if phase_part is None or slice_part is None:
-        raise CommandError(f"task creation requires fully-qualified slice id (e.g. P1.S2), got {slice_id!r}")
-    phase = next((ph for ph in p.phases if ph.id == phase_part), None)
-    if phase is None:
-        raise CommandError(f"phase {phase_part} not found")
-    slc = next((s for s in phase.slices if s.id == slice_part), None)
-    if slc is None:
-        raise CommandError(f"slice {phase_part}.{slice_part} not found")
-    new_id = next_task_id(p, phase_part, slice_part)
-    slc.tasks.append(Task(id=new_id, title=title, created=_today()))
-    _save(repo_root, p)
-    return new_id
-
 def cmd_create_cross(*, repo_root: Path, title: str) -> str:
     p = _load(repo_root)
     new_id = next_cross_id(p, repo_root)
