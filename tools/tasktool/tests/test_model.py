@@ -1,0 +1,55 @@
+from __future__ import annotations
+import unittest
+from tasktool.model import (
+    Project, Phase, Slice, Task, CrossCutting, BlockedOn, Status, SCHEMA_VERSION,
+)
+
+class StatusTests(unittest.TestCase):
+    def test_status_values(self):
+        self.assertEqual(
+            {s.value for s in Status},
+            {"ready", "in_progress", "blocked", "done"},
+        )
+
+class ConstructionTests(unittest.TestCase):
+    def test_empty_project(self):
+        p = Project(project="superstar")
+        self.assertEqual(p.schema_version, SCHEMA_VERSION)
+        self.assertEqual(p.phases, [])
+        self.assertEqual(p.cross_cutting, [])
+        self.assertEqual(p.archived_phases, [])
+
+    def test_phase_defaults(self):
+        ph = Phase(id="P2", title="tasktool", created="2026-05-17")
+        self.assertEqual(ph.status, Status.READY)
+        self.assertIsNone(ph.closed)
+        self.assertIsNone(ph.spec_path)
+        self.assertIsNone(ph.plan_path)
+        self.assertIsNone(ph.phase_reviewer_chain)
+        self.assertEqual(ph.notes, "")
+        self.assertEqual(ph.slices, [])
+
+    def test_slice_defaults(self):
+        s = Slice(id="S1", title="CLI core", created="2026-05-17")
+        self.assertEqual(s.status, Status.READY)
+        self.assertIsNone(s.blocked_on)
+        self.assertIsNone(s.reviewer_chain)
+        self.assertEqual(s.refs, [])
+        self.assertEqual(s.tasks, [])
+
+    def test_task_defaults(self):
+        t = Task(id="T1", title="x", created="2026-05-17")
+        self.assertEqual(t.status, Status.READY)
+        self.assertIsNone(t.closed)
+        self.assertEqual(t.refs, [])
+
+    def test_cross_defaults(self):
+        x = CrossCutting(id="X1", title="x", created="2026-05-17")
+        self.assertEqual(x.status, Status.READY)
+
+    def test_blocked_on_id(self):
+        b = BlockedOn(kind="id", value="P2.S1")
+        self.assertEqual(b.kind, "id")
+    def test_blocked_on_external(self):
+        b = BlockedOn(kind="external", value="vendor X")
+        self.assertEqual(b.value, "vendor X")
