@@ -18,6 +18,12 @@ def _slice_tag(s: Slice) -> str:
         return f" `BLOCKED on {prefix}{s.blocked_on.value}`"
     return ""
 
+def _non_slice_emoji(status: Status) -> str:
+    # Spec §6.6: blocked is slice-only. Defensively coerce to READY for phases/cross-cutting.
+    if status is Status.BLOCKED:
+        return STATUS_EMOJI[Status.READY]
+    return STATUS_EMOJI[status]
+
 def _phase_tag(ph: Phase) -> str:
     if ph.status is Status.DONE and ph.closed:
         return f" `DONE {ph.closed}`"
@@ -32,7 +38,7 @@ def render_project(p: Project) -> str:
     if p.north_star:
         lines += ["## North Star", "", p.north_star, ""]
     for ph in p.phases:
-        lines.append(f"## {ph.id} — {ph.title} {STATUS_EMOJI[ph.status]}{_phase_tag(ph)}")
+        lines.append(f"## {ph.id} — {ph.title} {_non_slice_emoji(ph.status)}{_phase_tag(ph)}")
         lines.append("")
         if ph.spec_path or ph.plan_path:
             spec = f"[`{ph.spec_path}`]({ph.spec_path})" if ph.spec_path else "_none_"
@@ -47,7 +53,7 @@ def render_project(p: Project) -> str:
     if p.cross_cutting:
         lines += ["## Cross-cutting (`X*`)", ""]
         for c in p.cross_cutting:
-            lines.append(f"- {STATUS_EMOJI[c.status]} **{c.id}** — {c.title}.")
+            lines.append(f"- {_non_slice_emoji(c.status)} **{c.id}** — {c.title}.")
         lines.append("")
     if p.archived_phases:
         lines += ["## Archived phases", ""]
