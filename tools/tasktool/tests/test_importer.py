@@ -28,6 +28,18 @@ class TestImporterPhase(unittest.TestCase):
         self.assertEqual(ph.spec_path, "docs/specs/2026-05-17-P2-tasktool-design.md")
         self.assertIsNone(ph.plan_path)
 
+    def test_phase_blocked_emoji_coerces_to_ready_with_warning(self):
+        text = "## P3 — Blocked phase ⏸\n"
+        r = parse_tasklist_md(text)
+        self.assertEqual(len(r.project.phases), 1)
+        ph = r.project.phases[0]
+        self.assertEqual(ph.id, "P3")
+        self.assertEqual(ph.status, Status.READY)
+        self.assertTrue(
+            any("blocked status not allowed on phase" in w for w in r.warnings),
+            f"expected warning substring, got {r.warnings!r}",
+        )
+
     def test_phase_done_tag_sets_closed(self):
         r = parse_tasklist_md(PHASE_HEADER_DONE)
         self.assertEqual(len(r.project.phases), 1)

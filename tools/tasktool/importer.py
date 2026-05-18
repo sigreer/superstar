@@ -49,10 +49,7 @@ def _match_phase_header(line: str):
     m = PHASE_HEADER_BLOCKED_RE.match(line)
     if m:
         # Plan says: blocked-fallback warns + coerces to READY.
-        warn = (
-            f"phase {m.group('id')} uses ⏸ (blocked) emoji at header; "
-            "coercing to READY"
-        )
+        warn = "blocked status not allowed on phase; coerced to ready"
         return m.group("id"), m.group("title").strip(), Status.READY, None, warn
     return None
 
