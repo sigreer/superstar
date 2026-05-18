@@ -24,7 +24,7 @@ Execute plan by dispatching fresh subagent per task, with two-stage in-loop revi
 | **Do not edit files in response to reviewer findings.**                        | Dispatch a fix subagent with the response file as input. The coordinator's job is to submit, gate on verdict, dispatch, and re-submit. |
 | **Only orchestrate.**                                                          | Your value is sequencing work, holding the plan in mind, and gating on verdicts.    |
 
-**Exception — genuinely cheaper to do inline.** A one-line typo fix, a `.gitkeep` write, a TASKLIST status flip — if dispatching a subagent costs strictly more than doing the action, you may do it. The bar is *strictly cheaper*, not *roughly equal*. When in doubt, delegate.
+**Exception — genuinely cheaper to do inline.** A one-line typo fix, a `.gitkeep` write, a tasktool note/title tweak — if dispatching a subagent costs strictly more than doing the action, you may do it. The bar is *strictly cheaper*, not *roughly equal*. When in doubt, delegate.
 
 ## Slice and phase boundaries
 
@@ -40,15 +40,15 @@ Plans are organised into **slices** (and slices into **tasks**) per `[[tasklist-
 The per-task internal reviews approving every task in a slice **does not** satisfy the slice-boundary external review. They have different scopes (one task vs. the whole slice) and different reviewers. Both are required.
 
 - **At the end of each slice** (all the slice's tasks closed, in-loop internal reviews passed):
-  1. Invoke `[[external-review]]` with `--kind post-slice`, passing the plan as `--file` and the spec + TASKLIST.md as `--context`.
+  1. Invoke `[[external-review]]` with `--kind post-slice`, passing the plan as `--file` and the spec + `docs/tasklist.json` as `--context`.
   2. Read the verdict. On `ready` / `ready with small edits`, proceed.
   3. On `merged_verdict: revise` (or `verdict_valid: false`), **dispatch a fix subagent** with the previous response file as input. The fix subagent MUST write `docs/reviewer/<chain>/r{N}-resolution.md` per the contract in `[[external-review]]` before signaling completion. Wait for completion. Re-submit. Iterate.
-  4. Once the verdict gates pass, flip the slice's status in TASKLIST.md per `[[tasklist-discipline]]`.
+  4. Once the verdict gates pass, run `tasktool close <slice-id>` (the CLI re-checks the reviewer chain and refuses on `revise`). See `[[tasklist-discipline]]`.
 
 - **At the end of the phase** (the last slice in the phase closes):
-  1. Invoke `[[external-review]]` with `--kind post-phase`, passing the phase plan or archive note as `--file` and the spec + plan + TASKLIST.md as `--context`.
+  1. Invoke `[[external-review]]` with `--kind post-phase`, passing the phase plan or archive note as `--file` and the spec + plan + `docs/tasklist.json` as `--context`.
   2. Same delegation rule — coordinator does not apply findings directly.
-  3. On verdict acceptance, archive the phase per `[[tasklist-discipline]]` and invoke `[[finishing-a-development-branch]]`.
+  3. On verdict acceptance, run `tasktool archive-phase <phase-id>` (the CLI re-checks the post-phase chain), then invoke `[[finishing-a-development-branch]]`.
 
 ## When to Use
 
@@ -102,12 +102,12 @@ digraph process {
     "Invoke external-review --kind post-slice" [shape=box style=filled fillcolor=lightyellow];
     "post-slice verdict ready?" [shape=diamond];
     "Dispatch fix subagent with reviewer response" [shape=box];
-    "Flip slice status per tasklist-discipline" [shape=box];
+    "tasktool close <slice-id>" [shape=box];
     "Last slice in phase?" [shape=diamond];
     "Invoke external-review --kind post-phase" [shape=box style=filled fillcolor=lightyellow];
     "post-phase verdict ready?" [shape=diamond];
     "Dispatch fix subagent (post-phase findings)" [shape=box];
-    "Archive phase per tasklist-discipline" [shape=box];
+    "tasktool archive-phase <phase-id>" [shape=box];
     "More tasks remain?" [shape=diamond];
     "Dispatch final code reviewer subagent for entire implementation" [shape=box];
     "Use superstar:finishing-a-development-branch" [shape=box style=filled fillcolor=lightgreen];
@@ -132,15 +132,15 @@ digraph process {
     "Invoke external-review --kind post-slice" -> "post-slice verdict ready?";
     "post-slice verdict ready?" -> "Dispatch fix subagent with reviewer response" [label="revise"];
     "Dispatch fix subagent with reviewer response" -> "Invoke external-review --kind post-slice" [label="re-submit"];
-    "post-slice verdict ready?" -> "Flip slice status per tasklist-discipline" [label="ready"];
-    "Flip slice status per tasklist-discipline" -> "Last slice in phase?";
+    "post-slice verdict ready?" -> "tasktool close <slice-id>" [label="ready"];
+    "tasktool close <slice-id>" -> "Last slice in phase?";
     "Last slice in phase?" -> "More tasks remain?" [label="no"];
     "Last slice in phase?" -> "Invoke external-review --kind post-phase" [label="yes"];
     "Invoke external-review --kind post-phase" -> "post-phase verdict ready?";
     "post-phase verdict ready?" -> "Dispatch fix subagent (post-phase findings)" [label="revise"];
     "Dispatch fix subagent (post-phase findings)" -> "Invoke external-review --kind post-phase" [label="re-submit"];
-    "post-phase verdict ready?" -> "Archive phase per tasklist-discipline" [label="ready"];
-    "Archive phase per tasklist-discipline" -> "More tasks remain?";
+    "post-phase verdict ready?" -> "tasktool archive-phase <phase-id>" [label="ready"];
+    "tasktool archive-phase <phase-id>" -> "More tasks remain?";
     "More tasks remain?" -> "Dispatch implementer subagent (./implementer-prompt.md)" [label="yes"];
     "More tasks remain?" -> "Dispatch final code reviewer subagent for entire implementation" [label="no"];
     "Dispatch final code reviewer subagent for entire implementation" -> "Use superstar:finishing-a-development-branch";
@@ -306,7 +306,7 @@ Done!
 | "It's just a one-line change, no need to delegate"                        | Bar is *strictly cheaper than delegating*. When in doubt, delegate.    |
 | "I'll skip post-slice review on this one, it's a small slice"             | No. Slice boundary is a gate. Run `[[external-review]] --kind post-slice`.|
 | "I'll resubmit without the resolution file, the reviewer will figure it out" | No. Post-slice/post-phase round N+1 exits 3 without `r{N-1}-resolution.md` or `--allow-missing-resolution`. |
-| "The plan's final close-out task ran, so I should ask before post-slice review" | No. The slice is not closed until `[[external-review]] --kind post-slice` passes and TASKLIST is flipped afterward. |
+| "The plan's final close-out task ran, so I should ask before post-slice review" | No. The slice is not closed until `[[external-review]] --kind post-slice` passes and tasktool close succeeds afterward. |
 
 **Process reds (also never):**
 - Start implementation on main/master branch without explicit user consent
