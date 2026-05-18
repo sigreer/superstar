@@ -1,0 +1,47 @@
+**1. Findings**
+
+F1 — RESOLVED  
+Spec header, tasklist link, past-tense problem framing, and AGS risk/open-question text remain updated in `docs/specs/2026-05-17-P2-tasktool-design.md:3`, `:6`, `:10`, and `:363-365`.
+
+F2 — RESOLVED  
+`tasktool set --status` still documents only `ready|in_progress|done`, with blocking routed through `tasktool block` / `unblock` at `docs/specs/2026-05-17-P2-tasktool-design.md:212-219`.
+
+F3 — RESOLVED  
+S1/S2 plan checkbox drift remains fixed. Current counts: S1 has `0` unchecked / `76` checked; S2 has `0` unchecked / `71` checked.
+
+F4 — RESOLVED  
+§12 no longer claims `tasktool brief --format json` is implemented. It now points shell-out consumers to text `tasktool brief <id>` or direct reads of canonical `docs/tasklist.json`, and explicitly defers a future `brief --format json` flag at `docs/specs/2026-05-17-P2-tasktool-design.md:365`.
+
+Sweep F1 — DEFERRED / acceptable  
+P2 is still unarchived (`status: in_progress`, `closed: null`, no archived phase), but that remains the expected pre-archive state for this post-phase gate. Archive should run after this passing verdict.
+
+Sweep F2 — RESOLVED  
+Duplicate of F1.
+
+Sweep F4 — RESOLVED  
+The P2.S2 parser artifact has the durable waiver at `docs/reviewer/p2-s2-tasktool-importer-render-brief-archive-P2-S2-post-slice/WAIVER.md:1-9`.
+
+**2. Open Questions / Assumptions**
+
+I assume the untracked `docs/reviewer/p2-tasktool-design-P2-post-phase/r3-2026-05-18T1556-request.md` is the active review request artifact and will be committed by the review chain machinery.
+
+**3. Suggested Document Edits**
+
+None required.
+
+**4. Verification**
+
+Ran:
+
+```bash
+PYTHONPATH=tools python3 -m tasktool validate --strict-format --format json
+PYTHONPATH=tools python3 -m unittest discover -s tools/tasktool/tests -v
+PYTHONPATH=tools python3 -m tasktool brief --help
+PYTHONPATH=tools python3 -m tasktool brief P2 --format json
+```
+
+Results: validation passed with no errors/warnings; 160 tests passed; `brief --help` only accepts `id`; `brief P2 --format json` still exits `2`, which is now consistent with the spec.
+
+**5. Overall Verdict**
+
+ready

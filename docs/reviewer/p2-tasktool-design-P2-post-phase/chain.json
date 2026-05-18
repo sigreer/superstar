@@ -110,6 +110,49 @@
       "base_ref": "d2fa720ede53b8a964eef3768ca25b6cedf92b48",
       "base_ref_source": "auto",
       "diff_included": true
+    },
+    {
+      "round": 3,
+      "reviewers": [
+        {
+          "role": "primary",
+          "sweep_group": null,
+          "parent_round": 3,
+          "request": "r3-2026-05-18T1556-request.md",
+          "response": "r3-2026-05-18T1556-response.md",
+          "verdict": null,
+          "verdict_valid": false,
+          "returncode": 0,
+          "status": "ok",
+          "provider": "codex",
+          "caller_provider": "claude",
+          "sandbox": {
+            "repo_root": "/home/simon/Dev/sigreer/skills/superstar",
+            "scratch_dir": "/tmp/superstar-reviewer-p2-tasktool-design-P2-post-phase-r3-primary-00nnn2_w",
+            "response_dir": "docs/reviewer/p2-tasktool-design-P2-post-phase/.reviewer-output/r3-primary",
+            "mode": "workspace-write-with-read-access"
+          }
+        }
+      ],
+      "status": "ok",
+      "returncode": 0,
+      "merged_verdict": null,
+      "merged_findings": null,
+      "request": "r3-2026-05-18T1556-request.md",
+      "response": "r3-2026-05-18T1556-response.md",
+      "resolution": "r2-resolution.md",
+      "resolution_parse_status": "partial",
+      "resolution_waiver": false,
+      "head_sha_at_request": "906a2b0c528b5eee21f4767153045343614824e6",
+      "head_sha_after_round": "906a2b0c528b5eee21f4767153045343614824e6",
+      "worktree_dirty_at_request": false,
+      "verdict": null,
+      "verdict_valid": false,
+      "findings_count": 4,
+      "blocking_findings_count": 1,
+      "base_ref": "426704445f7c881cadc84c332b8ee64443f05882",
+      "base_ref_source": "auto",
+      "diff_included": true
     }
   ],
   "sweep_checkpoints": {
