@@ -115,6 +115,11 @@ def _build_parser() -> argparse.ArgumentParser:
     p_import.add_argument("--force", action="store_true")
     p_import.add_argument("--project")
 
+    p_arch = sub.add_parser("archive-phase")
+    p_arch.add_argument("phase_id")
+    p_arch.add_argument("--reviewer-chain", type=Path)
+    p_arch.add_argument("--skip-review-gate", action="store_true")
+
     p_nextid = sub.add_parser("next-id")
     p_nextid.add_argument("--kind", required=True, choices=["phase", "slice", "task", "cross"])
     p_nextid.add_argument("--phase")
@@ -196,6 +201,12 @@ def main(argv: list[str]) -> int:
             if warn:
                 sys.stderr.write(warn + "\n")
             return rc
+        elif args.cmd == "archive-phase":
+            commands.cmd_archive_phase(
+                repo_root=root, phase_id=args.phase_id,
+                reviewer_chain=args.reviewer_chain,
+                skip_review_gate=args.skip_review_gate,
+            )
         elif args.cmd == "next-id":
             print(commands.cmd_next_id(
                 repo_root=root, kind=args.kind, phase=args.phase, slice=args.slice,

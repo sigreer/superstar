@@ -125,6 +125,22 @@ class ReviewGateE2ETests(unittest.TestCase):
         finally:
             t.cleanup()
 
+    def test_archive_phase_cli(self):
+        t = _CliTmp()
+        try:
+            run_cli("init", "--project", "demo", cwd=t.root)
+            run_cli("create", "phase", "--title", "Phase to archive", cwd=t.root)
+            run_cli("create", "slice", "P1", "--title", "Slice", cwd=t.root)
+            run_cli("close", "P1.S1", "--skip-review-gate", cwd=t.root)
+            r = run_cli("archive-phase", "P1", "--skip-review-gate", cwd=t.root)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertIn("review gate skipped for P1", r.stderr)
+            self.assertTrue((t.root / "docs" / "archived-tasks").exists())
+            md = list((t.root / "docs" / "archived-tasks").glob("P1-*.md"))
+            self.assertEqual(len(md), 1)
+        finally:
+            t.cleanup()
+
     def test_short_id_close_resolves_to_qualified_for_gate(self):
         """F8 regression: closing a short slice ID must not match historical
         same-named chains under a different phase."""
