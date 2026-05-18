@@ -262,3 +262,41 @@ def cmd_unblock(*, repo_root: Path, slice_id: str, resume: bool = False) -> None
     item.blocked_on = None
     item.status = Status.IN_PROGRESS if resume else Status.READY
     _save(repo_root, p)
+
+# ───── note / ref / title ─────
+
+def cmd_note(
+    *, repo_root: Path, id: str,
+    append: str | None = None, replace: str | None = None,
+) -> None:
+    if (append is None) == (replace is None):
+        raise CommandError("cmd_note requires exactly one of append/replace")
+    p = _load(repo_root)
+    _qid, _container, item = _find_item(p, id)
+    if append is not None:
+        item.notes = (item.notes + "\n" + append).strip() if item.notes else append
+    else:
+        item.notes = replace or ""
+    _save(repo_root, p)
+
+def cmd_ref(
+    *, repo_root: Path, id: str,
+    add: str | None = None, remove: str | None = None,
+) -> None:
+    if (add is None) == (remove is None):
+        raise CommandError("cmd_ref requires exactly one of add/remove")
+    p = _load(repo_root)
+    qid, _container, item = _find_item(p, id)
+    if not hasattr(item, "refs"):
+        raise CommandError(f"{qid}: this item kind does not have refs")
+    if add is not None and add not in item.refs:
+        item.refs.append(add)
+    elif remove is not None and remove in item.refs:
+        item.refs.remove(remove)
+    _save(repo_root, p)
+
+def cmd_title(*, repo_root: Path, id: str, new: str) -> None:
+    p = _load(repo_root)
+    _qid, _container, item = _find_item(p, id)
+    item.title = new
+    _save(repo_root, p)

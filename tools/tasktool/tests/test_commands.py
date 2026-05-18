@@ -206,20 +206,17 @@ class ShortFormResolutionTests(unittest.TestCase):
     def tearDown(self):
         self.t.cleanup()
 
-    @unittest.skip("cmd_note added in Task 10")
     def test_short_slice_unambiguous_resolves(self):
         # Only one slice in the project — short form S1 should resolve.
         commands.cmd_note(repo_root=self.t.root, id="S1", append="via short")
         p = load_project(self.t.root / "docs/tasklist.json")
         self.assertIn("via short", p.phases[0].slices[0].notes)
 
-    @unittest.skip("cmd_note added in Task 10")
     def test_short_task_unambiguous_resolves(self):
         commands.cmd_note(repo_root=self.t.root, id="T1", append="via short")
         p = load_project(self.t.root / "docs/tasklist.json")
         self.assertIn("via short", p.phases[0].slices[0].tasks[0].notes)
 
-    @unittest.skip("cmd_note added in Task 10")
     def test_short_slice_ambiguous_rejected(self):
         commands.cmd_create_phase(repo_root=self.t.root, title="P2")
         commands.cmd_create_slice(repo_root=self.t.root, phase_id="P2", title="S1")
@@ -230,3 +227,38 @@ class ShortFormResolutionTests(unittest.TestCase):
     def test_create_task_accepts_short_slice(self):
         new_id = commands.cmd_create_task(repo_root=self.t.root, slice_id="S1", title="t2")
         self.assertEqual(new_id, "T2")
+
+class NoteRefTitleTests(unittest.TestCase):
+    def setUp(self):
+        self.t = _Tmp()
+        commands.cmd_init(repo_root=self.t.root, project="demo")
+        commands.cmd_create_phase(repo_root=self.t.root, title="P1")
+        commands.cmd_create_slice(repo_root=self.t.root, phase_id="P1", title="S1")
+    def tearDown(self):
+        self.t.cleanup()
+
+    def test_note_append(self):
+        commands.cmd_note(repo_root=self.t.root, id="P1.S1", append="hello")
+        p = load_project(self.t.root / "docs/tasklist.json")
+        self.assertEqual(p.phases[0].slices[0].notes, "hello")
+        commands.cmd_note(repo_root=self.t.root, id="P1.S1", append="world")
+        p = load_project(self.t.root / "docs/tasklist.json")
+        self.assertEqual(p.phases[0].slices[0].notes, "hello\nworld")
+
+    def test_note_replace(self):
+        commands.cmd_note(repo_root=self.t.root, id="P1.S1", append="hello")
+        commands.cmd_note(repo_root=self.t.root, id="P1.S1", replace="fresh")
+        p = load_project(self.t.root / "docs/tasklist.json")
+        self.assertEqual(p.phases[0].slices[0].notes, "fresh")
+
+    def test_ref_add_remove(self):
+        commands.cmd_ref(repo_root=self.t.root, id="P1.S1", add="docs/a.md")
+        commands.cmd_ref(repo_root=self.t.root, id="P1.S1", add="docs/b.md")
+        commands.cmd_ref(repo_root=self.t.root, id="P1.S1", remove="docs/a.md")
+        p = load_project(self.t.root / "docs/tasklist.json")
+        self.assertEqual(p.phases[0].slices[0].refs, ["docs/b.md"])
+
+    def test_title_set(self):
+        commands.cmd_title(repo_root=self.t.root, id="P1.S1", new="renamed")
+        p = load_project(self.t.root / "docs/tasklist.json")
+        self.assertEqual(p.phases[0].slices[0].title, "renamed")
