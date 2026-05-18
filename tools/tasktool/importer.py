@@ -1,7 +1,7 @@
 from __future__ import annotations
 import re
 from dataclasses import dataclass, field
-from tasktool.model import Project, Phase, Status
+from tasktool.model import Project, Phase, Slice, BlockedOn, Status
 
 
 @dataclass(slots=True)
@@ -11,6 +11,16 @@ class _PhaseMatch:
     status: Status
     closed: str | None
     warning: str | None
+
+
+@dataclass(slots=True)
+class _SliceMatch:
+    id: str
+    title: str
+    status: Status
+    closed: str | None
+    blocked_on: BlockedOn | None
+    plan_path: str | None
 
 EMOJI_TO_STATUS = {
     "✅": Status.DONE,
@@ -30,6 +40,15 @@ PHASE_HEADER_BLOCKED_RE = re.compile(
 PHASE_DONE_TAG_RE = re.compile(r"^DONE\s+(?P<date>\d{4}-\d{2}-\d{2})$")
 SPEC_RE = re.compile(r"Spec:\s*\[`(?P<path>[^`]+)`\]\([^)]+\)")
 PLAN_RE = re.compile(r"Plan:\s*(?:\[`(?P<path>[^`]+)`\]\([^)]+\)|_pending_)")
+
+SLICE_LINE_RE = re.compile(
+    r"^-\s+(?P<emoji>[✅🚧⏸☐])\s+\*\*(?P<id>S\d+[a-z]?)\*\*"
+    r"(?:\s+`(?P<tag>[^`]+)`)?"
+    r"(?:\s+(?:—\s+)?(?P<rest>.+))?$"
+)
+SLICE_DONE_TAG_RE = re.compile(r"^DONE\s+(?P<date>\d{4}-\d{2}-\d{2})$")
+SLICE_BLOCKED_TAG_RE = re.compile(r"^BLOCKED on\s+(?P<on>.+)$")
+INLINE_PLAN_RE = re.compile(r"Plan:\s*\[`(?P<path>[^`]+)`\]\([^)]+\)")
 
 # Stop sniffing for Spec:/Plan: once we hit another header or a non-empty
 # structural marker. We accept a small window after the phase header.
@@ -73,6 +92,41 @@ def _match_phase_header(line: str) -> _PhaseMatch | None:
     return None
 
 
+def _match_slice_line(line: str) -> _SliceMatch | None:
+    m = SLICE_LINE_RE.match(line)
+    if not m:
+        return None
+    emoji = m.group("emoji")
+    tag = m.group("tag")
+    rest = m.group("rest") or ""
+    title = rest.split(". Plan:", 1)[0].strip() or "<untitled>"
+    closed: str | None = None
+    blocked_on: BlockedOn | None = None
+    if tag:
+        dm = SLICE_DONE_TAG_RE.match(tag)
+        if dm:
+            closed = dm.group("date")
+        bm = SLICE_BLOCKED_TAG_RE.match(tag)
+        if bm:
+            on = bm.group("on").strip()
+            if on.startswith("external:"):
+                blocked_on = BlockedOn(kind="external", value=on[len("external:"):])
+            else:
+                blocked_on = BlockedOn(kind="id", value=on)
+    plan_path: str | None = None
+    pm = INLINE_PLAN_RE.search(rest)
+    if pm:
+        plan_path = pm.group("path")
+    return _SliceMatch(
+        id=m.group("id"),
+        title=title,
+        status=EMOJI_TO_STATUS[emoji],
+        closed=closed,
+        blocked_on=blocked_on,
+        plan_path=plan_path,
+    )
+
+
 def parse_tasklist_md(text: str) -> ParseResult:
     """Forgiving parser for TASKLIST.md.
 
@@ -85,6 +139,7 @@ def parse_tasklist_md(text: str) -> ParseResult:
     """
     project = Project(project="<imported>")
     warnings: list[str] = []
+    current_phase: Phase | None = None
 
     lines = text.splitlines()
     i = 0
@@ -122,8 +177,25 @@ def parse_tasklist_md(text: str) -> ParseResult:
                         phase.plan_path = path
                 j += 1
             project.phases.append(phase)
+            current_phase = phase
             i += 1
             continue
+        if current_phase is not None:
+            sm = _match_slice_line(line)
+            if sm is not None:
+                current_phase.slices.append(
+                    Slice(
+                        id=sm.id,
+                        title=sm.title,
+                        created="1970-01-01",
+                        status=sm.status,
+                        closed=sm.closed,
+                        blocked_on=sm.blocked_on,
+                        plan_path=sm.plan_path,
+                    )
+                )
+                i += 1
+                continue
         i += 1
 
     return ParseResult(project=project, warnings=warnings)

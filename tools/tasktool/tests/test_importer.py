@@ -49,5 +49,30 @@ class TestImporterPhase(unittest.TestCase):
         self.assertEqual(ph.closed, "2026-05-17")
 
 
+SLICES_BLOCK = """\
+## P2 — Demo 🚧 `IN PROGRESS`
+
+- ✅ **S1** `DONE 2026-05-18` — CLI core: data model. Plan: [`docs/plans/2026-05-17-p2-s1.md`](plans/2026-05-17-p2-s1.md). Post-impl: 139 tests.
+- ☐ **S2** Importer, render, brief. Plan: _pending._
+- ⏸ **S3a** `BLOCKED on P2.S3` — follow-up cleanup.
+"""
+
+class TestImporterSlices(unittest.TestCase):
+    def test_slice_parsing(self):
+        r = parse_tasklist_md(SLICES_BLOCK)
+        self.assertEqual(len(r.project.phases), 1)
+        slices = r.project.phases[0].slices
+        self.assertEqual([s.id for s in slices], ["S1", "S2", "S3a"])
+        self.assertEqual(slices[0].status, Status.DONE)
+        self.assertEqual(slices[0].closed, "2026-05-18")
+        self.assertEqual(slices[0].plan_path, "docs/plans/2026-05-17-p2-s1.md")
+        self.assertEqual(slices[1].status, Status.READY)
+        self.assertIsNone(slices[1].plan_path)
+        self.assertEqual(slices[2].status, Status.BLOCKED)
+        self.assertIsNotNone(slices[2].blocked_on)
+        self.assertEqual(slices[2].blocked_on.kind, "id")
+        self.assertEqual(slices[2].blocked_on.value, "P2.S3")
+
+
 if __name__ == "__main__":
     unittest.main()
