@@ -393,3 +393,55 @@ def cmd_next_id(
     if kind == "cross":
         return next_cross_id(p, repo_root)
     raise CommandError(f"unknown kind {kind}")
+
+# ───── validate / schema ─────
+
+def cmd_validate(
+    *, repo_root: Path,
+    format: str = "text",
+    strict_format: bool = False,
+    normalise: bool = False,
+) -> tuple[int, str]:
+    from tasktool.validate import (
+        validate_project, ValidationError, strict_format_check, normalise_file,
+        find_path_warnings,
+    )
+    path = _tasklist_path(repo_root)
+    if not path.exists():
+        return 1, f"{path}: not found"
+    errors: list[str] = []
+    warnings: list[str] = []
+    project: Project | None = None
+    try:
+        project = load_project(path)
+        validate_project(project)
+    except (ValidationError, ValueError) as e:
+        errors.append(str(e))
+    if project is not None and not errors:
+        warnings.extend(find_path_warnings(project, repo_root))
+    if normalise and not errors:
+        try:
+            normalise_file(path)
+        except ValidationError as e:
+            errors.append(str(e))
+    if strict_format and not errors:
+        try:
+            strict_format_check(path)
+        except ValidationError as e:
+            errors.append(str(e))
+    rc = 0 if not errors else 1
+    if format == "json":
+        import json as _j
+        return rc, _j.dumps({"ok": rc == 0, "errors": errors, "warnings": warnings}, indent=2)
+    parts: list[str] = []
+    if warnings:
+        parts.extend(f"warning: {w}" for w in warnings)
+    if errors:
+        parts.extend(errors)
+    elif not warnings:
+        parts.append("ok")
+    return rc, "\n".join(parts) + "\n"
+
+def cmd_schema() -> str:
+    from tasktool.schema_gen import dump_schema
+    return dump_schema()

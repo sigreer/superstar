@@ -305,3 +305,46 @@ class NextIdTests(unittest.TestCase):
             )
         finally:
             t.cleanup()
+
+class ValidateCmdTests(unittest.TestCase):
+    def test_validate_clean(self):
+        t = _Tmp()
+        try:
+            commands.cmd_init(repo_root=t.root, project="demo")
+            rc, out = commands.cmd_validate(repo_root=t.root)
+            self.assertEqual(rc, 0)
+        finally:
+            t.cleanup()
+
+    def test_validate_strict_format_detects_drift(self):
+        t = _Tmp()
+        try:
+            commands.cmd_init(repo_root=t.root, project="demo")
+            path = t.root / "docs/tasklist.json"
+            path.write_text(path.read_text().replace("  ", "    "), encoding="utf-8")
+            rc, out = commands.cmd_validate(repo_root=t.root, strict_format=True)
+            self.assertEqual(rc, 1)
+        finally:
+            t.cleanup()
+
+    def test_validate_normalise_fixes(self):
+        t = _Tmp()
+        try:
+            commands.cmd_init(repo_root=t.root, project="demo")
+            path = t.root / "docs/tasklist.json"
+            path.write_text(path.read_text().replace("  ", "    "), encoding="utf-8")
+            rc, _ = commands.cmd_validate(repo_root=t.root, normalise=True)
+            self.assertEqual(rc, 0)
+            rc, _ = commands.cmd_validate(repo_root=t.root, strict_format=True)
+            self.assertEqual(rc, 0)
+        finally:
+            t.cleanup()
+
+class SchemaCmdTests(unittest.TestCase):
+    def test_schema_emits_valid_json(self):
+        out = commands.cmd_schema()
+        import json as _j
+        data = _j.loads(out)
+        self.assertEqual(data["$schema"], "https://json-schema.org/draft/2020-12/schema")
+        self.assertIn("properties", data)
+        self.assertIn("phases", data["properties"])
