@@ -72,3 +72,52 @@ class VerdictTests(unittest.TestCase):
             _write_chain(root, "p2-s1-post-slice", None)
             with self.assertRaises(GateError):
                 check_gate(root, "P2.S1", "post-slice")
+
+class RelativeExplicitPathTests(unittest.TestCase):
+    """F1 regression: relative --reviewer-chain paths must not raise ValueError."""
+
+    def test_relative_explicit_path_resolves(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            _write_chain(root, "p1-s1-post-slice", "ready")
+            # Pass a relative path (relative to repo_root) as explicit
+            rel = Path("docs/reviewer/p1-s1-post-slice")
+            found = discover_chain(root, "P1.S1", "post-slice", explicit=rel)
+            self.assertEqual(found, (root / rel).resolve())
+
+    def test_relative_explicit_path_in_check_gate(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            _write_chain(root, "p1-s1-post-slice", "ready")
+            rel = Path("docs/reviewer/p1-s1-post-slice")
+            result = check_gate(root, "P1.S1", "post-slice", explicit=rel)
+            self.assertEqual(result.verdict, "ready")
+
+class BoundaryMatchTests(unittest.TestCase):
+    """F2 regression: p1-s1 token must not match p1-s10-post-slice."""
+
+    def test_p1_s1_does_not_match_p1_s10(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            correct = _write_chain(root, "p1-s1-post-slice", "ready")
+            _write_chain(root, "p1-s10-post-slice", "ready")
+            found = discover_chain(root, "P1.S1", "post-slice")
+            self.assertEqual(found, correct)
+
+    def test_p1_s10_does_not_match_p1_s1(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            _write_chain(root, "p1-s1-post-slice", "ready")
+            correct = _write_chain(root, "p1-s10-post-slice", "ready")
+            found = discover_chain(root, "P1.S10", "post-slice")
+            self.assertEqual(found, correct)
+
+    def test_p1_s1_prefix_only_no_false_ambiguity(self):
+        """p1-s1 and p1-s10 both exist; P1.S1 must resolve to exactly one."""
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            _write_chain(root, "p1-s1-post-slice", "ready")
+            _write_chain(root, "p1-s10-post-slice", "ready")
+            # Should not raise — exactly one match expected.
+            result = check_gate(root, "P1.S1", "post-slice")
+            self.assertEqual(result.verdict, "ready")

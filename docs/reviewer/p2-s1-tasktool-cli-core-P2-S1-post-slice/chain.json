@@ -1,0 +1,119 @@
+{
+  "schema_version": 1,
+  "chain": "p2-s1-tasktool-cli-core-P2-S1-post-slice",
+  "kind": "post-slice",
+  "target": "docs/plans/2026-05-17-p2-s1-tasktool-cli-core.md",
+  "work_id": "P2.S1",
+  "legacy_migrated": false,
+  "rounds": [
+    {
+      "round": 1,
+      "reviewers": [
+        {
+          "role": "primary",
+          "sweep_group": null,
+          "parent_round": 1,
+          "request": "r1-2026-05-18T1104-primary-request.md",
+          "response": "r1-2026-05-18T1104-primary-response.md",
+          "verdict": null,
+          "verdict_valid": false,
+          "returncode": 1,
+          "status": "failed",
+          "provider": "codex",
+          "caller_provider": "claude",
+          "sandbox": {
+            "repo_root": "/home/simon/Dev/sigreer/skills/superstar",
+            "scratch_dir": "/tmp/superstar-reviewer-p2-s1-tasktool-cli-core-P2-S1-post-slice-r1-primary-pfuqud2e",
+            "response_dir": "docs/reviewer/p2-s1-tasktool-cli-core-P2-S1-post-slice/.reviewer-output/r1-primary",
+            "mode": "workspace-write-with-read-access"
+          }
+        },
+        {
+          "role": "sweep",
+          "sweep_group": 1,
+          "parent_round": 1,
+          "request": "r1-2026-05-18T1104-sweep1-request.md",
+          "response": "r1-2026-05-18T1104-sweep1-response.md",
+          "verdict": null,
+          "verdict_valid": false,
+          "returncode": 1,
+          "status": "failed",
+          "provider": "codex",
+          "caller_provider": "claude",
+          "sandbox": {
+            "repo_root": "/home/simon/Dev/sigreer/skills/superstar",
+            "scratch_dir": "/tmp/superstar-reviewer-p2-s1-tasktool-cli-core-P2-S1-post-slice-r1-sweep1-lrd0ya47",
+            "response_dir": "docs/reviewer/p2-s1-tasktool-cli-core-P2-S1-post-slice/.reviewer-output/r1-sweep1",
+            "mode": "workspace-write-with-read-access"
+          }
+        }
+      ],
+      "status": "failed",
+      "returncode": 1,
+      "merged_verdict": null,
+      "merged_findings": null,
+      "request": "r1-2026-05-18T1104-primary-request.md",
+      "response": "r1-2026-05-18T1104-primary-response.md",
+      "resolution": null,
+      "resolution_parse_status": null,
+      "resolution_waiver": false,
+      "head_sha_at_request": "290c16ec93162352699c6b1281bfe0f4986f1712",
+      "head_sha_after_round": "290c16ec93162352699c6b1281bfe0f4986f1712",
+      "worktree_dirty_at_request": true,
+      "verdict": null,
+      "verdict_valid": false,
+      "findings_count": 0,
+      "blocking_findings_count": 0,
+      "base_ref": null,
+      "base_ref_source": null,
+      "diff_included": false
+    },
+    {
+      "round": 2,
+      "reviewers": [
+        {
+          "role": "primary",
+          "sweep_group": null,
+          "parent_round": 2,
+          "request": "r2-2026-05-18T1104-request.md",
+          "response": "r2-2026-05-18T1104-response.md",
+          "verdict": "revise",
+          "verdict_valid": true,
+          "returncode": 0,
+          "status": "ok",
+          "provider": "codex",
+          "caller_provider": "claude",
+          "sandbox": {
+            "repo_root": "/home/simon/Dev/sigreer/skills/superstar",
+            "scratch_dir": "/tmp/superstar-reviewer-p2-s1-tasktool-cli-core-P2-S1-post-slice-r2-primary-vei90wmv",
+            "response_dir": "docs/reviewer/p2-s1-tasktool-cli-core-P2-S1-post-slice/.reviewer-output/r2-primary",
+            "mode": "workspace-write-with-read-access"
+          }
+        }
+      ],
+      "status": "ok",
+      "returncode": 0,
+      "merged_verdict": "revise",
+      "merged_findings": null,
+      "request": "r2-2026-05-18T1104-request.md",
+      "response": "r2-2026-05-18T1104-response.md",
+      "resolution": null,
+      "resolution_parse_status": null,
+      "resolution_waiver": false,
+      "head_sha_at_request": "290c16ec93162352699c6b1281bfe0f4986f1712",
+      "head_sha_after_round": "290c16ec93162352699c6b1281bfe0f4986f1712",
+      "worktree_dirty_at_request": true,
+      "verdict": "revise",
+      "verdict_valid": true,
+      "findings_count": 4,
+      "blocking_findings_count": 0,
+      "base_ref": "290c16ec93162352699c6b1281bfe0f4986f1712",
+      "base_ref_source": "auto",
+      "diff_included": true
+    }
+  ],
+  "sweep_checkpoints": {
+    "first-round": "completed",
+    "final-ready": "pending"
+  }
+}

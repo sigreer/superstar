@@ -50,7 +50,7 @@ def _build_parser() -> argparse.ArgumentParser:
     p_set = sub.add_parser("set")
     p_set.add_argument("id")
     p_set.add_argument("--status", required=True,
-                       choices=["ready", "in_progress", "blocked", "done"])
+                       choices=["ready", "in_progress", "done"])
     p_set.add_argument("--reviewer-chain", type=Path)
     p_set.add_argument("--skip-review-gate", action="store_true")
 

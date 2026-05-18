@@ -3125,4 +3125,16 @@ The slice-close itself is performed by the coordinator after `external-review --
 - Sibling skill touch-ups — S3
 - Actually migrating `docs/TASKLIST.md` to `docs/tasklist.json` in this repo — S2
 
+---
+
+## Post-implementation evidence
+
+- **Test count:** 131 tests pass (124 at initial implementation; +7 from r2 reviewer fixes F1/F2/F3)
+- **Commit range:** c363e8f (P2.S1: scaffold tasktool package and smoke test) → HEAD (r2 fixes)
+- **Deferred to S2/S3:** `import`, `brief`, `render`, `archive-phase`, pre-commit hook template, `tasklist-discipline` skill rewrite, sibling skill touch-ups, actual TASKLIST→JSON migration
+- **Follow-up bugfix commits from r2 (F1/F2/F3):**
+  - F1: resolve relative `--reviewer-chain` paths against `repo_root` in `discover_chain` (`reviewer_gate.py`)
+  - F2: boundary-aware segment matching in `discover_chain` — `p1-s1` no longer matches `p1-s10-post-slice`
+  - F3: removed `blocked` from `set --status` argparse choices in `cli.py`; users must use `tasktool block` instead
+
 These are explicitly out-of-scope here. If you find yourself reaching for them, stop — they belong in their own slice.

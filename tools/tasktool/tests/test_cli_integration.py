@@ -187,3 +187,41 @@ class ReviewGateE2ETests(unittest.TestCase):
             self.assertEqual(r.returncode, 0, r.stderr)
         finally:
             t.cleanup()
+
+    def test_close_slice_with_relative_reviewer_chain(self):
+        """F1 regression: passing a relative --reviewer-chain path must not crash."""
+        t = _CliTmp()
+        try:
+            run_cli("init", "--project", "demo", cwd=t.root)
+            run_cli("create", "phase", "--title", "P", cwd=t.root)
+            run_cli("create", "slice", "P1", "--title", "S", cwd=t.root)
+            chain = t.root / "docs/reviewer/p1-s1-post-slice"
+            chain.mkdir(parents=True)
+            (chain / "chain.json").write_text(
+                '{"rounds":[{"round":1,"merged_verdict":"ready","status":"ok"}]}',
+                encoding="utf-8",
+            )
+            # Pass a relative path — should succeed without ValueError traceback.
+            r = run_cli("close", "P1.S1", "--reviewer-chain", "docs/reviewer/p1-s1-post-slice",
+                        cwd=t.root)
+            self.assertEqual(r.returncode, 0, r.stderr)
+        finally:
+            t.cleanup()
+
+class SetStatusTests(unittest.TestCase):
+    """F3 regression: `set --status blocked` must be rejected by argparse."""
+
+    def test_set_blocked_exits_nonzero_with_argparse_error(self):
+        """blocked is no longer a valid choice; argparse must reject it cleanly."""
+        t = _CliTmp()
+        try:
+            run_cli("init", "--project", "demo", cwd=t.root)
+            run_cli("create", "phase", "--title", "P", cwd=t.root)
+            run_cli("create", "slice", "P1", "--title", "S", cwd=t.root)
+            r = run_cli("set", "P1.S1", "--status", "blocked", cwd=t.root)
+            self.assertNotEqual(r.returncode, 0)
+            # argparse exits with code 2 and prints to stderr — no Python traceback.
+            self.assertNotIn("Traceback", r.stderr)
+            self.assertNotIn("ValidationError", r.stderr)
+        finally:
+            t.cleanup()

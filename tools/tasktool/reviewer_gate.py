@@ -17,10 +17,18 @@ class GatePass:
 def _id_token(work_id: str) -> str:
     return work_id.replace(".", "-").lower()
 
+def _token_matches_name(token: str, name: str) -> bool:
+    """Return True iff token appears as a hyphen-bounded segment in name."""
+    import re
+    return bool(re.search(rf"(^|-){re.escape(token)}(-|$)", name))
+
 def discover_chain(repo_root: Path, work_id: str, kind: str, *, explicit: Path | None = None) -> Path:
     """Find the reviewer chain folder. kind ∈ {post-slice, post-phase}.
     If explicit is given, just validate it. Otherwise search docs/reviewer/."""
     if explicit is not None:
+        # Resolve relative paths against repo_root so callers can pass relative paths.
+        if not explicit.is_absolute():
+            explicit = (repo_root / explicit).resolve()
         if not (explicit / "chain.json").is_file():
             raise GateError(f"{explicit}: not a reviewer chain folder (missing chain.json)")
         return explicit
@@ -31,7 +39,7 @@ def discover_chain(repo_root: Path, work_id: str, kind: str, *, explicit: Path |
     suffix = f"-{kind}"
     candidates = [
         d for d in base.iterdir()
-        if d.is_dir() and d.name.endswith(suffix) and token in d.name.lower()
+        if d.is_dir() and d.name.endswith(suffix) and _token_matches_name(token, d.name.lower()[:-len(suffix)])
     ]
     if not candidates:
         raise GateError(
