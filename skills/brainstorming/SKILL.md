@@ -26,7 +26,7 @@ You MUST create a task for each of these items and complete them in order:
 3. **Ask clarifying questions** — one at a time, understand purpose/constraints/success criteria
 4. **Propose 2-3 approaches** — with trade-offs and your recommendation
 5. **Present design** — in sections scaled to their complexity, get user approval after each section
-6. **Write design doc** — save to `docs/specs/YYYY-MM-DD-<id>-<topic>-design.md` (where `<id>` is the TASKLIST ID per [[tasklist-discipline]], omitted if no TASKLIST.md) and commit. **If no TASKLIST row exists for `<id>` yet, create it first** via [[tasklist-discipline]] (see "Allocating a new ID") — the spec must not be the first artifact carrying the ID.
+6. **Write design doc** — save to `docs/specs/YYYY-MM-DD-<id>-<topic>-design.md` (where `<id>` is the tasktool ID per [[tasklist-discipline]], omitted if the project has no `docs/tasklist.json`) and commit. **If no row exists for `<id>` in `docs/tasklist.json` yet, create it first** via `tasktool create phase|slice|cross …` (see [[tasklist-discipline]]) — the spec must not be the first artifact carrying the ID. The pre-commit hook rejects orphan filenames.
 7. **Spec self-review** — quick inline check for placeholders, contradictions, ambiguity, scope (see below)
 8. **External spec review** — invoke [[external-review]] with `--kind spec` against the written spec; iterate until the verdict is `ready` or `ready with small edits`
 9. **Transition to implementation planning** — invoke writing-plans skill immediately to create the implementation plan. Do not ask the user before implementation planning unless review findings require a product decision or you are genuinely blocked.
@@ -124,7 +124,7 @@ After writing the spec document, look at it with fresh eyes:
 Fix any issues inline. No need to re-review — just fix and move on.
 
 **External Spec Review Gate:**
-After the spec self-review loop passes, invoke `[[external-review]]` with `--kind spec` against the written spec. Pass `docs/TASKLIST.md` as context when present, and iterate until the verdict is `ready` or `ready with small edits`.
+After the spec self-review loop passes, invoke `[[external-review]]` with `--kind spec` against the written spec. Pass `docs/tasklist.json` (or `tasktool render` output) as context when present, and iterate until the verdict is `ready` or `ready with small edits`.
 
 If the reviewer returns `revise`, apply the findings directly, update the spec, and re-submit. If a finding requires a product decision that was not resolved during brainstorming, ask the user the narrow question needed to unblock the review. Otherwise, continue without pausing.
 
