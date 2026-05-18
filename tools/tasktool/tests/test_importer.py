@@ -73,6 +73,36 @@ class TestImporterSlices(unittest.TestCase):
         self.assertEqual(slices[2].blocked_on.kind, "id")
         self.assertEqual(slices[2].blocked_on.value, "P2.S3")
 
+    def test_slice_external_blocked(self):
+        text = (
+            "## P2 — Demo 🚧 `IN PROGRESS`\n\n"
+            "- ⏸ **S4** `BLOCKED on external:foo/bar#42` — wait\n"
+        )
+        r = parse_tasklist_md(text)
+        slices = r.project.phases[0].slices
+        self.assertEqual(len(slices), 1)
+        self.assertEqual(slices[0].status, Status.BLOCKED)
+        self.assertIsNotNone(slices[0].blocked_on)
+        self.assertEqual(slices[0].blocked_on.kind, "external")
+        self.assertEqual(slices[0].blocked_on.value, "foo/bar#42")
+
+    def test_slice_unrecognised_tag_warns(self):
+        text = (
+            "## P2 — Demo 🚧 `IN PROGRESS`\n\n"
+            "- ☐ **S5** `WAT lol` — odd tag\n"
+        )
+        r = parse_tasklist_md(text)
+        slices = r.project.phases[0].slices
+        self.assertEqual(len(slices), 1)
+        self.assertEqual(slices[0].id, "S5")
+        self.assertEqual(slices[0].status, Status.READY)
+        self.assertIsNone(slices[0].closed)
+        self.assertIsNone(slices[0].blocked_on)
+        self.assertTrue(
+            any("unrecognised tag on slice S5" in w and "`WAT lol`" in w for w in r.warnings),
+            f"expected unrecognised-tag warning, got {r.warnings!r}",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -21,6 +21,10 @@ class _SliceMatch:
     closed: str | None
     blocked_on: BlockedOn | None
     plan_path: str | None
+    warning: str | None
+
+UNTITLED = "<untitled>"
+EXTERNAL_PREFIX = "external:"
 
 EMOJI_TO_STATUS = {
     "✅": Status.DONE,
@@ -37,7 +41,7 @@ PHASE_HEADER_BLOCKED_RE = re.compile(
     r"^##\s+(?P<id>P\d+)\s+—\s+(?P<title>.+?)\s+"
     r"⏸(?:\s+`(?P<tag>[^`]+)`)?\s*$"
 )
-PHASE_DONE_TAG_RE = re.compile(r"^DONE\s+(?P<date>\d{4}-\d{2}-\d{2})$")
+DONE_TAG_RE = re.compile(r"^DONE\s+(?P<date>\d{4}-\d{2}-\d{2})$")
 SPEC_RE = re.compile(r"Spec:\s*\[`(?P<path>[^`]+)`\]\([^)]+\)")
 PLAN_RE = re.compile(r"Plan:\s*(?:\[`(?P<path>[^`]+)`\]\([^)]+\)|_pending_)")
 
@@ -46,8 +50,7 @@ SLICE_LINE_RE = re.compile(
     r"(?:\s+`(?P<tag>[^`]+)`)?"
     r"(?:\s+(?:—\s+)?(?P<rest>.+))?$"
 )
-SLICE_DONE_TAG_RE = re.compile(r"^DONE\s+(?P<date>\d{4}-\d{2}-\d{2})$")
-SLICE_BLOCKED_TAG_RE = re.compile(r"^BLOCKED on\s+(?P<on>.+)$")
+BLOCKED_TAG_RE = re.compile(r"^BLOCKED on\s+(?P<on>.+)$")
 INLINE_PLAN_RE = re.compile(r"Plan:\s*\[`(?P<path>[^`]+)`\]\([^)]+\)")
 
 # Stop sniffing for Spec:/Plan: once we hit another header or a non-empty
@@ -69,7 +72,7 @@ def _match_phase_header(line: str) -> _PhaseMatch | None:
         tag = m.group("tag")
         closed: str | None = None
         if status is Status.DONE and tag:
-            dm = PHASE_DONE_TAG_RE.match(tag)
+            dm = DONE_TAG_RE.match(tag)
             if dm:
                 closed = dm.group("date")
         return _PhaseMatch(
@@ -97,33 +100,38 @@ def _match_slice_line(line: str) -> _SliceMatch | None:
     if not m:
         return None
     emoji = m.group("emoji")
+    sid = m.group("id")
     tag = m.group("tag")
     rest = m.group("rest") or ""
-    title = rest.split(". Plan:", 1)[0].strip() or "<untitled>"
+    title = rest.split(". Plan:", 1)[0].strip() or UNTITLED
     closed: str | None = None
     blocked_on: BlockedOn | None = None
+    warning: str | None = None
     if tag:
-        dm = SLICE_DONE_TAG_RE.match(tag)
+        dm = DONE_TAG_RE.match(tag)
+        bm = BLOCKED_TAG_RE.match(tag)
         if dm:
             closed = dm.group("date")
-        bm = SLICE_BLOCKED_TAG_RE.match(tag)
-        if bm:
+        elif bm:
             on = bm.group("on").strip()
-            if on.startswith("external:"):
-                blocked_on = BlockedOn(kind="external", value=on[len("external:"):])
+            if on.startswith(EXTERNAL_PREFIX):
+                blocked_on = BlockedOn(kind="external", value=on[len(EXTERNAL_PREFIX):])
             else:
                 blocked_on = BlockedOn(kind="id", value=on)
+        else:
+            warning = f"unrecognised tag on slice {sid}: `{tag}`"
     plan_path: str | None = None
     pm = INLINE_PLAN_RE.search(rest)
     if pm:
         plan_path = pm.group("path")
     return _SliceMatch(
-        id=m.group("id"),
+        id=sid,
         title=title,
         status=EMOJI_TO_STATUS[emoji],
         closed=closed,
         blocked_on=blocked_on,
         plan_path=plan_path,
+        warning=warning,
     )
 
 
@@ -183,6 +191,8 @@ def parse_tasklist_md(text: str) -> ParseResult:
         if current_phase is not None:
             sm = _match_slice_line(line)
             if sm is not None:
+                if sm.warning:
+                    warnings.append(f"line {i + 1}: {sm.warning}")
                 current_phase.slices.append(
                     Slice(
                         id=sm.id,
