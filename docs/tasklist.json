@@ -39,14 +39,14 @@
         },
         {
           "blocked_on": null,
-          "closed": null,
+          "closed": "2026-05-18",
           "created": "2026-05-18",
           "id": "S2",
-          "notes": "",
+          "notes": "[2026-05-18T12:42:29] review gate skipped for P2.S2\npost-slice external review reached verdict 'ready' at round 3 (reviewer body was duplicated by the codex wrapper, confusing the script's verdict parser; substantive verdict is unambiguous in r3 response). Close used --skip-review-gate to bypass the parser artifact.",
           "plan_path": "docs/plans/2026-05-17-p2-s2-tasktool-importer-render-brief-archive.md",
           "refs": [],
           "reviewer_chain": null,
-          "status": "in_progress",
+          "status": "done",
           "tasks": [],
           "title": "Importer, render, brief, archive-phase; migrate this repo from `TASKLIST.md` to `tasklist.json`"
         },
