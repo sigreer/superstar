@@ -1,6 +1,7 @@
 # tools/tasktool/commands.py
 from __future__ import annotations
 import datetime as _dt
+import subprocess as _subprocess
 from pathlib import Path
 from tasktool.model import (
     Project, Phase, Slice, Task, CrossCutting, BlockedOn, Status,
@@ -18,6 +19,23 @@ class CommandError(RuntimeError):
 
 DEFAULT_JSON_REL = "docs/tasklist.json"
 
+# Process-global toggle for `--no-stage`. Set by cli.main() before dispatch.
+STAGE_AFTER_WRITE: bool = True
+
+def _git_stage(repo_root: Path, path: Path) -> None:
+    """Best-effort `git add`. Silent on any failure (not a git repo, git missing, etc.).
+    Skipped entirely when STAGE_AFTER_WRITE is False (e.g. --no-stage)."""
+    if not STAGE_AFTER_WRITE:
+        return
+    try:
+        _subprocess.run(
+            ["git", "add", "--", str(path.relative_to(repo_root))],
+            cwd=repo_root, check=False,
+            stdout=_subprocess.DEVNULL, stderr=_subprocess.DEVNULL,
+        )
+    except (OSError, ValueError):
+        pass
+
 def _today() -> str:
     return _dt.date.today().isoformat()
 
@@ -32,7 +50,9 @@ def _load(repo_root: Path) -> Project:
 
 def _save(repo_root: Path, p: Project) -> None:
     validate_project(p)
-    save_project(p, _tasklist_path(repo_root))
+    path = _tasklist_path(repo_root)
+    save_project(p, path)
+    _git_stage(repo_root, path)
 
 # ───── init ─────
 

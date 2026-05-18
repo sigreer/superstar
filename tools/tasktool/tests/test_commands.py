@@ -348,3 +348,49 @@ class SchemaCmdTests(unittest.TestCase):
         self.assertEqual(data["$schema"], "https://json-schema.org/draft/2020-12/schema")
         self.assertIn("properties", data)
         self.assertIn("phases", data["properties"])
+
+import subprocess as _sp
+
+class GitStageTests(unittest.TestCase):
+    def test_writes_stage_file_when_in_git_repo(self):
+        t = _Tmp()
+        try:
+            _sp.run(["git", "init", "-q"], cwd=t.root, check=True)
+            _sp.run(["git", "config", "user.email", "t@t"], cwd=t.root, check=True)
+            _sp.run(["git", "config", "user.name", "t"], cwd=t.root, check=True)
+            commands.cmd_init(repo_root=t.root, project="demo")
+            staged = _sp.run(
+                ["git", "diff", "--cached", "--name-only"],
+                cwd=t.root, capture_output=True, text=True, check=True,
+            ).stdout
+            self.assertIn("docs/tasklist.json", staged)
+        finally:
+            t.cleanup()
+
+    def test_writes_silent_when_not_in_git_repo(self):
+        t = _Tmp()
+        try:
+            # No git init. Should not raise.
+            commands.cmd_init(repo_root=t.root, project="demo")
+            self.assertTrue((t.root / "docs/tasklist.json").exists())
+        finally:
+            t.cleanup()
+
+    def test_no_stage_skips_git_add(self):
+        t = _Tmp()
+        try:
+            _sp.run(["git", "init", "-q"], cwd=t.root, check=True)
+            _sp.run(["git", "config", "user.email", "t@t"], cwd=t.root, check=True)
+            _sp.run(["git", "config", "user.name", "t"], cwd=t.root, check=True)
+            commands.STAGE_AFTER_WRITE = False
+            try:
+                commands.cmd_init(repo_root=t.root, project="demo")
+            finally:
+                commands.STAGE_AFTER_WRITE = True
+            staged = _sp.run(
+                ["git", "diff", "--cached", "--name-only"],
+                cwd=t.root, capture_output=True, text=True, check=True,
+            ).stdout
+            self.assertNotIn("docs/tasklist.json", staged)
+        finally:
+            t.cleanup()
