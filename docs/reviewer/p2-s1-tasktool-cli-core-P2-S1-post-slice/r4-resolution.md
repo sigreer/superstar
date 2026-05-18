@@ -15,7 +15,7 @@ Status: fixed (carried over from r2)
 ## S1.F1
 Status: fixed
 Evidence:
-- Commit: TBD (committed after this file)
+- Commit: 894f307
 - Files: `tools/tasktool/allocate.py:51-65`, `tools/tasktool/tests/test_allocate.py`
 - Verification: new test `test_orphan_slice_in_reviewer_folder` passes; full suite green at 139 tests
 
