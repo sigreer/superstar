@@ -236,6 +236,21 @@ class ImportCliTests(unittest.TestCase):
             t.cleanup()
 
 
+class RenderCliTests(unittest.TestCase):
+    def test_render_outputs_markdown(self):
+        t = _CliTmp()
+        try:
+            r = run_cli("init", "--project", "demo", cwd=t.root)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            r = run_cli("create", "phase", "--title", "Demo phase", cwd=t.root)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            r = run_cli("render", cwd=t.root)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertIn("## P1 — Demo phase", r.stdout)
+        finally:
+            t.cleanup()
+
+
 class SetStatusTests(unittest.TestCase):
     """F3 regression: `set --status blocked` must be rejected by argparse."""
 

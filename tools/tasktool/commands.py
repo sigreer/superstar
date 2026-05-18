@@ -469,6 +469,12 @@ def cmd_import(
     _save(repo_root, result.project)
     return 0, f"wrote {target}\n", warnings_text
 
+def cmd_render(*, repo_root: Path, format: str = "markdown") -> str:
+    from tasktool.render import render_project
+    if format != "markdown":
+        raise CommandError(f"render: unsupported format {format!r} (only 'markdown' for S2)")
+    return render_project(_load(repo_root))
+
 def cmd_schema() -> str:
     from tasktool.schema_gen import dump_schema
     return dump_schema()

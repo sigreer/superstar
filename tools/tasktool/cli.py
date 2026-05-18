@@ -103,6 +103,9 @@ def _build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("schema")
 
+    p_render = sub.add_parser("render")
+    p_render.add_argument("--format", default="markdown", choices=["markdown"])
+
     p_import = sub.add_parser("import")
     p_import.add_argument("md_path", type=Path)
     p_import.add_argument("--dry-run", action="store_true")
@@ -176,6 +179,8 @@ def main(argv: list[str]) -> int:
             return rc
         elif args.cmd == "schema":
             sys.stdout.write(commands.cmd_schema())
+        elif args.cmd == "render":
+            sys.stdout.write(commands.cmd_render(repo_root=root, format=args.format))
         elif args.cmd == "import":
             rc, out, warn = commands.cmd_import(
                 repo_root=root, md_path=args.md_path,
