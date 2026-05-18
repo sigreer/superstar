@@ -247,12 +247,12 @@ Each chain folder contains a `chain.json` manifest that records every round's me
 
 | `--kind`      | Target (`--file`)                                | Required `--context`                                       |
 |---------------|--------------------------------------------------|------------------------------------------------------------|
-| `spec`        | The spec file                                    | `docs/TASKLIST.md` (if present)                            |
-| `plan`        | The plan file                                    | Originating spec; `docs/TASKLIST.md` (if present)          |
-| `post-slice`  | The plan file (or slice-close note)              | Spec; `docs/TASKLIST.md`; any slice-close / evidence files |
-| `post-phase`  | The phase archive note or plan                   | Spec; plan; `docs/TASKLIST.md`                             |
+| `spec`        | The spec file                                    | `docs/tasklist.json` (if present; or `tasktool render`)    |
+| `plan`        | The plan file                                    | Originating spec; `docs/tasklist.json` (if present)        |
+| `post-slice`  | The plan file (or slice-close note)              | Spec; `docs/tasklist.json`; any slice-close / evidence files |
+| `post-phase`  | The phase archive note or plan                   | Spec; plan; `docs/tasklist.json`                           |
 
-If the project has no TASKLIST.md, substitute its top-level tracker. Always pass *some* tracker as context so the reviewer sees how the artefact fits the broader plan.
+If the project has no `docs/tasklist.json` (and no equivalent top-level tracker), substitute whatever the project uses. Always pass *some* tracker as context so the reviewer sees how the artefact fits the broader plan.
 
 ## Hard rule — delegation during execution
 
@@ -337,6 +337,6 @@ After applying edits, summarise:
 
 - `[[writing-plans]]` — invokes this skill after spec save and after plan save.
 - `[[subagent-driven-development]]` — invokes this skill after each slice and at phase close.
-- `[[tasklist-discipline]]` — slice/phase boundaries are defined by TASKLIST.md status flips.
+- `[[tasklist-discipline]]` — slice/phase boundaries are defined by `tasktool close` / `tasktool archive-phase`, both of which enforce the relevant review gate before they accept the status change.
 - `[[finishing-a-development-branch]]` — pairs with `--kind post-phase` before the closeout commit.
 - `[[project-setup]]` — installs/configures the reviewer CLI in new projects.
