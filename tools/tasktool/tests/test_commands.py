@@ -86,3 +86,147 @@ class CreateTests(unittest.TestCase):
     def test_create_cross(self):
         new_id = commands.cmd_create_cross(repo_root=self.t.root, title="docs cleanup")
         self.assertEqual(new_id, "X1")
+
+import json
+
+def _write_passing_chain(root: Path, name: str, verdict: str = "ready") -> Path:
+    chain = root / "docs/reviewer" / name
+    chain.mkdir(parents=True)
+    (chain / "chain.json").write_text(
+        json.dumps({"rounds": [{"round": 1, "merged_verdict": verdict, "status": "ok"}]}),
+        encoding="utf-8",
+    )
+    return chain
+
+class SetStatusTests(unittest.TestCase):
+    def setUp(self):
+        self.t = _Tmp()
+        commands.cmd_init(repo_root=self.t.root, project="demo")
+        commands.cmd_create_phase(repo_root=self.t.root, title="P1")
+        commands.cmd_create_slice(repo_root=self.t.root, phase_id="P1", title="S1")
+        commands.cmd_create_task(repo_root=self.t.root, slice_id="P1.S1", title="T1")
+    def tearDown(self):
+        self.t.cleanup()
+
+    def test_set_task_in_progress(self):
+        commands.cmd_set(repo_root=self.t.root, id="P1.S1.T1", status="in_progress")
+        p = load_project(self.t.root / "docs/tasklist.json")
+        self.assertEqual(p.phases[0].slices[0].tasks[0].status, Status.IN_PROGRESS)
+
+    def test_set_task_done_auto_stamps_closed(self):
+        commands.cmd_set(repo_root=self.t.root, id="P1.S1.T1", status="done")
+        p = load_project(self.t.root / "docs/tasklist.json")
+        self.assertIsNotNone(p.phases[0].slices[0].tasks[0].closed)
+
+    def test_set_slice_done_requires_review_gate(self):
+        with self.assertRaises(commands.CommandError):
+            commands.cmd_set(repo_root=self.t.root, id="P1.S1", status="done")
+
+    def test_set_slice_done_passes_with_chain(self):
+        _write_passing_chain(self.t.root, "p1-s1-post-slice", "ready")
+        commands.cmd_set(repo_root=self.t.root, id="P1.S1", status="done")
+        p = load_project(self.t.root / "docs/tasklist.json")
+        self.assertEqual(p.phases[0].slices[0].status, Status.DONE)
+        self.assertIsNotNone(p.phases[0].slices[0].reviewer_chain)
+
+    def test_set_slice_done_skip_gate(self):
+        commands.cmd_set(
+            repo_root=self.t.root, id="P1.S1", status="done", skip_review_gate=True,
+        )
+        p = load_project(self.t.root / "docs/tasklist.json")
+        self.assertEqual(p.phases[0].slices[0].status, Status.DONE)
+        self.assertIn("review gate skipped", p.phases[0].slices[0].notes)
+
+class CloseTests(unittest.TestCase):
+    def setUp(self):
+        self.t = _Tmp()
+        commands.cmd_init(repo_root=self.t.root, project="demo")
+        commands.cmd_create_phase(repo_root=self.t.root, title="P1")
+        commands.cmd_create_slice(repo_root=self.t.root, phase_id="P1", title="S1")
+    def tearDown(self):
+        self.t.cleanup()
+
+    def test_close_slice_with_chain_and_refs(self):
+        _write_passing_chain(self.t.root, "p1-s1-post-slice", "ready")
+        commands.cmd_close(
+            repo_root=self.t.root, id="P1.S1",
+            refs=["docs/a.md", "docs/b.md"], note="post-impl",
+        )
+        p = load_project(self.t.root / "docs/tasklist.json")
+        s = p.phases[0].slices[0]
+        self.assertEqual(s.status, Status.DONE)
+        self.assertEqual(s.refs, ["docs/a.md", "docs/b.md"])
+        self.assertIn("post-impl", s.notes)
+
+class BlockTests(unittest.TestCase):
+    def setUp(self):
+        self.t = _Tmp()
+        commands.cmd_init(repo_root=self.t.root, project="demo")
+        commands.cmd_create_phase(repo_root=self.t.root, title="P1")
+        commands.cmd_create_slice(repo_root=self.t.root, phase_id="P1", title="S1")
+        commands.cmd_create_slice(repo_root=self.t.root, phase_id="P1", title="S2")
+    def tearDown(self):
+        self.t.cleanup()
+
+    def test_block_slice_by_id(self):
+        commands.cmd_block(repo_root=self.t.root, slice_id="P1.S1", on="P1.S2")
+        p = load_project(self.t.root / "docs/tasklist.json")
+        s = p.phases[0].slices[0]
+        self.assertEqual(s.status, Status.BLOCKED)
+        self.assertEqual(s.blocked_on.kind, "id")
+        self.assertEqual(s.blocked_on.value, "P1.S2")
+
+    def test_block_external(self):
+        commands.cmd_block(repo_root=self.t.root, slice_id="P1.S1", on="external:vendor")
+        p = load_project(self.t.root / "docs/tasklist.json")
+        s = p.phases[0].slices[0]
+        self.assertEqual(s.blocked_on.kind, "external")
+        self.assertEqual(s.blocked_on.value, "vendor")
+
+    def test_block_rejects_task(self):
+        commands.cmd_create_task(repo_root=self.t.root, slice_id="P1.S1", title="t")
+        with self.assertRaises(commands.CommandError):
+            commands.cmd_block(repo_root=self.t.root, slice_id="P1.S1.T1", on="P1.S2")
+
+    def test_unblock(self):
+        commands.cmd_block(repo_root=self.t.root, slice_id="P1.S1", on="P1.S2")
+        commands.cmd_unblock(repo_root=self.t.root, slice_id="P1.S1")
+        p = load_project(self.t.root / "docs/tasklist.json")
+        s = p.phases[0].slices[0]
+        self.assertEqual(s.status, Status.READY)
+        self.assertIsNone(s.blocked_on)
+
+class ShortFormResolutionTests(unittest.TestCase):
+    def setUp(self):
+        self.t = _Tmp()
+        commands.cmd_init(repo_root=self.t.root, project="demo")
+        commands.cmd_create_phase(repo_root=self.t.root, title="P1")
+        commands.cmd_create_slice(repo_root=self.t.root, phase_id="P1", title="S1")
+        commands.cmd_create_task(repo_root=self.t.root, slice_id="P1.S1", title="t")
+    def tearDown(self):
+        self.t.cleanup()
+
+    @unittest.skip("cmd_note added in Task 10")
+    def test_short_slice_unambiguous_resolves(self):
+        # Only one slice in the project — short form S1 should resolve.
+        commands.cmd_note(repo_root=self.t.root, id="S1", append="via short")
+        p = load_project(self.t.root / "docs/tasklist.json")
+        self.assertIn("via short", p.phases[0].slices[0].notes)
+
+    @unittest.skip("cmd_note added in Task 10")
+    def test_short_task_unambiguous_resolves(self):
+        commands.cmd_note(repo_root=self.t.root, id="T1", append="via short")
+        p = load_project(self.t.root / "docs/tasklist.json")
+        self.assertIn("via short", p.phases[0].slices[0].tasks[0].notes)
+
+    @unittest.skip("cmd_note added in Task 10")
+    def test_short_slice_ambiguous_rejected(self):
+        commands.cmd_create_phase(repo_root=self.t.root, title="P2")
+        commands.cmd_create_slice(repo_root=self.t.root, phase_id="P2", title="S1")
+        with self.assertRaises(commands.CommandError) as ctx:
+            commands.cmd_note(repo_root=self.t.root, id="S1", append="x")
+        self.assertIn("ambiguous", str(ctx.exception).lower())
+
+    def test_create_task_accepts_short_slice(self):
+        new_id = commands.cmd_create_task(repo_root=self.t.root, slice_id="S1", title="t2")
+        self.assertEqual(new_id, "T2")

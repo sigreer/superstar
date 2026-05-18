@@ -100,3 +100,165 @@ def cmd_create_cross(*, repo_root: Path, title: str) -> str:
     p.cross_cutting.append(CrossCutting(id=new_id, title=title, created=_today()))
     _save(repo_root, p)
     return new_id
+
+# ───── set / close / block / unblock ─────
+
+def _resolve_id(p: Project, id: str) -> str:
+    """Resolve a short ID to its fully-qualified form when unambiguous (spec §7 conventions).
+    Phase and cross IDs need no resolution. Short S/T IDs are accepted only when exactly one
+    matching item exists across the whole project."""
+    parsed = parse_id(id)[0]
+    if "." in id or parsed in ("phase", "cross"):
+        return id
+    if parsed == "slice":
+        matches = [(ph.id, s.id) for ph in p.phases for s in ph.slices if s.id == id]
+        if not matches:
+            raise CommandError(f"slice {id} not found")
+        if len(matches) > 1:
+            qids = ", ".join(f"{ph}.{s}" for ph, s in matches)
+            raise CommandError(f"ambiguous short id {id!r}; matches: {qids}. Use fully-qualified form.")
+        return f"{matches[0][0]}.{matches[0][1]}"
+    if parsed == "task":
+        matches = [(ph.id, s.id, t.id) for ph in p.phases for s in ph.slices for t in s.tasks if t.id == id]
+        if not matches:
+            raise CommandError(f"task {id} not found")
+        if len(matches) > 1:
+            qids = ", ".join(f"{ph}.{s}.{t}" for ph, s, t in matches)
+            raise CommandError(f"ambiguous short id {id!r}; matches: {qids}. Use fully-qualified form.")
+        ph, s, t = matches[0]
+        return f"{ph}.{s}.{t}"
+    return id
+
+def cmd_create_task(*, repo_root: Path, slice_id: str, title: str) -> str:
+    """Now accepts unambiguous short slice IDs via _resolve_id. Replaces the
+    fully-qualified-only version from Task 8."""
+    p = _load(repo_root)
+    qid = _resolve_id(p, slice_id)
+    if parse_id(qid)[0] != "slice":
+        raise CommandError(f"task creation requires a slice id, got {slice_id!r} ({parse_id(qid)[0]})")
+    phase_part, slice_part, _ = split_qualified(qid)
+    phase = next(ph for ph in p.phases if ph.id == phase_part)
+    slc = next(s for s in phase.slices if s.id == slice_part)
+    new_id = next_task_id(p, phase_part, slice_part)
+    slc.tasks.append(Task(id=new_id, title=title, created=_today()))
+    _save(repo_root, p)
+    return new_id
+
+def _find_item(p: Project, id: str):
+    """Returns (qid, container_list, item). Accepts fully-qualified or unambiguous short.
+    The returned qid is the fully-qualified form — callers MUST use it for any downstream
+    operation that searches by ID (reviewer-chain discovery in particular), to avoid the
+    short-form aliasing across historical chains."""
+    qid = _resolve_id(p, id)
+    parsed = parse_id(qid)[0]
+    if parsed == "phase":
+        for ph in p.phases:
+            if ph.id == qid:
+                return qid, p.phases, ph
+        raise CommandError(f"phase {qid} not found")
+    if parsed == "cross":
+        for c in p.cross_cutting:
+            if c.id == qid:
+                return qid, p.cross_cutting, c
+        raise CommandError(f"cross-cutting {qid} not found")
+    phase_part, slice_part, task_part = split_qualified(qid)
+    phase = next((ph for ph in p.phases if ph.id == phase_part), None)
+    if phase is None:
+        raise CommandError(f"phase {phase_part} not found")
+    if task_part is not None:
+        slc = next((s for s in phase.slices if s.id == slice_part), None)
+        if slc is None:
+            raise CommandError(f"slice {phase_part}.{slice_part} not found")
+        task = next((t for t in slc.tasks if t.id == task_part), None)
+        if task is None:
+            raise CommandError(f"task {qid} not found")
+        return qid, slc.tasks, task
+    slc = next((s for s in phase.slices if s.id == slice_part), None)
+    if slc is None:
+        raise CommandError(f"slice {qid} not found")
+    return qid, phase.slices, slc
+
+def _apply_review_gate(
+    repo_root: Path, p: Project, item, id: str, kind_label: str,
+    reviewer_chain: Path | None, skip_review_gate: bool,
+) -> None:
+    """Mutates item to record reviewer_chain or skip note."""
+    if skip_review_gate:
+        ts = _dt.datetime.now().isoformat(timespec="seconds")
+        note = f"[{ts}] review gate skipped for {id}"
+        item.notes = (item.notes + "\n" + note).strip() if item.notes else note
+        return
+    gate_kind = "post-slice" if kind_label == "slice" else "post-phase"
+    try:
+        result = check_gate(repo_root, id, gate_kind, explicit=reviewer_chain)
+    except GateError as e:
+        raise CommandError(f"review gate failed: {e}") from e
+    rel = result.chain.relative_to(repo_root).as_posix()
+    if kind_label == "slice":
+        item.reviewer_chain = rel
+    else:
+        item.phase_reviewer_chain = rel
+
+def cmd_set(
+    *, repo_root: Path, id: str, status: str,
+    reviewer_chain: Path | None = None, skip_review_gate: bool = False,
+) -> None:
+    p = _load(repo_root)
+    qid, _container, item = _find_item(p, id)
+    new_status = Status(status)
+    kind = parse_id(qid)[0]
+    if new_status == Status.BLOCKED and kind != "slice":
+        raise CommandError(f"only slices can be blocked; {qid} is a {kind}")
+    if new_status == Status.DONE and kind in ("slice", "phase"):
+        _apply_review_gate(repo_root, p, item, qid, kind, reviewer_chain, skip_review_gate)
+    item.status = new_status
+    if new_status == Status.DONE and item.closed is None:
+        item.closed = _today()
+    _save(repo_root, p)
+
+def cmd_close(
+    *, repo_root: Path, id: str,
+    refs: list[str] | None = None, closed_date: str | None = None,
+    note: str | None = None,
+    reviewer_chain: Path | None = None, skip_review_gate: bool = False,
+) -> None:
+    p = _load(repo_root)
+    qid, _container, item = _find_item(p, id)
+    kind = parse_id(qid)[0]
+    if kind == "task" or kind == "cross":
+        pass  # no gate; just close
+    elif kind in ("slice", "phase"):
+        _apply_review_gate(repo_root, p, item, qid, kind, reviewer_chain, skip_review_gate)
+    else:
+        raise CommandError(f"cannot close {kind} {qid}")
+    item.status = Status.DONE
+    item.closed = closed_date or _today()
+    if refs:
+        for r in refs:
+            if r not in item.refs:
+                item.refs.append(r)
+    if note:
+        item.notes = (item.notes + "\n" + note).strip() if item.notes else note
+    _save(repo_root, p)
+
+def cmd_block(*, repo_root: Path, slice_id: str, on: str) -> None:
+    p = _load(repo_root)
+    if not is_slice_id(slice_id):
+        raise CommandError(f"block only works on slices; {slice_id} is a {kind_of(slice_id)}")
+    _qid, _container, item = _find_item(p, slice_id)
+    if on.startswith("external:"):
+        item.blocked_on = BlockedOn(kind="external", value=on[len("external:"):])
+    else:
+        parse_id(on)  # validate
+        item.blocked_on = BlockedOn(kind="id", value=on)
+    item.status = Status.BLOCKED
+    _save(repo_root, p)
+
+def cmd_unblock(*, repo_root: Path, slice_id: str, resume: bool = False) -> None:
+    p = _load(repo_root)
+    if not is_slice_id(slice_id):
+        raise CommandError(f"unblock only works on slices; {slice_id} is a {kind_of(slice_id)}")
+    _qid, _container, item = _find_item(p, slice_id)
+    item.blocked_on = None
+    item.status = Status.IN_PROGRESS if resume else Status.READY
+    _save(repo_root, p)
