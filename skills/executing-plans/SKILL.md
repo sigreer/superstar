@@ -35,9 +35,9 @@ For each task:
 When the last task in a slice is verified — **before flipping slice status** — run the external-review gate:
 
 - Announce: "I'm using the external-review skill to gate slice close."
-- **REQUIRED SUB-SKILL:** `superstar:external-review` with `--kind post-slice`, passing the plan as `--file` and the spec + TASKLIST.md as `--context`.
+- **REQUIRED SUB-SKILL:** `superstar:external-review` with `--kind post-slice`, passing the plan as `--file` and the spec + `docs/tasklist.json` as `--context`.
 - On `revise`: address findings, re-submit. Loop until verdict ∈ {ready, ready with small edits}.
-- Only then flip the slice status per `[[tasklist-discipline]]`.
+- Only then run `tasktool close <slice-id>` (the CLI re-checks the reviewer chain) — see `[[tasklist-discipline]]`.
 
 **This gate is separate from any per-task internal review.** Even when the in-loop internal/code-quality review has approved every task in the slice, the external review at slice boundary is still required. They are different reviews with different scopes (per-task vs. per-slice) and different reviewers (in-session subagent vs. third-party CLI).
 
@@ -47,7 +47,7 @@ When the last slice in a phase has closed — **before archiving the phase**:
 
 - **REQUIRED SUB-SKILL:** `superstar:external-review` with `--kind post-phase`.
 - Same gate rules. Iterate until accepted.
-- Then archive the phase per `[[tasklist-discipline]]`.
+- Then run `tasktool archive-phase <phase-id>`; see `[[tasklist-discipline]]`.
 
 ### Step 5: Complete Development
 
