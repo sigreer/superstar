@@ -1,7 +1,7 @@
 from __future__ import annotations
 import re
 from dataclasses import dataclass, field
-from tasktool.model import Project, Phase, Slice, BlockedOn, Status
+from tasktool.model import Project, Phase, Slice, BlockedOn, CrossCutting, Status
 
 
 @dataclass(slots=True)
@@ -52,6 +52,51 @@ SLICE_LINE_RE = re.compile(
 )
 BLOCKED_TAG_RE = re.compile(r"^BLOCKED on\s+(?P<on>.+)$")
 INLINE_PLAN_RE = re.compile(r"Plan:\s*\[`(?P<path>[^`]+)`\]\([^)]+\)")
+
+CROSS_HEADER_RE = re.compile(r"^##\s+Cross-cutting\b")
+CROSS_LINE_RE = re.compile(
+    r"^-\s+(?P<emoji>[✅🚧☐])\s+\*\*(?P<id>X\d+)\*\*"
+    r"(?:\s+—\s+(?P<rest>.+))?$"
+)
+CROSS_LINE_BLOCKED_RE = re.compile(
+    r"^-\s+⏸\s+\*\*(?P<id>X\d+)\*\*"
+    r"(?:\s+—\s+(?P<rest>.+))?$"
+)
+
+BLOCKED_NOT_ALLOWED_ON_CROSS = "blocked status not allowed on cross; coerced to ready"
+UNPARSED_BULLET = "unparsed bullet: {raw!r}"
+
+
+@dataclass(slots=True)
+class _CrossMatch:
+    id: str
+    title: str
+    status: Status
+    warning: str | None
+
+
+def _match_cross_line(line: str) -> _CrossMatch | None:
+    m = CROSS_LINE_RE.match(line)
+    if m:
+        rest = (m.group("rest") or "").strip()
+        title = rest or UNTITLED
+        return _CrossMatch(
+            id=m.group("id"),
+            title=title,
+            status=EMOJI_TO_STATUS[m.group("emoji")],
+            warning=None,
+        )
+    m = CROSS_LINE_BLOCKED_RE.match(line)
+    if m:
+        rest = (m.group("rest") or "").strip()
+        title = rest or UNTITLED
+        return _CrossMatch(
+            id=m.group("id"),
+            title=title,
+            status=Status.READY,
+            warning=BLOCKED_NOT_ALLOWED_ON_CROSS,
+        )
+    return None
 
 # Stop sniffing for Spec:/Plan: once we hit another header or a non-empty
 # structural marker. We accept a small window after the phase header.
@@ -148,14 +193,21 @@ def parse_tasklist_md(text: str) -> ParseResult:
     project = Project(project="<imported>")
     warnings: list[str] = []
     current_phase: Phase | None = None
+    in_cross = False
 
     lines = text.splitlines()
     i = 0
     n = len(lines)
     while i < n:
         line = lines[i]
+        if CROSS_HEADER_RE.match(line):
+            in_cross = True
+            current_phase = None
+            i += 1
+            continue
         header = _match_phase_header(line)
         if header is not None:
+            in_cross = False
             if header.warning:
                 warnings.append(f"line {i + 1}: {header.warning}")
             phase = Phase(
@@ -188,6 +240,27 @@ def parse_tasklist_md(text: str) -> ParseResult:
             current_phase = phase
             i += 1
             continue
+        if in_cross:
+            cm = _match_cross_line(line)
+            if cm is not None:
+                if cm.warning:
+                    warnings.append(f"line {i + 1}: {cm.warning}")
+                project.cross_cutting.append(
+                    CrossCutting(
+                        id=cm.id,
+                        title=cm.title,
+                        created="1970-01-01",
+                        status=cm.status,
+                    )
+                )
+                i += 1
+                continue
+            if line.startswith("- "):
+                warnings.append(
+                    f"line {i + 1}: " + UNPARSED_BULLET.format(raw=line)
+                )
+            i += 1
+            continue
         if current_phase is not None:
             sm = _match_slice_line(line)
             if sm is not None:
@@ -206,6 +279,10 @@ def parse_tasklist_md(text: str) -> ParseResult:
                 )
                 i += 1
                 continue
+            if line.startswith("- "):
+                warnings.append(
+                    f"line {i + 1}: " + UNPARSED_BULLET.format(raw=line)
+                )
         i += 1
 
     return ParseResult(project=project, warnings=warnings)

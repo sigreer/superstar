@@ -104,5 +104,34 @@ class TestImporterSlices(unittest.TestCase):
         )
 
 
+CROSS_AND_NOISE = """\
+## Cross-cutting (`X*`) — opportunistic, unscheduled
+
+- ☐ **X1** — gather telemetry for skill firing rate.
+- ⏸ **X2** — bogus blocked cross item.
+- malformed bullet
+
+## P1 — Old work (historical) ✅ `DONE 2025-12-01`
+
+Closed; see `docs/archived-tasks/P1-old.md`.
+"""
+
+
+class TestImporterMisc(unittest.TestCase):
+    def test_cross_and_warnings(self):
+        r = parse_tasklist_md(CROSS_AND_NOISE)
+        # Both cross items captured; X2's blocked status coerced to ready.
+        self.assertEqual([c.id for c in r.project.cross_cutting], ["X1", "X2"])
+        self.assertEqual(r.project.cross_cutting[0].status, Status.READY)
+        self.assertEqual(r.project.cross_cutting[1].status, Status.READY)
+        # P1 stays in phases[] (historical imports never become ArchivedPhase).
+        self.assertTrue(any(ph.id == "P1" for ph in r.project.phases))
+        self.assertFalse(r.project.archived_phases)
+        # X2's invalid status surfaces as a warning.
+        self.assertTrue(any("blocked status not allowed on cross" in w for w in r.warnings))
+        # The malformed bullet surfaces as a warning.
+        self.assertTrue(any("malformed bullet" in w for w in r.warnings))
+
+
 if __name__ == "__main__":
     unittest.main()
