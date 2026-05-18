@@ -22,7 +22,7 @@
 | Create | `tools/tasktool/tests/test_validate_orphans.py` | Unit + CLI tests for the new orphan-scan flag. |
 | Create | `tools/tasktool/templates/pre-commit-tasktool` | POSIX sh hook template (per spec §8.1) — strict-format + full validate + orphan scan + TASKLIST.md block. |
 | Modify | `tools/tasktool/install.sh` | Add `install.sh --hook` mode that drops `.git/hooks/pre-commit` from the template, idempotent + `--force`. |
-| Create | `tools/tasktool/tests/test_pre_commit_hook.py` | Synthetic-repo hook tests: canonical commit passes; non-canonical bytes blocked; orphan staged spec blocked; staged `TASKLIST.md` blocked; `TASKTOOL_RAW=1` editor + `validate --normalise` round-trip passes. |
+| Create | `tools/tasktool/tests/test_pre_commit_hook.py` | Synthetic-repo hook tests: canonical commit passes; non-canonical bytes blocked; orphan staged spec blocked; staged `TASKLIST.md` blocked; raw semantic edit + `validate --normalise` round-trip passes. (`TASKTOOL_RAW=1` is editor-side scaffolding only — the hook never inspects it, so the test exercises the recovery path with a direct edit instead.) |
 | Rewrite | `skills/tasklist-discipline/SKILL.md` | Full rewrite around tasktool (per spec §9.1). |
 | Delete | `skills/tasklist-discipline/templates/TASKLIST.template.md` | Replaced by `tasktool init`. |
 | Modify | `skills/writing-plans/SKILL.md` | `docs/TASKLIST.md` → `docs/tasklist.json`; ID-existence check uses `tasktool show <id>`. |
