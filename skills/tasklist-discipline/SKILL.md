@@ -7,6 +7,8 @@ description: Use whenever planning, closing slices/phases, or referencing work i
 
 A `docs/tasklist.json` file is the canonical, top-level tracker for the project. It groups work into **phases**, **slices**, **tasks**, and **cross-cutting** items, each with a stable, never-renumbered ID. All mutations flow through `tasktool`; a pre-commit hook refuses non-canonical bytes, orphaned spec/plan filenames, and any commit that touches the legacy `docs/TASKLIST.md`.
 
+Prefer the repo-local launcher `tools/tasktool/tasktool` when it exists; it works from a fresh clone without installing a global shim. The global `tasktool` command is an optional convenience installed by `bash tools/tasktool/install.sh`. If neither is available, use `PYTHONPATH=tools python3 -m tasktool`.
+
 **Announce at start:** "I'm using the tasklist-discipline skill to update docs/tasklist.json via tasktool."
 
 ## When to use
@@ -16,6 +18,8 @@ A `docs/tasklist.json` file is the canonical, top-level tracker for the project.
 - About to close a phase → `tasktool archive-phase <phase-id>`. The CLI enforces the post-phase gate and writes the archive note.
 - Entering a slice → `tasktool brief <slice-id>` instead of reading the JSON.
 - Onboarding a project — `[[project-setup]]` runs `tasktool init` and installs the hook.
+
+Onboarding has a hard setup boundary: after `[[project-setup]]` creates or imports `docs/tasklist.json`, installs hooks, vendors `scripts/external-reviewer.py`, moves legacy `docs/superpowers/` files, or edits `CLAUDE.md` / `AGENTS.md`, that setup/migration must be committed, stashed, or explicitly paused before implementation work begins.
 
 ## Conceptual model
 
@@ -33,20 +37,20 @@ Status enum: `ready | in_progress | blocked | done`. Only slices may take `block
 ## Daily commands
 
 ```sh
-tasktool brief <id>            # start-of-work primer for slice or phase
-tasktool show <id>             # full detail
-tasktool list --open           # everything ready / in_progress / blocked
-tasktool create slice <phase-id> --title "…"
-tasktool set <id> --status in_progress
-tasktool note <id> --append "…"
-tasktool ref <id> --add path/to/artifact
-tasktool block <slice-id> --on P2.S5
-tasktool close <slice-id>      # enforces post-slice review gate
-tasktool archive-phase <phase-id>  # enforces post-phase review gate
-tasktool validate              # full validation
+tools/tasktool/tasktool brief <id>            # start-of-work primer for slice or phase
+tools/tasktool/tasktool show <id>             # full detail
+tools/tasktool/tasktool list --open           # everything ready / in_progress / blocked
+tools/tasktool/tasktool create slice <phase-id> --title "…"
+tools/tasktool/tasktool set <id> --status in_progress
+tools/tasktool/tasktool note <id> --append "…"
+tools/tasktool/tasktool ref <id> --add path/to/artifact
+tools/tasktool/tasktool block <slice-id> --on P2.S5
+tools/tasktool/tasktool close <slice-id>      # enforces post-slice review gate
+tools/tasktool/tasktool archive-phase <phase-id>  # enforces post-phase review gate
+tools/tasktool/tasktool validate              # full validation
 ```
 
-Run `tasktool --help` (or `tasktool <cmd> --help`) for the full surface.
+Run `tools/tasktool/tasktool --help` (or `tools/tasktool/tasktool <cmd> --help`) for the full surface.
 
 ## Gating concepts (why the CLI refuses you)
 
@@ -62,7 +66,7 @@ If a raw edit is genuinely needed:
 
 ```sh
 TASKTOOL_RAW=1 $EDITOR docs/tasklist.json
-tasktool validate --normalise
+tools/tasktool/tasktool validate --normalise
 ```
 
 `--normalise` re-serialises the file through the canonical formatter so the pre-commit hook accepts it. There is no `tasktool edit --raw` subcommand by design — the friction keeps agents on the sanctioned commands.
@@ -71,10 +75,10 @@ tasktool validate --normalise
 
 | Scenario | Action |
 |----------|--------|
-| Incidental fix in the same area | `tasktool create task <slice-id> --title …` |
-| Real unit of work | `tasktool create slice <phase-id> --title …` (or `--follow-up <slice-id>` for a letter-suffix) |
+| Incidental fix in the same area | `tools/tasktool/tasktool create task <slice-id> --title …` |
+| Real unit of work | `tools/tasktool/tasktool create slice <phase-id> --title …` (or `--follow-up <slice-id>` for a letter-suffix) |
 | Bug surfaced by review | Inline task if cheap; follow-up slice if it deserves its own scope. |
-| Cross-cutting, unscheduled | `tasktool create cross --title …` |
+| Cross-cutting, unscheduled | `tools/tasktool/tasktool create cross --title …` |
 
 ## Referencing items in artifacts
 
@@ -92,11 +96,12 @@ tasktool validate --normalise
 | "`tasktool` says the verdict isn't ready, but the reviewer comments look fine." | Re-read the verdict line. `revise` is `revise`. If the reviewer chain is mis-parsed, fix the chain; do not pass `--skip-review-gate` casually. |
 | "I'll bring back `docs/TASKLIST.md` for readability." | The hook refuses commits that touch it. Use `tasktool render` if you want markdown. |
 | "I'll just renumber IDs to match execution order." | No. IDs are stable. Execution order lives in the array order; IDs preserve creation order. |
+| "Setup files are just scaffolding; I'll leave them dirty while implementing." | No. Setup/migration artifacts make post-slice review scope ambiguous. Resolve the setup boundary first. |
 
 ## Integration
 
-- `[[writing-plans]]` — embeds slice IDs in plan filenames; calls `tasktool show <id>` for context.
-- `[[brainstorming]]` — allocates IDs via `tasktool create` before writing the spec.
+- `[[writing-plans]]` — embeds slice IDs in plan filenames; calls `tools/tasktool/tasktool show <id>` for context.
+- `[[brainstorming]]` — allocates IDs via `tools/tasktool/tasktool create` before writing the spec.
 - `[[external-review]]` — passes `docs/tasklist.json` (or `tasktool render` output) as `--context`.
-- `[[subagent-driven-development]]` — calls `tasktool close <slice-id>` at slice end and `tasktool archive-phase` at phase end.
+- `[[subagent-driven-development]]` — calls `tools/tasktool/tasktool close <slice-id>` at slice end and `tools/tasktool/tasktool archive-phase` at phase end.
 - `[[project-setup]]` — runs `tasktool init` and `install.sh --hook`.

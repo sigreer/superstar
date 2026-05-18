@@ -40,15 +40,17 @@ Plans are organised into **slices** (and slices into **tasks**) per `[[tasklist-
 The per-task internal reviews approving every task in a slice **does not** satisfy the slice-boundary external review. They have different scopes (one task vs. the whole slice) and different reviewers. Both are required.
 
 - **At the end of each slice** (all the slice's tasks closed, in-loop internal reviews passed):
-  1. Invoke `[[external-review]]` with `--kind post-slice`, passing the plan as `--file` and the spec + `docs/tasklist.json` as `--context`.
-  2. Read the verdict. On `ready` / `ready with small edits`, proceed.
-  3. On `merged_verdict: revise` (or `verdict_valid: false`), **dispatch a fix subagent** with the previous response file as input. The fix subagent MUST write `docs/reviewer/<chain>/r{N}-resolution.md` per the contract in `[[external-review]]` before signaling completion. Wait for completion. Re-submit. Iterate.
-  4. Once the verdict gates pass, run `tasktool close <slice-id>` (the CLI re-checks the reviewer chain and refuses on `revise`). See `[[tasklist-discipline]]`.
+  1. Run `git status --short`. If setup/migration artifacts, unrelated reviewer chains, legacy path moves, or other dirty files outside the slice scope are present, stop and resolve that boundary before review.
+  2. Invoke `[[external-review]]` with `--kind post-slice`, passing the plan as `--file` and the spec + `docs/tasklist.json` as `--context`.
+  3. Read the verdict. On `ready` / `ready with small edits`, proceed.
+  4. On `merged_verdict: revise` (or `verdict_valid: false`), **dispatch a fix subagent** with the previous response file as input. The fix subagent MUST write `docs/reviewer/<chain>/r{N}-resolution.md` per the contract in `[[external-review]]` before signaling completion. Wait for completion. Re-submit. Iterate.
+  5. Once the verdict gates pass, run `tasktool close <slice-id>` (the CLI re-checks the reviewer chain and refuses on `revise`). See `[[tasklist-discipline]]`.
 
 - **At the end of the phase** (the last slice in the phase closes):
-  1. Invoke `[[external-review]]` with `--kind post-phase`, passing the phase plan or archive note as `--file` and the spec + plan + `docs/tasklist.json` as `--context`.
-  2. Same delegation rule — coordinator does not apply findings directly.
-  3. On verdict acceptance, run `tasktool archive-phase <phase-id>` (the CLI re-checks the post-phase chain), then invoke `[[finishing-a-development-branch]]`.
+  1. Run the same `git status --short` scope preflight.
+  2. Invoke `[[external-review]]` with `--kind post-phase`, passing the phase plan or archive note as `--file` and the spec + plan + `docs/tasklist.json` as `--context`.
+  3. Same delegation rule — coordinator does not apply findings directly.
+  4. On verdict acceptance, run `tasktool archive-phase <phase-id>` (the CLI re-checks the post-phase chain), then invoke `[[finishing-a-development-branch]]`.
 
 ## When to Use
 

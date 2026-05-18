@@ -23,8 +23,9 @@ For each check the skill must report **status** (`present` / `missing` / `partia
 
 | # | Check                                                    | Pass criteria                                                          | Scaffold action                                                              |
 |---|----------------------------------------------------------|------------------------------------------------------------------------|------------------------------------------------------------------------------|
-| 1 | `docs/tasklist.json`                                     | File exists and validates clean (`tasktool validate`).                 | `tasktool init --project <name>`.                                            |
+| 1 | `docs/tasklist.json`                                     | File exists and validates clean (`tools/tasktool/tasktool validate`, or `tasktool validate` when the global shim is installed). | `tools/tasktool/tasktool init --project <name>`.                             |
 | 1b| `.git/hooks/pre-commit` (tasktool hook)                  | Tasktool hook installed (`grep -q 'tasktool-pre-commit-hook' .git/hooks/pre-commit`). | `bash tools/tasktool/install.sh --hook` (or the equivalent for non-superstar repos). |
+| 1c| Legacy `docs/TASKLIST.md` import decision                | If `docs/TASKLIST.md` exists, the user has explicitly chosen `tasktool import docs/TASKLIST.md --project <name>` or chosen to start with a new empty tracker. | Show `tools/tasktool/tasktool import docs/TASKLIST.md --dry-run --project <name>`, surface warnings, then ask whether to import, start empty, or stop. |
 | 2 | `docs/specs/` directory                                  | Directory exists.                                                      | `mkdir -p docs/specs` and add a `.gitkeep`.                                  |
 | 3 | `docs/plans/` directory                                  | Directory exists.                                                      | `mkdir -p docs/plans` and add a `.gitkeep`.                                  |
 | 4 | `docs/handoffs/` directory                               | Directory exists.                                                      | `mkdir -p docs/handoffs` and add a `.gitkeep`.                               |
@@ -44,7 +45,39 @@ For each check the skill must report **status** (`present` / `missing` / `partia
 4. **Offer scaffolding.** For each `missing` or `partial` item, ask the user whether to scaffold it. Allow "all", "none", or per-item selection.
 5. **Apply.** For each accepted item, run the scaffold action. Use `git add -N` (intent-to-add) on new empty files so `.gitkeep`s show up in `git status` but aren't auto-staged.
 6. **Verify.** Re-run the audit and confirm everything the user accepted is now `present`. Print the new table.
-7. **Report.** Summarise what was created, what was skipped, and what manual action (if any) is still required — e.g. installing the reviewer command, populating the north-star or first phase title via `tasktool create`.
+7. **Run the setup boundary.** Follow "Setup boundary before implementation" below.
+8. **Report.** Summarise what was created, what was skipped, what must be committed or stashed before feature work, and what manual action (if any) is still required — e.g. installing the reviewer command, importing `docs/TASKLIST.md`, populating the north-star or first phase title via `tasktool create`.
+
+## Setup Boundary Before Implementation
+
+Setup is its own change. Do not continue into `[[brainstorming]]`, `[[writing-plans]]`, `[[subagent-driven-development]]`, or `[[external-review]]` while migration/scaffold artifacts are still mixed with feature work.
+
+After any accepted scaffold or legacy migration:
+
+1. Run `git status --short` and classify every dirty path as one of:
+   - setup/migration (`docs/tasklist.json`, `docs/specs/`, `docs/plans/`, `docs/handoffs/`, `docs/reviewer/`, `docs/archived-tasks/`, `scripts/external-reviewer.py`, `.git/hooks/pre-commit`, `CLAUDE.md` / `AGENTS.md` / `GEMINI.md`, legacy `docs/superpowers/` moves);
+   - feature implementation;
+   - local noise or user-owned changes.
+2. Run `tools/tasktool/tasktool validate` when the repo-local launcher exists, otherwise `tasktool validate`.
+3. If `docs/TASKLIST.md` exists, stop until the user chooses one path:
+   - import it with `tools/tasktool/tasktool import docs/TASKLIST.md --project <name>` after first showing `--dry-run` output;
+   - start with an empty tracker and leave/delete the legacy file by explicit user choice;
+   - stop setup.
+4. If migration moved dated historical files into `docs/specs/` or `docs/plans/`, dry-run the orphan check before any commit:
+   ```bash
+   TASKTOOL=tasktool
+   test -x tools/tasktool/tasktool && TASKTOOL=tools/tasktool/tasktool
+   git diff --name-only --diff-filter=ACMR -- docs/specs docs/plans |
+     grep -E '^docs/(specs|plans)/[0-9]{4}-[0-9]{2}-[0-9]{2}-' |
+     xargs -r "$TASKTOOL" validate --check-orphans
+   ```
+   If this fails, do not press on. Ask the user whether to import matching IDs, keep those historical docs outside orphan-checked paths, or defer tracking `docs/tasklist.json`.
+5. Stop at the boundary. Ask the user to choose one of:
+   - commit the setup/migration as a standalone setup commit;
+   - stash/shelve it;
+   - leave it dirty and pause feature work.
+
+Do not run post-slice or post-phase review until this boundary is resolved. Reviewers correctly treat unrelated setup artifacts, untracked reviewer scripts, copied chain outputs, and legacy path moves as ambiguous scope.
 
 ## Legacy migration (when superpowers artefacts are present)
 
@@ -120,6 +153,7 @@ After **both** answers are in:
        --apply --paths=<choice> --refs=<choice>
    ```
 4. **Re-run the standard audit** so the regular table reflects the post-migration state. The migration may have satisfied items 2–6 of the checklist (`docs/specs/`, `docs/plans/` etc. now exist).
+5. **Run the setup boundary.** Legacy path moves and reference rewrites must be committed or shelved separately before implementation work starts.
 
 ### Rules
 
@@ -127,6 +161,7 @@ After **both** answers are in:
 - Never run `--apply` without first showing the dry-run summary.
 - The script handles its own exclusions (`.git/`, gitignored paths, binaries, exempt files). Do not pre-filter or duplicate that logic.
 - If the script reports that `docs/superpowers/` is non-empty after a `migrate` run (rare — would indicate an unexpected file type or permission issue), surface the warning to the user instead of pressing on.
+- Do not treat migrated `docs/specs/` or `docs/plans/` files as harmless docs churn. Once `docs/tasklist.json` is tracked, the pre-commit hook checks dated spec/plan filenames against task IDs; historical migrated files can be orphaned and must be resolved at the setup boundary.
 
 ## Extending the checklist
 
@@ -155,7 +190,7 @@ Order rows by dependency: a row that scaffolds a directory must precede a row th
 
 ## Integration
 
-- `[[tasklist-discipline]]` — describes tasktool conventions; the CLI itself ships the canonical scaffold via `tasktool init`.
+- `[[tasklist-discipline]]` — describes tasktool conventions; the CLI itself ships the canonical scaffold via `tools/tasktool/tasktool init`.
 - `[[external-review]]` — provides the reviewer script and the `AGENT_REVIEWER_CMD` expectation.
 - `[[writing-plans]]` — relies on the `docs/specs/`, `docs/plans/`, `docs/handoffs/` tree.
 - `[[subagent-driven-development]]` — relies on `docs/reviewer/` for chain folders.

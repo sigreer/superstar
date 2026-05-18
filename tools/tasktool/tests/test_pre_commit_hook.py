@@ -133,6 +133,36 @@ def test_hook_install_is_idempotent(tmp_path):
     r = subprocess.run(["bash", str(INSTALL), "--hook"], cwd=repo, capture_output=True, text=True, env=env)
     assert r.returncode == 0, r.stdout + r.stderr
 
+def test_hook_prefers_repo_local_tasktool_wrapper(tmp_path):
+    repo = tmp_path / "r"
+    repo.mkdir()
+    _git(repo, "init", "-q", "-b", "main")
+    _git(repo, "config", "user.email", "t@example.com")
+    _git(repo, "config", "user.name", "t")
+    (repo / "docs").mkdir()
+    (repo / "docs" / "tasklist.json").write_text(
+        '{"schema_version":1,"project":"demo","north_star":"","last_reviewed":null,'
+        '"phases":[],"cross_cutting":[],"archived_phases":[]}\n',
+        encoding="utf-8",
+    )
+    wrapper = repo / "tools" / "tasktool" / "tasktool"
+    wrapper.parent.mkdir(parents=True)
+    log = repo / "wrapper.log"
+    wrapper.write_text(
+        "#!/usr/bin/env sh\n"
+        f"printf '%s\\n' \"$*\" >> {log}\n"
+        "exit 0\n",
+        encoding="utf-8",
+    )
+    wrapper.chmod(0o755)
+    _git(repo, "add", "docs/tasklist.json")
+    subprocess.run(["bash", str(INSTALL), "--hook"], cwd=repo, check=True)
+    env = os.environ.copy()
+    env["PATH"] = "/usr/bin:/bin"
+    r = _git(repo, "commit", "-m", "init", check=False, env=env)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "--project-root" in log.read_text(encoding="utf-8")
+
 def test_staged_good_dirty_worktree_passes(tmp_path):
     """Stage canonical bytes, then dirty the worktree without re-staging.
     The hook MUST pass — the index is canonical, the worktree dirt is irrelevant."""

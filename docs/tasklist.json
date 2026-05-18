@@ -7,7 +7,26 @@
       "title": "tasktool: JSON-backed task management CLI"
     }
   ],
-  "cross_cutting": [],
+  "cross_cutting": [
+    {
+      "closed": "2026-05-18",
+      "created": "2026-05-18",
+      "id": "X1",
+      "notes": "Changed external-review default prompt transport from argv to stdin so the bundled Codex reviewer-agent receives prompts via codex exec '-' and avoids argv length failures.",
+      "refs": [],
+      "status": "done",
+      "title": "Default external-review prompt transport to stdin"
+    },
+    {
+      "closed": "2026-05-18",
+      "created": "2026-05-18",
+      "id": "X2",
+      "notes": "Added repo-local tools/tasktool/tasktool launcher, updated tasklist/project-setup docs to prefer it, and taught the pre-commit hook to use the repo-local launcher before falling back to a global tasktool shim.",
+      "refs": [],
+      "status": "done",
+      "title": "Add repo-local tasktool launcher"
+    }
+  ],
   "last_reviewed": "2026-05-18",
   "north_star": "",
   "phases": [

@@ -12,6 +12,13 @@
 # Bypass for genuine emergencies: `git commit --no-verify` and document the reason.
 set -e
 
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+if [ -x "$REPO_ROOT/tools/tasktool/tasktool" ]; then
+  TASKTOOL="$REPO_ROOT/tools/tasktool/tasktool"
+else
+  TASKTOOL="tasktool"
+fi
+
 STAGED="$(git diff --cached --name-only --diff-filter=ACMR)"
 
 # 1. Block docs/TASKLIST.md
@@ -41,9 +48,9 @@ if [ "$HAS_INDEX_TASKLIST" -eq 1 ]; then
   git show :docs/tasklist.json > "$TMP/docs/tasklist.json"
 
   if printf '%s\n' "$STAGED" | grep -qx 'docs/tasklist.json'; then
-    tasktool --project-root "$TMP" validate --strict-format --format text
+    "$TASKTOOL" --project-root "$TMP" validate --strict-format --format text
   fi
-  tasktool --project-root "$TMP" validate --format text
+  "$TASKTOOL" --project-root "$TMP" validate --format text
 
   ORPHAN_CANDIDATES="$(printf '%s\n' "$STAGED" | grep -E '^docs/(specs|plans)/[0-9]{4}-[0-9]{2}-[0-9]{2}-' || true)"
   if [ -n "$ORPHAN_CANDIDATES" ]; then
@@ -52,6 +59,6 @@ if [ "$HAS_INDEX_TASKLIST" -eq 1 ]; then
       git show ":$f" > "$TMP/$f" 2>/dev/null || true
     done
     # shellcheck disable=SC2086
-    (cd "$TMP" && tasktool validate --check-orphans $ORPHAN_CANDIDATES --format text)
+    (cd "$TMP" && "$TASKTOOL" validate --check-orphans $ORPHAN_CANDIDATES --format text)
   fi
 fi

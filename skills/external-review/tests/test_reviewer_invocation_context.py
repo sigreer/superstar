@@ -72,6 +72,39 @@ def test_reviewer_receives_sandbox_context_env(tmp_path):
     assert seen["AGENT_REVIEWER_TARGET_FILE"] == str(repo / "plan.md")
 
 
+def test_bare_reviewer_defaults_to_stdin_transport(tmp_path):
+    repo = _repo(tmp_path)
+    marker = repo / "stdin-prompt.txt"
+    reviewer = repo / "fake-reviewer.py"
+    reviewer.write_text(
+        "#!/usr/bin/env python3\n"
+        "import pathlib, sys\n"
+        f"pathlib.Path({str(marker)!r}).write_text(sys.stdin.read())\n"
+        "print('Overall verdict: ready')\n"
+    )
+    reviewer.chmod(0o755)
+    env = os.environ.copy()
+    env["AGENT_REVIEWER_CMD"] = str(reviewer)
+    env["AGENT_REVIEWER_STATE_FILE"] = str(tmp_path / "state.json")
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPTS / "external-reviewer.py"),
+            "review",
+            "--kind", "spec",
+            "--file", "plan.md",
+            "--emit", "json",
+        ],
+        cwd=repo,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "<!-- superstar-prompt:start -->" in marker.read_text()
+
+
 def test_reviewer_scratch_is_removed_by_default(tmp_path):
     repo = _repo(tmp_path)
     marker = repo / "scratch-path.txt"

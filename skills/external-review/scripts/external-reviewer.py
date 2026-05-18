@@ -11,11 +11,11 @@ of rN-*-request.md files already in the chain folder.
 
 Configuration:
   AGENT_REVIEWER_CMD='reviewer-agent'
-  AGENT_REVIEWER_TRANSPORT='arg'
+  AGENT_REVIEWER_TRANSPORT='stdin'
 
 If the command contains placeholders, it is executed through the shell after
 substitution. If it contains no placeholders, the prompt is supplied according
-to --prompt-transport: as one argument (default), as stdin, or as a prompt-file
+to --prompt-transport: via stdin (default), as one argument, or as a prompt-file
 path.
 """
 
@@ -1588,8 +1588,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         choices=["arg", "file", "stdin"],
         default=os.environ.get("AGENT_REVIEWER_TRANSPORT"),
         help="How to pass the prompt when reviewer-cmd has no placeholders. "
-             "If unset, defaults to 'arg' on round 1 / broad mode and 'stdin' on "
-             "incremental rounds (round 2+) to avoid ARG_MAX overflow.",
+             "If unset, defaults to 'stdin'. Use 'arg' or 'file' only for "
+             "custom reviewer backends that require those transports.",
     )
     sp_review.add_argument(
         "--output-dir",
@@ -2132,7 +2132,7 @@ def main() -> int:
 
     mode = resolve_mode(args.mode, round_num=round_num)
     if args.prompt_transport is None:
-        args.prompt_transport = "stdin" if mode == "incremental" else "arg"
+        args.prompt_transport = "stdin"
     diff_section = ""
     base_ref: str | None = None
     base_source: str | None = None

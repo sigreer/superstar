@@ -1,4 +1,5 @@
 from __future__ import annotations
+import os
 import subprocess
 import sys
 import unittest
@@ -6,6 +7,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 PKG_DIR = REPO_ROOT / "tools"
+WRAPPER = REPO_ROOT / "tools" / "tasktool" / "tasktool"
 
 def run_cli(*args: str, cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
     import os
@@ -25,6 +27,19 @@ class SmokeTests(unittest.TestCase):
     def test_unknown_command_exits_two(self):
         result = run_cli("nope")
         self.assertEqual(result.returncode, 2)
+
+    def test_repo_local_wrapper_works_without_pythonpath(self):
+        env = os.environ.copy()
+        env.pop("PYTHONPATH", None)
+        result = subprocess.run(
+            [str(WRAPPER), "--help"],
+            capture_output=True,
+            text=True,
+            cwd=REPO_ROOT,
+            env=env,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("tasktool", result.stdout)
 
 import tempfile, json
 from pathlib import Path

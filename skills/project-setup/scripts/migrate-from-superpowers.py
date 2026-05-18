@@ -284,6 +284,14 @@ def summarize(path_plan: dict, ref_plan: dict, *, paths_action: str, refs_action
         for old, count in sorted(totals.items(), key=lambda kv: -kv[1]):
             new = next(n for o, n in REF_MAPPINGS if o == old)
             lines.append(f"    - `{old}` → `{new}`: in {count} files")
+
+    if path_plan["has_legacy_dir"] and paths_action in {"migrate", "duplicate"}:
+        lines.append("")
+        lines.append("## Post-migration boundary")
+        lines.append("- Run `git status --short` and keep this as a setup/migration-only change.")
+        lines.append("- Run `tasktool validate` after `docs/tasklist.json` exists.")
+        lines.append("- If dated historical files moved into `docs/specs/` or `docs/plans/`, run the tasktool orphan check before committing them.")
+        lines.append("- Commit or shelve the migration before starting feature implementation or post-slice review.")
     return "\n".join(lines)
 
 
@@ -345,7 +353,11 @@ def main() -> int:
             apply_paths_duplicate(root, path_plan)
             print("[paths] duplicated docs/superpowers/ contents under docs/", file=sys.stderr)
 
-    print("\nDone. Review with `git status` and commit when ready.", file=sys.stderr)
+    print(
+        "\nDone. Run `git status --short`, `tasktool validate`, and any needed "
+        "orphan checks; commit or shelve this setup before feature work.",
+        file=sys.stderr,
+    )
     return 0
 
 

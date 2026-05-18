@@ -53,7 +53,7 @@ The default command remains `reviewer-agent`. The safe wrapper contract is:
 
 The command may be:
 
-- A bare executable (`reviewer-agent`) — the prompt is supplied per `--prompt-transport` (`arg` | `file` | `stdin`, default `arg`).
+- A bare executable (`reviewer-agent`) — the prompt is supplied per `--prompt-transport` (`stdin` | `arg` | `file`, default `stdin`).
 - A template with placeholders (`{prompt_file}`, `{prompt_text}`, `{target_file}`, `{kind}`, `{chain_dir}`, `{round}`, `{previous_response}`, `{resolution_file}`, `{session_file}`, `{repo_root}`, `{response_dir}`, `{scratch_dir}`, `{request_file}`) — substituted and run through the shell. Env vars are authoritative; placeholders are derived convenience values.
 
 The bridge exports `AGENT_REVIEWER_REPO_ROOT`, `AGENT_REVIEWER_CHAIN_DIR`, `AGENT_REVIEWER_REQUEST_FILE`, `AGENT_REVIEWER_RESPONSE_DIR`, `AGENT_REVIEWER_SCRATCH_DIR`, `AGENT_REVIEWER_TARGET_FILE`, `AGENT_REVIEWER_KIND`, `AGENT_REVIEWER_ROLE`, and `AGENT_REVIEWER_SWEEP_INDEX` for every reviewer process. `AGENT_REVIEWER_SWEEP_INDEX` is always set: empty for primary, numeric for sweeps. These env vars are authoritative; command placeholders are convenience sugar derived from the same values.
@@ -69,6 +69,14 @@ If `reviewer-agent` is missing, `[[project-setup]]` will offer to install/config
 - `--incremental-budget-chars` (default `400000`) sets a target cap on assembled prompt size for incremental rounds. The prompt is pruned in priority order — target preview, diff body, resolution body, prior findings body — toward the target; sentinel markers, chain summary, and finding-ID lists are never trimmed. The final size may exceed the target by ~150 bytes due to the appended `<!-- budget-applied: ... -->` diagnostic note.
 
 ## How a round runs
+
+For `post-slice` and `post-phase`, run a scope preflight before invoking the reviewer:
+
+```bash
+git status --short
+```
+
+If the status includes setup/migration artifacts, legacy path moves, untracked vendored reviewer scripts, copied chain output from unrelated work, or any dirty files outside the slice/phase scope, stop and resolve the setup boundary first. A reviewer is expected to fail a boundary review when the artifact set is ambiguous.
 
 ```bash
 python3 scripts/external-reviewer.py review \
@@ -88,7 +96,7 @@ python3 scripts/external-reviewer.py review \
 
 The command **blocks** until the reviewer exits (default `--timeout 900`). Run it in the **foreground**. Do not background it, do not poll the chain folder, do not retry in a loop.
 
-**Prompt transport for incremental rounds.** Round 2+ prompts embed prior findings, the fixer's resolution doc, and a diff, and routinely exceed `ARG_MAX` for `--prompt-transport arg`. The script auto-selects `stdin` for any incremental round (round 2+ in `auto` mode, or explicit `--mode incremental`) and `arg` for round-1/broad prompts when `--prompt-transport` is not set explicitly. Override with `--prompt-transport {arg|file|stdin}` or `AGENT_REVIEWER_TRANSPORT` only when the reviewer backend cannot accept the default.
+**Prompt transport.** The script defaults to `stdin` for every bare reviewer command. This matches the bundled `reviewer-agent` wrapper and avoids `ARG_MAX` failures when prompts grow large. Override with `--prompt-transport {stdin|arg|file}` or `AGENT_REVIEWER_TRANSPORT` only when a custom reviewer backend cannot accept stdin.
 
 ## Failure handling
 
