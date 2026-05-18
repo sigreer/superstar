@@ -262,3 +262,46 @@ class NoteRefTitleTests(unittest.TestCase):
         commands.cmd_title(repo_root=self.t.root, id="P1.S1", new="renamed")
         p = load_project(self.t.root / "docs/tasklist.json")
         self.assertEqual(p.phases[0].slices[0].title, "renamed")
+
+class ShowListTests(unittest.TestCase):
+    def setUp(self):
+        self.t = _Tmp()
+        commands.cmd_init(repo_root=self.t.root, project="demo")
+        commands.cmd_create_phase(repo_root=self.t.root, title="P1 title")
+        commands.cmd_create_slice(repo_root=self.t.root, phase_id="P1", title="S1 title")
+        commands.cmd_create_slice(repo_root=self.t.root, phase_id="P1", title="S2 title")
+        commands.cmd_create_task(repo_root=self.t.root, slice_id="P1.S1", title="t1")
+    def tearDown(self):
+        self.t.cleanup()
+
+    def test_show_phase(self):
+        out = commands.cmd_show(repo_root=self.t.root, id="P1")
+        self.assertIn("P1 title", out)
+        self.assertIn("S1", out)
+        self.assertIn("S2", out)
+
+    def test_show_slice(self):
+        out = commands.cmd_show(repo_root=self.t.root, id="P1.S1")
+        self.assertIn("S1 title", out)
+        self.assertIn("T1", out)
+
+    def test_list_filter_status_open(self):
+        out = commands.cmd_list(repo_root=self.t.root, open_only=True)
+        self.assertIn("P1.S1", out)
+
+    def test_list_format_json(self):
+        out = commands.cmd_list(repo_root=self.t.root, format="json")
+        import json as _j
+        data = _j.loads(out)
+        self.assertIsInstance(data, list)
+
+class NextIdTests(unittest.TestCase):
+    def test_next_phase_empty(self):
+        t = _Tmp()
+        try:
+            commands.cmd_init(repo_root=t.root, project="demo")
+            self.assertEqual(
+                commands.cmd_next_id(repo_root=t.root, kind="phase"), "P1",
+            )
+        finally:
+            t.cleanup()

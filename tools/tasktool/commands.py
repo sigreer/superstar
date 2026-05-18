@@ -300,3 +300,96 @@ def cmd_title(*, repo_root: Path, id: str, new: str) -> None:
     _qid, _container, item = _find_item(p, id)
     item.title = new
     _save(repo_root, p)
+
+# ───── show / list / next-id ─────
+
+def _item_one_line(prefix: str, item) -> str:
+    status_tag = item.status.value
+    return f"{prefix}  [{status_tag}]  {item.title}"
+
+def cmd_show(*, repo_root: Path, id: str) -> str:
+    p = _load(repo_root)
+    qid, _container, item = _find_item(p, id)
+    lines = [f"# {qid} — {item.title}", f"status: {item.status.value}"]
+    if getattr(item, "closed", None):
+        lines.append(f"closed: {item.closed}")
+    if getattr(item, "blocked_on", None):
+        bo = item.blocked_on
+        lines.append(f"blocked_on: {bo.kind}:{bo.value}")
+    if getattr(item, "refs", None):
+        lines.append("refs:")
+        for r in item.refs:
+            lines.append(f"  - {r}")
+    if getattr(item, "notes", ""):
+        lines.append(f"notes:\n{item.notes}")
+    # children
+    if hasattr(item, "slices"):
+        lines.append("\nSlices:")
+        for s in item.slices:
+            lines.append(_item_one_line(f"  {s.id}", s))
+    if hasattr(item, "tasks"):
+        lines.append("\nTasks:")
+        for t in item.tasks:
+            lines.append(_item_one_line(f"  {t.id}", t))
+    return "\n".join(lines) + "\n"
+
+def _iter_items(p: Project):
+    for ph in p.phases:
+        yield ("phase", ph.id, ph)
+        for s in ph.slices:
+            yield ("slice", f"{ph.id}.{s.id}", s)
+            for t in s.tasks:
+                yield ("task", f"{ph.id}.{s.id}.{t.id}", t)
+    for c in p.cross_cutting:
+        yield ("cross", c.id, c)
+
+def cmd_list(
+    *, repo_root: Path,
+    phase: str | None = None,
+    status: list[str] | None = None,
+    kind: str | None = None,
+    open_only: bool = False,
+    format: str = "text",
+) -> str:
+    p = _load(repo_root)
+    if open_only:
+        status_filter = {"ready", "in_progress", "blocked"}
+    elif status:
+        status_filter = set(status)
+    else:
+        status_filter = None
+    rows: list[tuple[str, str, str, str]] = []
+    for item_kind, qid, item in _iter_items(p):
+        if phase and not qid.startswith(phase):
+            continue
+        if kind and item_kind != kind:
+            continue
+        if status_filter and item.status.value not in status_filter:
+            continue
+        rows.append((qid, item_kind, item.status.value, item.title))
+    if format == "json":
+        import json as _j
+        return _j.dumps(
+            [{"id": q, "kind": k, "status": s, "title": t} for q, k, s, t in rows],
+            indent=2,
+        )
+    return "\n".join(f"{q}  [{s}]  {k:5}  {t}" for q, k, s, t in rows) + "\n"
+
+def cmd_next_id(
+    *, repo_root: Path, kind: str,
+    phase: str | None = None, slice: str | None = None,
+) -> str:
+    p = _load(repo_root)
+    if kind == "phase":
+        return next_phase_id(p, repo_root)
+    if kind == "slice":
+        if not phase:
+            raise CommandError("next-id slice requires --phase")
+        return next_slice_id(p, phase, repo_root)
+    if kind == "task":
+        if not phase or not slice:
+            raise CommandError("next-id task requires --phase and --slice")
+        return next_task_id(p, phase, slice)
+    if kind == "cross":
+        return next_cross_id(p, repo_root)
+    raise CommandError(f"unknown kind {kind}")
