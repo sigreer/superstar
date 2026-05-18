@@ -1,118 +1,102 @@
 ---
 name: tasklist-discipline
-description: Use whenever planning, closing slices/phases, or referencing work items in a project that has docs/TASKLIST.md. Encodes the stable-ID scheme (P/S/T/X), status emoji set, close-in-place rule, and phase-archive convention.
+description: Use whenever planning, closing slices/phases, or referencing work items in a project that uses docs/tasklist.json. Teaches the tasktool CLI surface and the gating concepts; the CLI enforces the rules.
 ---
 
 # TASKLIST Discipline
 
-A `docs/TASKLIST.md` file is the canonical, top-level tracker for the project. It groups work into **phases**, **slices**, **tasks**, and **cross-cutting** items, each with a stable, never-renumbered ID. This skill encodes the rules for adding, closing, and archiving work against that file.
+A `docs/tasklist.json` file is the canonical, top-level tracker for the project. It groups work into **phases**, **slices**, **tasks**, and **cross-cutting** items, each with a stable, never-renumbered ID. All mutations flow through `tasktool`; a pre-commit hook refuses non-canonical bytes, orphaned spec/plan filenames, and any commit that touches the legacy `docs/TASKLIST.md`.
 
-**Announce at start:** "I'm using the tasklist-discipline skill to update TASKLIST.md."
+**Announce at start:** "I'm using the tasklist-discipline skill to update docs/tasklist.json via tasktool."
 
 ## When to use
 
-- About to plan or write a new spec → confirm an ID exists for the work; if not, allocate one per "Allocating a new ID" below. **Write the TASKLIST.md entry before the spec file is created.** The TASKLIST entry is the act of allocation; the spec/plan/reviewer-chain filenames are downstream of it. Orphaned artifacts (spec or plan committed without a corresponding TASKLIST row) are how IDs get duplicated later.
-- About to close a slice → flip status in place per the rules below.
-- About to close a phase → archive per the rules below.
-- Referencing work in a spec, plan, reviewer chain folder, or commit — use the canonical IDs.
-- Onboarding a project — `[[project-setup]]` will offer to scaffold TASKLIST.md if missing.
+- About to plan or write a new spec → allocate an ID with `tasktool create phase|slice|task|cross …` **before** the spec file lands. The TASKLIST row is the allocation; the spec/plan/reviewer-chain filenames are downstream.
+- About to close a slice → `tasktool close <slice-id>`. The CLI enforces the post-slice external-review gate.
+- About to close a phase → `tasktool archive-phase <phase-id>`. The CLI enforces the post-phase gate and writes the archive note.
+- Entering a slice → `tasktool brief <slice-id>` instead of reading the JSON.
+- Onboarding a project — `[[project-setup]]` runs `tasktool init` and installs the hook.
 
-## ID scheme
+## Conceptual model
 
-Every unit of work has a stable identifier. Within a nested context, the short form is sufficient — fully-qualified IDs are used only for cross-scope references.
+| Scope | Short form | Fully-qualified |
+|-------|-----------|-----------------|
+| Phase | `P2` | `P2` |
+| Slice | `S1` (follow-up: `S5a`) | `P2.S1` (`P2.S5a`) |
+| Task | `T3` | `P2.S5.T3` |
+| Cross-cutting | `X4` | `P2.X4` |
 
-| Scope            | Short form (in headers/labels) | Fully-qualified (in references) |
-|------------------|--------------------------------|---------------------------------|
-| Phase            | `P2`                           | `P2`                            |
-| Slice            | `S1`                           | `P2.S1`                         |
-| Follow-up slice  | `S5a`                          | `P2.S5a`                        |
-| Task             | `T3`                           | `P2.S5.T3`                      |
-| Cross-cutting    | `X4`                           | `P2.X4` (or just `X4` if global)|
+IDs are assigned at birth and **never renumbered**. The `tasktool create` family does orphan-aware allocation (`max+1` across `docs/tasklist.json`, `docs/specs/`, `docs/plans/`, `docs/reviewer/`) and prints the new ID.
 
-**Stability.** IDs are assigned at birth and **never renumbered**. New slices get the next free integer; follow-ups get the next free letter under their parent. Sections are arranged in **execution order**; IDs preserve **creation order**. If they diverge, that's expected — that's the whole point of stable IDs.
+Status enum: `ready | in_progress | blocked | done`. Only slices may take `blocked` (and only via `tasktool block <slice-id> --on …`). Emoji are a render concern; `tasktool render` and `tasktool brief` handle that. `done` requires `closed`; the CLI stamps it.
 
-## Allocating a new ID
+## Daily commands
 
-TASKLIST.md is canonical, but it is not the only place an ID can be in flight. A spec, plan, or reviewer-chain folder may have been created against an ID that never got a tracker row (orphan). Picking "next free" by scanning TASKLIST.md alone will collide with that orphan and produce a duplicate.
+```sh
+tasktool brief <id>            # start-of-work primer for slice or phase
+tasktool show <id>             # full detail
+tasktool list --open           # everything ready / in_progress / blocked
+tasktool create slice <phase-id> --title "…"
+tasktool set <id> --status in_progress
+tasktool note <id> --append "…"
+tasktool ref <id> --add path/to/artifact
+tasktool block <slice-id> --on P2.S5
+tasktool close <slice-id>      # enforces post-slice review gate
+tasktool archive-phase <phase-id>  # enforces post-phase review gate
+tasktool validate              # full validation
+```
 
-**Next-free rule.** Compute `max + 1` across all of:
+Run `tasktool --help` (or `tasktool <cmd> --help`) for the full surface.
 
-- `docs/TASKLIST.md` — every `P{n}` / `S{n}` / `X{n}` / task ID currently in the file.
-- `docs/specs/` — IDs in filename prefixes (`YYYY-MM-DD-<id>-…`).
-- `docs/plans/` — same.
-- `docs/reviewer/` — IDs in chain-folder names.
+## Gating concepts (why the CLI refuses you)
 
-Take the union, then add one. If an orphan is discovered during this scan (artifact exists but no TASKLIST row), surface it to the operator before allocating — it's either work that needs a tracker entry or work that was abandoned, and either way the operator decides before a new ID is minted.
+- **Post-slice external review.** `tasktool close <slice-id>` reads `chain.json` from the slice's reviewer chain folder (`docs/reviewer/<slug>-post-slice/` by default; override with `--reviewer-chain`). It refuses unless the latest round's verdict ∈ {`ready`, `ready with small edits`}. Per-task internal reviews do not satisfy this gate.
+- **Post-phase external review.** `tasktool archive-phase <phase-id>` refuses until every slice is `done` *and* the phase's post-phase chain returns `ready` / `ready with small edits`.
+- **`--skip-review-gate`** exists for emergencies and is recorded in the slice/phase `notes` with a timestamp. Use it only when the operator has explicitly chosen to bypass.
 
-**Then write the TASKLIST entry immediately**, before the spec file is created. The entry is the allocation; everything else (filenames, reviewer chains, commit messages) follows from it.
+See `[[external-review]]` for how to drive the reviewer.
 
-## Status set
+## Hand-edits are an emergency path, not a workflow
 
-Every slice and task carries a glanceable emoji + a status tag.
+If a raw edit is genuinely needed:
 
-| Emoji | Tag                  | Meaning                       |
-|-------|----------------------|-------------------------------|
-| ✅    | `DONE YYYY-MM-DD`    | Complete                      |
-| 🚧    | `IN PROGRESS`        | Active work                   |
-| ⏸    | `BLOCKED on …`       | Waiting on a dependency       |
-| ☐    | `READY` / `TODO`     | Not started, unblocked        |
+```sh
+TASKTOOL_RAW=1 $EDITOR docs/tasklist.json
+tasktool validate --normalise
+```
 
-## Closing a slice
-
-0. **Run `[[external-review]] --kind post-slice` before flipping status.** This is a gate, not a suggestion. It is separate from the in-loop internal review (`[[requesting-internal-review]]`) that runs per task — both are required, and the per-task internal review does not substitute for the slice-boundary external review. Do not close on a `revise` verdict — address findings, re-submit, iterate until the verdict ∈ {ready, ready with small edits}. Link the reviewer chain folder in step 3 below.
-1. Tick the checkboxes inside the slice (☐ → ✅).
-2. Flip the slice header to `✅ DONE YYYY-MM-DD`.
-3. Append post-impl notes inline under the slice (spec/plan links, reviewer chain link, commit SHAs, verification evidence).
-4. **Do not move the section** to a "completed" graveyard within the live file. Its execution-order position is the timeline up until the phase closes.
-
-## Closing a phase (archival)
-
-When **every** slice in a phase is ✅:
-
-1. Move the entire phase section to `docs/archived-tasks/P{n}-<short-title>.md`.
-2. Replace the phase here with a one-line summary that links to the archive file.
-3. Capture the phase's full verification run (wall-clock, any waivers) inline in the archive note.
-4. Cross-cutting items that complete may be archived the same way (`docs/archived-tasks/X-<short-title>.md`) or left ✅ in the cross-cutting list — operator's call based on whether the context still has signal.
-
-A phase archive should be preceded by a `post-phase` review via `[[external-review]]`. Do not archive on a `revise` verdict.
+`--normalise` re-serialises the file through the canonical formatter so the pre-commit hook accepts it. There is no `tasktool edit --raw` subcommand by design — the friction keeps agents on the sanctioned commands.
 
 ## New work mid-slice
 
-| Scenario                        | Action                                                                              |
-|---------------------------------|-------------------------------------------------------------------------------------|
-| Incidental fix in the same area | `Inline follow-on` task under the parent slice.                                     |
-| Real unit of work               | New slice with its own ID — letter suffix if it hangs off a parent, integer if standalone, `X{n}` if cross-cutting and unscheduled. |
-| Bug surfaced by review          | `Inline follow-on` if cheap; new `S{n}a` follow-up slice if it deserves its own scope.|
+| Scenario | Action |
+|----------|--------|
+| Incidental fix in the same area | `tasktool create task <slice-id> --title …` |
+| Real unit of work | `tasktool create slice <phase-id> --title …` (or `--follow-up <slice-id>` for a letter-suffix) |
+| Bug surfaced by review | Inline task if cheap; follow-up slice if it deserves its own scope. |
+| Cross-cutting, unscheduled | `tasktool create cross --title …` |
 
-## Referencing TASKLIST items
+## Referencing items in artifacts
 
-- In specs, plans, and reviewer chain folders, use the fully-qualified ID at first mention (`P9.S3a`) and the short form afterwards.
-- Plan and spec filenames embed the ID: `YYYY-MM-DD-<id>-<slug>(-design).md`.
-- Reviewer chain folders are keyed by target stem; they inherit the ID via the filename.
-- Commit messages may use either form; prefer the fully-qualified form for cross-phase commits.
-
-## Scaffolding TASKLIST.md
-
-If a project does not yet have `docs/TASKLIST.md`, do not create one mid-flow. Defer to `[[project-setup]]` and ask the user to run "init project for superstar". The skill's template lives at `skills/tasklist-discipline/templates/TASKLIST.template.md`.
+- Specs, plans, reviewer chain folders: fully-qualified ID at first mention (`P9.S3a`), short form afterwards.
+- Plan and spec filenames embed the ID: `YYYY-MM-DD-<id>-<slug>(-design).md`. The pre-commit hook rejects filenames whose ID has no `tasklist.json` row.
+- Commit messages may use either form; prefer fully-qualified for cross-phase commits.
 
 ## Red flags
 
-| Thought                                                       | Reality                                                                  |
-|---------------------------------------------------------------|--------------------------------------------------------------------------|
-| "I'll renumber to make execution order match the IDs"         | No. IDs are stable. Execution order is positional, IDs are creation order.|
-| "This new bug is tiny, I'll just fix it without an ID"        | If it touches a slice that's already ✅, it needs a follow-up ID.        |
-| "I'll move the closed slice to the bottom for cleanliness"    | Close in place. Move only at phase close, and only to the archive file.  |
-| "I'll mark the slice ✅ before running post-slice review"     | Review first. `revise` blocks closure. The per-task internal review does not satisfy this gate. |
-| "I'll mark the phase ✅ before running post-phase review"     | Review first. `revise` blocks closure.                                   |
-| "The internal reviewer already approved this slice, skip external" | No. Internal review = per-task, in-loop. External review = per-slice/phase, out-of-loop. Both required. |
-| "The status tag is fine without a date"                       | `DONE` requires `YYYY-MM-DD`. Future-you needs the timestamp.            |
-| "I checked TASKLIST.md and X{n} is free"                      | TASKLIST.md alone is not authoritative for allocation. Check `docs/specs/`, `docs/plans/`, and `docs/reviewer/` too — an orphaned artifact can hold an ID that the tracker never recorded. |
-| "I'll commit the spec file now and add the TASKLIST row after" | No. The TASKLIST row is the allocation. Write it first — otherwise the spec is an orphan the moment it lands. |
+| Thought | Reality |
+|---------|---------|
+| "I'll just edit `docs/tasklist.json` by hand quickly." | The hook will refuse non-canonical bytes; `tasktool` is faster than fighting the hook. Use the CLI. |
+| "I'll mark the slice `done` with `set` instead of `close` to skip the review gate." | `tasktool set --status done` routes through the same gate as `close`. The gate cannot be bypassed by reaching for a different subcommand. |
+| "I'll commit the spec now and add the row after." | The pre-commit hook rejects orphan spec/plan filenames. Allocate first. |
+| "`tasktool` says the verdict isn't ready, but the reviewer comments look fine." | Re-read the verdict line. `revise` is `revise`. If the reviewer chain is mis-parsed, fix the chain; do not pass `--skip-review-gate` casually. |
+| "I'll bring back `docs/TASKLIST.md` for readability." | The hook refuses commits that touch it. Use `tasktool render` if you want markdown. |
+| "I'll just renumber IDs to match execution order." | No. IDs are stable. Execution order lives in the array order; IDs preserve creation order. |
 
 ## Integration
 
-- `[[writing-plans]]` — embeds slice IDs in plan filenames; references TASKLIST entries.
-- `[[brainstorming]]` — references TASKLIST when scoping new work.
-- `[[external-review]]` — passes TASKLIST.md as `--context` for `spec` / `plan` / `post-slice` / `post-phase` reviews.
-- `[[subagent-driven-development]]` — flips slice status on close; triggers phase-archive at phase end.
-- `[[project-setup]]` — scaffolds TASKLIST.md from the template if missing.
+- `[[writing-plans]]` — embeds slice IDs in plan filenames; calls `tasktool show <id>` for context.
+- `[[brainstorming]]` — allocates IDs via `tasktool create` before writing the spec.
+- `[[external-review]]` — passes `docs/tasklist.json` (or `tasktool render` output) as `--context`.
+- `[[subagent-driven-development]]` — calls `tasktool close <slice-id>` at slice end and `tasktool archive-phase` at phase end.
+- `[[project-setup]]` — runs `tasktool init` and `install.sh --hook`.
