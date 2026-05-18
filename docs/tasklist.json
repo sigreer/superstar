@@ -43,10 +43,10 @@
           "created": "2026-05-18",
           "id": "S2",
           "notes": "",
-          "plan_path": null,
+          "plan_path": "docs/plans/2026-05-17-p2-s2-tasktool-importer-render-brief-archive.md",
           "refs": [],
           "reviewer_chain": null,
-          "status": "ready",
+          "status": "in_progress",
           "tasks": [],
           "title": "Importer, render, brief, archive-phase; migrate this repo from `TASKLIST.md` to `tasklist.json`"
         },
