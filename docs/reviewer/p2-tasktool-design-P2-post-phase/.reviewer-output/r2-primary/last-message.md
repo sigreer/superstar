@@ -1,0 +1,46 @@
+**1. Findings**
+
+F1 — RESOLVED  
+Spec status, tracker link, past-tense problem statement, and AGS risk/open-question text have been updated in `docs/specs/2026-05-17-P2-tasktool-design.md:3`, `:6`, `:10`, and `:363-365`.
+
+F2 — RESOLVED  
+`tasktool set --status` now lists only `ready|in_progress|done`, with blocking routed through `tasktool block` / `unblock` at `docs/specs/2026-05-17-P2-tasktool-design.md:212-219`.
+
+F3 — RESOLVED  
+S1/S2 plan checkbox drift is fixed. Current counts: S1 has `0` unchecked / `76` checked; S2 has `0` unchecked / `71` checked.
+
+F4 — Severity: minor  
+The new AGS deferral text claims `tasktool brief --format json` is supported, but the implementation rejects that flag. `tasktool brief --help` only accepts `id`, and `PYTHONPATH=tools python3 -m tasktool brief P2 --format json` exits `2` with “unrecognized arguments” (`docs/specs/2026-05-17-P2-tasktool-design.md:365`, `tools/tasktool/cli.py:92-93`). Either remove the JSON shell-out claim or defer JSON output as future AGS integration work.
+
+Sweep F1 — DEFERRED / acceptable  
+P2 is still unarchived, but that is the expected pre-archive state for this post-phase gate. Archive should run only after this round records a passing verdict.
+
+Sweep F2 — RESOLVED  
+Duplicate of F1.
+
+Sweep F4 — RESOLVED  
+The P2.S2 parser artifact now has a durable waiver at `docs/reviewer/p2-s2-tasktool-importer-render-brief-archive-P2-S2-post-slice/WAIVER.md:1-9`.
+
+**2. Open Questions / Assumptions**
+
+I assume the untracked `docs/reviewer/p2-tasktool-design-P2-post-phase/r2-2026-05-18T1543-request.md` is the active review request artifact and will be committed by the review chain machinery.
+
+**3. Suggested Document Edits**
+
+Change §12 to say shell-out consumers can use `tasktool brief` text output today, or direct JSON reads from `docs/tasklist.json`; defer any `brief --format json` CLI surface to AGS integration work.
+
+**4. Verification**
+
+Ran:
+
+```bash
+PYTHONPATH=tools python3 -m tasktool validate --strict-format --format json
+PYTHONPATH=tools python3 -m unittest discover -s tools/tasktool/tests -v
+PYTHONPATH=tools python3 -m tasktool brief P2 --format json
+```
+
+Results: validation passed; 160 tests passed; `brief --format json` failed as described in F4.
+
+**5. Overall Verdict**
+
+ready with small edits
