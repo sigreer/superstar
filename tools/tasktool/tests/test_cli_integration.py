@@ -251,6 +251,28 @@ class RenderCliTests(unittest.TestCase):
             t.cleanup()
 
 
+class BriefCliTests(unittest.TestCase):
+    def test_brief_slice(self):
+        t = _CliTmp()
+        try:
+            r = run_cli("init", "--project", "demo", cwd=t.root)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            r = run_cli("create", "phase", "--title", "Phase", cwd=t.root)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            r = run_cli("create", "slice", "P1", "--title", "Slice", cwd=t.root)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            r = run_cli("create", "task", "P1.S1", "--title", "Task A", cwd=t.root)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            r = run_cli("brief", "P1.S1", cwd=t.root)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertIn("# P1.S1 — Slice", r.stdout)
+            self.assertIn("Parent phase: P1", r.stdout)
+            self.assertIn("Open tasks:", r.stdout)
+            self.assertIn("Task A", r.stdout)
+        finally:
+            t.cleanup()
+
+
 class SetStatusTests(unittest.TestCase):
     """F3 regression: `set --status blocked` must be rejected by argparse."""
 

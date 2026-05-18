@@ -15,6 +15,7 @@ from tasktool.model import (
 from tasktool.serialize import load_project, save_project, dumps_canonical, loads_project
 from tasktool.importer import parse_tasklist_md
 from tasktool.render import render_project
+from tasktool.brief import brief
 
 __all__ = [
     "__version__",
@@ -33,4 +34,5 @@ __all__ = [
     "loads_project",
     "parse_tasklist_md",
     "render_project",
+    "brief",
 ]

@@ -478,3 +478,9 @@ def cmd_render(*, repo_root: Path, format: str = "markdown") -> str:
 def cmd_schema() -> str:
     from tasktool.schema_gen import dump_schema
     return dump_schema()
+
+def cmd_brief(*, repo_root: Path, id: str) -> str:
+    from tasktool.brief import brief as _brief
+    p = _load(repo_root)
+    qid = _resolve_id(p, id)
+    return _brief(p, qid)

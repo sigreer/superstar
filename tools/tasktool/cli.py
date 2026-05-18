@@ -89,6 +89,9 @@ def _build_parser() -> argparse.ArgumentParser:
     p_show = sub.add_parser("show")
     p_show.add_argument("id")
 
+    p_brief = sub.add_parser("brief")
+    p_brief.add_argument("id")
+
     p_list = sub.add_parser("list")
     p_list.add_argument("--phase")
     p_list.add_argument("--status")
@@ -164,6 +167,8 @@ def main(argv: list[str]) -> int:
             commands.cmd_title(repo_root=root, id=args.id, new=args.new)
         elif args.cmd == "show":
             sys.stdout.write(commands.cmd_show(repo_root=root, id=args.id))
+        elif args.cmd == "brief":
+            sys.stdout.write(commands.cmd_brief(repo_root=root, id=args.id))
         elif args.cmd == "list":
             status_list = args.status.split(",") if args.status else None
             sys.stdout.write(commands.cmd_list(
