@@ -13,6 +13,7 @@ from tasktool.model import (
     SCHEMA_VERSION,
 )
 from tasktool.serialize import load_project, save_project, dumps_canonical, loads_project
+from tasktool.importer import parse_tasklist_md
 
 __all__ = [
     "__version__",
@@ -29,4 +30,5 @@ __all__ = [
     "save_project",
     "dumps_canonical",
     "loads_project",
+    "parse_tasklist_md",
 ]

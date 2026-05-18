@@ -208,6 +208,34 @@ class ReviewGateE2ETests(unittest.TestCase):
         finally:
             t.cleanup()
 
+class ImportCliTests(unittest.TestCase):
+    def test_import_creates_tasklist_json(self):
+        t = _CliTmp()
+        try:
+            (t.root / "TASKLIST.md").write_text(
+                "## P2 — Demo 🚧 `IN PROGRESS`\n\n- ✅ **S1** `DONE 2026-01-01` — done.\n"
+            )
+            r = run_cli("import", str(t.root / "TASKLIST.md"), cwd=t.root)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertTrue((t.root / "docs" / "tasklist.json").exists())
+            r2 = run_cli("show", "P2.S1", cwd=t.root)
+            self.assertEqual(r2.returncode, 0, r2.stderr)
+            self.assertIn("done", r2.stdout)
+        finally:
+            t.cleanup()
+
+    def test_import_dry_run(self):
+        t = _CliTmp()
+        try:
+            (t.root / "TASKLIST.md").write_text("## P2 — Demo 🚧 `IN PROGRESS`\n")
+            r = run_cli("import", str(t.root / "TASKLIST.md"), "--dry-run", cwd=t.root)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertFalse((t.root / "docs" / "tasklist.json").exists())
+            self.assertIn('"id": "P2"', r.stdout)
+        finally:
+            t.cleanup()
+
+
 class SetStatusTests(unittest.TestCase):
     """F3 regression: `set --status blocked` must be rejected by argparse."""
 

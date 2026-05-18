@@ -103,6 +103,12 @@ def _build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("schema")
 
+    p_import = sub.add_parser("import")
+    p_import.add_argument("md_path", type=Path)
+    p_import.add_argument("--dry-run", action="store_true")
+    p_import.add_argument("--force", action="store_true")
+    p_import.add_argument("--project")
+
     p_nextid = sub.add_parser("next-id")
     p_nextid.add_argument("--kind", required=True, choices=["phase", "slice", "task", "cross"])
     p_nextid.add_argument("--phase")
@@ -170,6 +176,16 @@ def main(argv: list[str]) -> int:
             return rc
         elif args.cmd == "schema":
             sys.stdout.write(commands.cmd_schema())
+        elif args.cmd == "import":
+            rc, out, warn = commands.cmd_import(
+                repo_root=root, md_path=args.md_path,
+                dry_run=args.dry_run, force=args.force, project=args.project,
+            )
+            if out:
+                sys.stdout.write(out)
+            if warn:
+                sys.stderr.write(warn + "\n")
+            return rc
         elif args.cmd == "next-id":
             print(commands.cmd_next_id(
                 repo_root=root, kind=args.kind, phase=args.phase, slice=args.slice,

@@ -444,6 +444,31 @@ def cmd_validate(
         parts.append("ok")
     return rc, "\n".join(parts) + "\n"
 
+def cmd_import(
+    *, repo_root: Path, md_path: Path,
+    dry_run: bool = False, force: bool = False, project: str | None = None,
+) -> tuple[int, str, str]:
+    """Import a TASKLIST.md markdown file into docs/tasklist.json.
+    Returns (rc, stdout, stderr_warnings)."""
+    from tasktool.importer import parse_tasklist_md
+    from tasktool.serialize import dumps_canonical
+    text = md_path.read_text(encoding="utf-8")
+    result = parse_tasklist_md(text)
+    if project:
+        result.project.project = project
+    elif result.project.project == "<imported>":
+        result.project.project = repo_root.name
+    result.project.last_reviewed = _today()
+    warnings_text = "\n".join(result.warnings)
+    if dry_run:
+        return 0, dumps_canonical(result.project), warnings_text
+    target = _tasklist_path(repo_root)
+    if target.exists() and not force:
+        raise CommandError(f"{target}: already exists. Pass --force to overwrite.")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    _save(repo_root, result.project)
+    return 0, f"wrote {target}\n", warnings_text
+
 def cmd_schema() -> str:
     from tasktool.schema_gen import dump_schema
     return dump_schema()
