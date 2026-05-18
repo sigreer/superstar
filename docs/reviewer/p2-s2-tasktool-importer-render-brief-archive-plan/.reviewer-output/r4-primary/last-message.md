@@ -1,0 +1,44 @@
+1. Findings
+
+F6. RESOLVED  
+Phase `DONE YYYY-MM-DD` parsing is now covered by `test_phase_done_tag_sets_closed` and `_apply_phase_tag`, setting `Phase.closed` from the tag at `docs/plans/2026-05-17-p2-s2-tasktool-importer-render-brief-archive.md:127` and `:177`.
+
+F2. RESOLVED  
+Blocked phase input now has an explicit fallback parser path, coerces to `Status.READY`, and emits the promised warning at `docs/plans/2026-05-17-p2-s2-tasktool-importer-render-brief-archive.md:164` and `:204`. The test at `:396` covers this behavior.
+
+F3. RESOLVED  
+The stale claim that historical phases become `ArchivedPhase` records has been replaced. The plan now explicitly says historical imports remain in `phases[]` and never populate `archived_phases[]` at `docs/plans/2026-05-17-p2-s2-tasktool-importer-render-brief-archive.md:361` and `:437`.
+
+F1. RESOLVED  
+Still resolved.
+
+F4. RESOLVED  
+Still resolved.
+
+F5. RESOLVED  
+Still resolved.
+
+F7. Severity: minor  
+`docs/plans/2026-05-17-p2-s2-tasktool-importer-render-brief-archive.md:437` says `(historical)` / `(archived)` annotations are captured into `Phase.notes`, but the importer snippets do not implement or test that behavior. Either remove that claim, or add explicit parsing instructions plus an assertion that imported `P1.notes` contains the historical note.
+
+2. Open questions / assumptions
+
+I assume the historical note is nice-to-have metadata, not a migration blocker, because Task 12’s acceptance gate only requires `P1` to remain in `phases[]` with `status: done` and `closed: 2026-05-17`.
+
+3. Suggested document edits
+
+Either delete the `Phase.notes` sentence on line 437, or add a test and implementation detail for historical annotation handling.
+
+4. Verification gaps / commands
+
+The plan’s proposed gates are now appropriate:
+
+```bash
+PYTHONPATH=tools python3 -m unittest tools.tasktool.tests.test_importer -v
+PYTHONPATH=tools python3 -m tasktool import docs/TASKLIST.md --dry-run --project superstar >/tmp/preview.json 2>/tmp/preview-warnings.txt
+PYTHONPATH=tools python3 -m tasktool validate
+```
+
+5. Overall verdict
+
+ready with small edits
