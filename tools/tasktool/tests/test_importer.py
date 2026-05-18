@@ -1,5 +1,6 @@
 from __future__ import annotations
 import unittest
+from pathlib import Path
 from tasktool.importer import parse_tasklist_md
 from tasktool.model import Status
 
@@ -131,6 +132,24 @@ class TestImporterMisc(unittest.TestCase):
         self.assertTrue(any("blocked status not allowed on cross" in w for w in r.warnings))
         # The malformed bullet surfaces as a warning.
         self.assertTrue(any("malformed bullet" in w for w in r.warnings))
+
+
+class TestImporterFixture(unittest.TestCase):
+    def test_sample_fixture_roundtrip(self):
+        path = Path(__file__).parent / "fixtures" / "TASKLIST_sample.md"
+        text = path.read_text(encoding="utf-8")
+        r = parse_tasklist_md(text)
+        ph_ids = [ph.id for ph in r.project.phases]
+        self.assertIn("P1", ph_ids)
+        self.assertIn("P2", ph_ids)
+        all_slice_ids = [s.id for ph in r.project.phases for s in ph.slices]
+        self.assertIn("S3a", all_slice_ids)
+        # Malformed bullet surfaced as warning.
+        self.assertTrue(any("should warn" in w for w in r.warnings))
+        # render → re-parse stable for IDs.
+        from tasktool.render import render_project
+        round_tripped = parse_tasklist_md(render_project(r.project))
+        self.assertEqual(ph_ids, [ph.id for ph in round_tripped.project.phases])
 
 
 if __name__ == "__main__":
