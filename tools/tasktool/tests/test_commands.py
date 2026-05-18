@@ -394,3 +394,39 @@ class GitStageTests(unittest.TestCase):
             self.assertNotIn("docs/tasklist.json", staged)
         finally:
             t.cleanup()
+
+
+class ArchivePhaseTests(unittest.TestCase):
+    def test_archive_phase_writes_summary_and_moves_to_archived(self):
+        t = _Tmp()
+        try:
+            commands.cmd_init(repo_root=t.root, project="demo")
+            pid = commands.cmd_create_phase(repo_root=t.root, title="A phase")
+            sid = commands.cmd_create_slice(repo_root=t.root, phase_id=pid, title="Only slice")
+            commands.cmd_close(
+                repo_root=t.root, id=f"{pid}.{sid}",
+                skip_review_gate=True,
+            )
+            commands.cmd_archive_phase(repo_root=t.root, phase_id=pid, skip_review_gate=True)
+            p = load_project(t.root / "docs" / "tasklist.json")
+            self.assertFalse(any(ph.id == pid for ph in p.phases))
+            self.assertEqual([a.id for a in p.archived_phases], [pid])
+            arch_path = t.root / p.archived_phases[0].archived_path
+            self.assertTrue(arch_path.exists())
+            body = arch_path.read_text(encoding="utf-8")
+            self.assertIn(f"# {pid} —", body)
+            self.assertIn("```json", body)
+        finally:
+            t.cleanup()
+
+    def test_archive_phase_refuses_with_open_slices(self):
+        t = _Tmp()
+        try:
+            commands.cmd_init(repo_root=t.root, project="demo")
+            pid = commands.cmd_create_phase(repo_root=t.root, title="phase")
+            commands.cmd_create_slice(repo_root=t.root, phase_id=pid, title="open slice")
+            with self.assertRaises(commands.CommandError) as cm:
+                commands.cmd_archive_phase(repo_root=t.root, phase_id=pid, skip_review_gate=True)
+            self.assertIn("open slices", str(cm.exception).lower())
+        finally:
+            t.cleanup()

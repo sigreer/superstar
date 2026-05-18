@@ -479,6 +479,85 @@ def cmd_schema() -> str:
     from tasktool.schema_gen import dump_schema
     return dump_schema()
 
+import re as _re
+
+def _slugify(text: str) -> str:
+    s = _re.sub(r"[^a-zA-Z0-9]+", "-", text.lower()).strip("-")
+    return s[:40] or "phase"
+
+def cmd_archive_phase(
+    *, repo_root: Path, phase_id: str,
+    reviewer_chain: Path | None = None, skip_review_gate: bool = False,
+) -> None:
+    """Archive a completed phase. Per spec §7.3/§8.2:
+    refuses if any slice is not done; applies post-phase review gate; writes
+    docs/archived-tasks/<pid>-<slug>.md containing a summary + canonical JSON;
+    moves phase from project.phases to project.archived_phases."""
+    import sys as _sys
+    from tasktool.model import ArchivedPhase
+    from tasktool.serialize import dumps_canonical
+
+    p = _load(repo_root)
+    phase = next((ph for ph in p.phases if ph.id == phase_id), None)
+    if phase is None:
+        raise CommandError(f"phase {phase_id} not found")
+    open_slices = [s.id for s in phase.slices if s.status != Status.DONE]
+    if open_slices:
+        raise CommandError(
+            f"phase {phase_id} has open slices: {', '.join(open_slices)}"
+        )
+    if skip_review_gate:
+        print(f"warning: review gate skipped for {phase_id}", file=_sys.stderr)
+    _apply_review_gate(repo_root, p, phase, phase_id, "phase",
+                       reviewer_chain, skip_review_gate)
+    if phase.status != Status.DONE:
+        phase.status = Status.DONE
+        phase.closed = phase.closed or _today()
+
+    slug = _slugify(phase.title)
+    archive_rel = f"docs/archived-tasks/{phase_id}-{slug}.md"
+    archive_path = repo_root / archive_rel
+
+    # Build archive content in memory (no disk side effects yet).
+    sub_project = Project(project=p.project)
+    sub_project.phases.append(phase)
+    phase_json = dumps_canonical(sub_project)
+    summary_lines = [f"# {phase_id} — {phase.title}", "", f"status: {phase.status.value}"]
+    if phase.closed:
+        summary_lines.append(f"closed: {phase.closed}")
+    if phase.spec_path:
+        summary_lines.append(f"spec: {phase.spec_path}")
+    if phase.plan_path:
+        summary_lines.append(f"plan: {phase.plan_path}")
+    summary_lines += ["", "## Slices", ""]
+    for s in phase.slices:
+        closed = f" — closed {s.closed}" if s.closed else ""
+        summary_lines.append(f"- **{s.id}** [{s.status.value}]{closed} — {s.title}")
+    summary_lines += [
+        "",
+        "## Full phase JSON (for tasktool unarchive)",
+        "",
+        "```json",
+        phase_json.rstrip(),
+        "```",
+        "",
+    ]
+    summary_text = "\n".join(summary_lines)
+
+    # Mutate project state.
+    p.phases = [ph for ph in p.phases if ph.id != phase_id]
+    p.archived_phases.append(ArchivedPhase(
+        id=phase_id, title=phase.title,
+        archived_path=archive_rel, archived_date=_today(),
+    ))
+    # Validate BEFORE any filesystem writes so a bad state aborts cleanly.
+    validate_project(p)
+    # Now write.
+    archive_path.parent.mkdir(parents=True, exist_ok=True)
+    archive_path.write_text(summary_text, encoding="utf-8")
+    _save(repo_root, p)
+    _git_stage(repo_root, archive_path)
+
 def cmd_brief(*, repo_root: Path, id: str) -> str:
     from tasktool.brief import brief as _brief
     p = _load(repo_root)
