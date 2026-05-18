@@ -403,10 +403,11 @@ def cmd_validate(
     format: str = "text",
     strict_format: bool = False,
     normalise: bool = False,
+    check_orphans: list[str] | None = None,
 ) -> tuple[int, str]:
     from tasktool.validate import (
         validate_project, ValidationError, strict_format_check, normalise_file,
-        find_path_warnings,
+        find_path_warnings, validate_orphan_filenames,
     )
     path = _tasklist_path(repo_root)
     if not path.exists():
@@ -421,6 +422,8 @@ def cmd_validate(
         errors.append(str(e))
     if project is not None and not errors:
         warnings.extend(find_path_warnings(project, repo_root))
+        if check_orphans:
+            errors.extend(validate_orphan_filenames(project, check_orphans))
     if normalise and not errors:
         try:
             normalise_file(path)

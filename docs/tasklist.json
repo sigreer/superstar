@@ -55,11 +55,13 @@
           "closed": null,
           "created": "2026-05-18",
           "id": "S3",
-          "notes": "",
+          "notes": "Plan: docs/plans/2026-05-18-p2-s3-skill-rewrite-and-hook.md (recorded via ref; plan_path field remains null — tasktool has no edit-slice-plan-path command in S1/S2)",
           "plan_path": null,
-          "refs": [],
+          "refs": [
+            "docs/plans/2026-05-18-p2-s3-skill-rewrite-and-hook.md"
+          ],
           "reviewer_chain": null,
-          "status": "ready",
+          "status": "in_progress",
           "tasks": [],
           "title": "Rewrite `tasklist-discipline` skill; install pre-commit hook; touch up sibling skills (`writing-plans`, `external-review`, `project-setup`, `brainstorming`, `subagent-driven-development`)"
         }

@@ -143,3 +143,52 @@ def normalise_file(path: Path) -> None:
     p = load_project(path)
     validate_project(p)
     save_project(p, path)
+
+_FILENAME_ID_RE = re.compile(
+    r"^\d{4}-\d{2}-\d{2}-"
+    r"(?:(?P<cross>[Xx]\d+)"
+    r"|(?P<phase>[Pp]\d+)"
+      r"(?:-(?P<child>[SsXx]\d+[a-z]?))?"
+      r"(?:-(?P<task>[Tt]\d+))?"
+    r")-",
+)
+
+def _normalise_id(*, cross, phase, child, task):
+    if cross:
+        return cross.upper()
+    assert phase is not None
+    parts = [phase.upper()]
+    if child:
+        parts.append(child.upper())
+    if task:
+        parts.append(task.upper())
+    return ".".join(parts)
+
+def collect_known_ids(p):
+    ids = set()
+    for ph in p.phases:
+        ids.add(ph.id)
+        for sl in ph.slices:
+            ids.add(f"{ph.id}.{sl.id}")
+            for t in sl.tasks:
+                ids.add(f"{ph.id}.{sl.id}.{t.id}")
+    for ph in getattr(p, "archived_phases", []) or []:
+        ids.add(ph.id if hasattr(ph, "id") else ph["id"])
+    for x in p.cross_cutting:
+        ids.add(x.id)
+    return ids
+
+def validate_orphan_filenames(p, paths):
+    known = collect_known_ids(p)
+    findings = []
+    for path in paths:
+        name = Path(path).name
+        m = _FILENAME_ID_RE.match(name)
+        if not m:
+            continue
+        fq = _normalise_id(cross=m.group("cross"), phase=m.group("phase"),
+                           child=m.group("child"), task=m.group("task"))
+        if fq in known:
+            continue
+        findings.append(f"{path}: filename references ID {fq} but no matching row in tasklist.json")
+    return findings

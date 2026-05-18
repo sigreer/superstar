@@ -103,6 +103,8 @@ def _build_parser() -> argparse.ArgumentParser:
     p_validate.add_argument("--format", choices=["text", "json"], default="text")
     p_validate.add_argument("--strict-format", action="store_true")
     p_validate.add_argument("--normalise", action="store_true")
+    p_validate.add_argument("--check-orphans", nargs="*", default=None,
+                            help="Spec/plan filepaths to check against tasklist.json IDs.")
 
     sub.add_parser("schema")
 
@@ -184,6 +186,7 @@ def main(argv: list[str]) -> int:
             rc, text = commands.cmd_validate(
                 repo_root=root, format=args.format,
                 strict_format=args.strict_format, normalise=args.normalise,
+                check_orphans=args.check_orphans,
             )
             sys.stdout.write(text)
             return rc
