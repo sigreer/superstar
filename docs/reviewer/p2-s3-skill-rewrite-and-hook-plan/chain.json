@@ -1,0 +1,229 @@
+{
+  "schema_version": 1,
+  "chain": "p2-s3-skill-rewrite-and-hook-plan",
+  "kind": "plan",
+  "target": "docs/plans/2026-05-18-p2-s3-skill-rewrite-and-hook.md",
+  "work_id": null,
+  "legacy_migrated": false,
+  "rounds": [
+    {
+      "round": 1,
+      "reviewers": [
+        {
+          "role": "primary",
+          "sweep_group": null,
+          "parent_round": 1,
+          "request": "r1-2026-05-18T1300-request.md",
+          "response": "r1-2026-05-18T1300-response.md",
+          "verdict": null,
+          "verdict_valid": false,
+          "returncode": 1,
+          "status": "failed",
+          "provider": "codex",
+          "caller_provider": "claude",
+          "sandbox": {
+            "repo_root": "/home/simon/Dev/sigreer/skills/superstar",
+            "scratch_dir": "/tmp/superstar-reviewer-p2-s3-skill-rewrite-and-hook-plan-r1-primary-alj8u5y0",
+            "response_dir": "docs/reviewer/p2-s3-skill-rewrite-and-hook-plan/.reviewer-output/r1-primary",
+            "mode": "workspace-write-with-read-access"
+          }
+        }
+      ],
+      "status": "failed",
+      "returncode": 1,
+      "merged_verdict": null,
+      "merged_findings": null,
+      "request": "r1-2026-05-18T1300-request.md",
+      "response": "r1-2026-05-18T1300-response.md",
+      "resolution": null,
+      "resolution_parse_status": null,
+      "resolution_waiver": false,
+      "head_sha_at_request": "6543f8909736830d17dde90693af24e14847f11d",
+      "head_sha_after_round": "6543f8909736830d17dde90693af24e14847f11d",
+      "worktree_dirty_at_request": true,
+      "verdict": null,
+      "verdict_valid": false,
+      "findings_count": 0,
+      "blocking_findings_count": 0,
+      "base_ref": null,
+      "base_ref_source": null,
+      "diff_included": false
+    },
+    {
+      "round": 2,
+      "reviewers": [
+        {
+          "role": "primary",
+          "sweep_group": null,
+          "parent_round": 2,
+          "request": "r2-2026-05-18T1300-request.md",
+          "response": "r2-2026-05-18T1300-response.md",
+          "verdict": null,
+          "verdict_valid": false,
+          "returncode": 0,
+          "status": "ok",
+          "provider": "codex",
+          "caller_provider": "claude",
+          "sandbox": {
+            "repo_root": "/home/simon/Dev/sigreer/skills/superstar",
+            "scratch_dir": "/tmp/superstar-reviewer-p2-s3-skill-rewrite-and-hook-plan-r2-primary-put8hzh3",
+            "response_dir": "docs/reviewer/p2-s3-skill-rewrite-and-hook-plan/.reviewer-output/r2-primary",
+            "mode": "workspace-write-with-read-access"
+          }
+        }
+      ],
+      "status": "ok",
+      "returncode": 0,
+      "merged_verdict": null,
+      "merged_findings": null,
+      "request": "r2-2026-05-18T1300-request.md",
+      "response": "r2-2026-05-18T1300-response.md",
+      "resolution": null,
+      "resolution_parse_status": null,
+      "resolution_waiver": false,
+      "head_sha_at_request": "6543f8909736830d17dde90693af24e14847f11d",
+      "head_sha_after_round": "6543f8909736830d17dde90693af24e14847f11d",
+      "worktree_dirty_at_request": true,
+      "verdict": null,
+      "verdict_valid": false,
+      "findings_count": 5,
+      "blocking_findings_count": 1,
+      "base_ref": "6543f8909736830d17dde90693af24e14847f11d",
+      "base_ref_source": "auto",
+      "diff_included": true
+    },
+    {
+      "round": 3,
+      "reviewers": [
+        {
+          "role": "primary",
+          "sweep_group": null,
+          "parent_round": 3,
+          "request": "r3-2026-05-18T1305-request.md",
+          "response": "r3-2026-05-18T1305-response.md",
+          "verdict": null,
+          "verdict_valid": false,
+          "returncode": 0,
+          "status": "ok",
+          "provider": "codex",
+          "caller_provider": "claude",
+          "sandbox": {
+            "repo_root": "/home/simon/Dev/sigreer/skills/superstar",
+            "scratch_dir": "/tmp/superstar-reviewer-p2-s3-skill-rewrite-and-hook-plan-r3-primary-v07s4ssz",
+            "response_dir": "docs/reviewer/p2-s3-skill-rewrite-and-hook-plan/.reviewer-output/r3-primary",
+            "mode": "workspace-write-with-read-access"
+          }
+        }
+      ],
+      "status": "ok",
+      "returncode": 0,
+      "merged_verdict": null,
+      "merged_findings": null,
+      "request": "r3-2026-05-18T1305-request.md",
+      "response": "r3-2026-05-18T1305-response.md",
+      "resolution": null,
+      "resolution_parse_status": null,
+      "resolution_waiver": false,
+      "head_sha_at_request": "6543f8909736830d17dde90693af24e14847f11d",
+      "head_sha_after_round": "6543f8909736830d17dde90693af24e14847f11d",
+      "worktree_dirty_at_request": true,
+      "verdict": null,
+      "verdict_valid": false,
+      "findings_count": 7,
+      "blocking_findings_count": 0,
+      "base_ref": "6543f8909736830d17dde90693af24e14847f11d",
+      "base_ref_source": "auto",
+      "diff_included": true
+    },
+    {
+      "round": 4,
+      "reviewers": [
+        {
+          "role": "primary",
+          "sweep_group": null,
+          "parent_round": 4,
+          "request": "r4-2026-05-18T1308-request.md",
+          "response": "r4-2026-05-18T1308-response.md",
+          "verdict": null,
+          "verdict_valid": false,
+          "returncode": 0,
+          "status": "ok",
+          "provider": "codex",
+          "caller_provider": "claude",
+          "sandbox": {
+            "repo_root": "/home/simon/Dev/sigreer/skills/superstar",
+            "scratch_dir": "/tmp/superstar-reviewer-p2-s3-skill-rewrite-and-hook-plan-r4-primary-9snut4r2",
+            "response_dir": "docs/reviewer/p2-s3-skill-rewrite-and-hook-plan/.reviewer-output/r4-primary",
+            "mode": "workspace-write-with-read-access"
+          }
+        }
+      ],
+      "status": "ok",
+      "returncode": 0,
+      "merged_verdict": null,
+      "merged_findings": null,
+      "request": "r4-2026-05-18T1308-request.md",
+      "response": "r4-2026-05-18T1308-response.md",
+      "resolution": null,
+      "resolution_parse_status": null,
+      "resolution_waiver": false,
+      "head_sha_at_request": "6543f8909736830d17dde90693af24e14847f11d",
+      "head_sha_after_round": "6543f8909736830d17dde90693af24e14847f11d",
+      "worktree_dirty_at_request": true,
+      "verdict": null,
+      "verdict_valid": false,
+      "findings_count": 8,
+      "blocking_findings_count": 1,
+      "base_ref": "6543f8909736830d17dde90693af24e14847f11d",
+      "base_ref_source": "auto",
+      "diff_included": true
+    },
+    {
+      "round": 5,
+      "reviewers": [
+        {
+          "role": "primary",
+          "sweep_group": null,
+          "parent_round": 5,
+          "request": "r5-2026-05-18T1311-request.md",
+          "response": "r5-2026-05-18T1311-response.md",
+          "verdict": null,
+          "verdict_valid": false,
+          "returncode": 0,
+          "status": "ok",
+          "provider": "codex",
+          "caller_provider": "claude",
+          "sandbox": {
+            "repo_root": "/home/simon/Dev/sigreer/skills/superstar",
+            "scratch_dir": "/tmp/superstar-reviewer-p2-s3-skill-rewrite-and-hook-plan-r5-primary-xwf5b1x2",
+            "response_dir": "docs/reviewer/p2-s3-skill-rewrite-and-hook-plan/.reviewer-output/r5-primary",
+            "mode": "workspace-write-with-read-access"
+          }
+        }
+      ],
+      "status": "ok",
+      "returncode": 0,
+      "merged_verdict": null,
+      "merged_findings": null,
+      "request": "r5-2026-05-18T1311-request.md",
+      "response": "r5-2026-05-18T1311-response.md",
+      "resolution": null,
+      "resolution_parse_status": null,
+      "resolution_waiver": false,
+      "head_sha_at_request": "6543f8909736830d17dde90693af24e14847f11d",
+      "head_sha_after_round": "6543f8909736830d17dde90693af24e14847f11d",
+      "worktree_dirty_at_request": true,
+      "verdict": null,
+      "verdict_valid": false,
+      "findings_count": 8,
+      "blocking_findings_count": 0,
+      "base_ref": "6543f8909736830d17dde90693af24e14847f11d",
+      "base_ref_source": "auto",
+      "diff_included": true
+    }
+  ],
+  "sweep_checkpoints": {
+    "first-round": "pending",
+    "final-ready": "pending"
+  }
+}

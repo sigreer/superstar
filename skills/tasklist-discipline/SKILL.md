@@ -24,7 +24,7 @@ A `docs/tasklist.json` file is the canonical, top-level tracker for the project.
 | Phase | `P2` | `P2` |
 | Slice | `S1` (follow-up: `S5a`) | `P2.S1` (`P2.S5a`) |
 | Task | `T3` | `P2.S5.T3` |
-| Cross-cutting | `X4` | `P2.X4` |
+| Cross-cutting | `X4` | `X4` (top-level; not nested under a phase) |
 
 IDs are assigned at birth and **never renumbered**. The `tasktool create` family does orphan-aware allocation (`max+1` across `docs/tasklist.json`, `docs/specs/`, `docs/plans/`, `docs/reviewer/`) and prints the new ID.
 
