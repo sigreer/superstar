@@ -2,6 +2,30 @@
 # tools/tasktool/install.sh — install/update the ~/.local/bin/tasktool shim.
 set -euo pipefail
 
+# --- hook installer (must precede shim-install logic) ---------------------
+if [[ "${1:-}" == "--hook" ]]; then
+  shift
+  FORCE_HOOK=0
+  if [[ "${1:-}" == "--force" ]]; then FORCE_HOOK=1; shift; fi
+  REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+  if [[ -z "$REPO_ROOT" ]]; then
+    echo "install.sh --hook: must be run inside a git working tree" >&2
+    exit 1
+  fi
+  HOOK_SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/templates/pre-commit-tasktool"
+  HOOK_DEST="$REPO_ROOT/.git/hooks/pre-commit"
+  if [[ -f "$HOOK_DEST" && "$FORCE_HOOK" -ne 1 ]]; then
+    if ! grep -q 'tasktool-pre-commit-hook' "$HOOK_DEST" 2>/dev/null; then
+      echo "install.sh --hook: $HOOK_DEST exists and is not a tasktool hook. Re-run with --force to overwrite." >&2
+      exit 1
+    fi
+  fi
+  install -m 0755 "$HOOK_SRC" "$HOOK_DEST"
+  echo "Installed $HOOK_DEST"
+  exit 0
+fi
+# --------------------------------------------------------------------------
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PKG_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"   # → tools/
 TARGET="${HOME}/.local/bin/tasktool"
