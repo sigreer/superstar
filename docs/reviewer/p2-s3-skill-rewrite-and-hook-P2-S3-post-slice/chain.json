@@ -67,10 +67,67 @@
       "base_ref": null,
       "base_ref_source": null,
       "diff_included": false
+    },
+    {
+      "round": 2,
+      "reviewers": [
+        {
+          "role": "primary",
+          "sweep_group": null,
+          "parent_round": 2,
+          "request": "r2-2026-05-18T1526-primary-request.md",
+          "response": "r2-2026-05-18T1526-primary-response.md",
+          "verdict": "ready with small edits",
+          "verdict_valid": true,
+          "returncode": 0,
+          "status": "ok",
+          "provider": "custom",
+          "caller_provider": "unknown",
+          "sandbox": null
+        },
+        {
+          "role": "sweep",
+          "sweep_group": 1,
+          "parent_round": 2,
+          "request": "r2-2026-05-18T1526-sweep1-request.md",
+          "response": "r2-2026-05-18T1526-sweep1-response.md",
+          "verdict": "revise",
+          "verdict_valid": true,
+          "returncode": 0,
+          "status": "ok",
+          "provider": "codex",
+          "caller_provider": "claude",
+          "sandbox": {
+            "repo_root": "/home/simon/Dev/sigreer/skills/superstar",
+            "scratch_dir": "/tmp/superstar-reviewer-p2-s3-skill-rewrite-and-hook-P2-S3-post-slice-r2-sweep1-xn8wxt6k",
+            "response_dir": "docs/reviewer/p2-s3-skill-rewrite-and-hook-P2-S3-post-slice/.reviewer-output/r2-sweep1",
+            "mode": "workspace-write-with-read-access"
+          }
+        }
+      ],
+      "status": "ok",
+      "returncode": 0,
+      "merged_verdict": "revise",
+      "merged_findings": "r2-merged-findings.md",
+      "request": "r2-2026-05-18T1526-primary-request.md",
+      "response": "r2-2026-05-18T1526-primary-response.md",
+      "resolution": "r1-resolution.md",
+      "resolution_parse_status": "ok",
+      "resolution_waiver": false,
+      "head_sha_at_request": "52da9209b12489792d1be4da4175161ca037faee",
+      "head_sha_after_round": "52da9209b12489792d1be4da4175161ca037faee",
+      "worktree_dirty_at_request": false,
+      "verdict": "ready with small edits",
+      "verdict_valid": true,
+      "findings_count": 4,
+      "blocking_findings_count": 0,
+      "base_ref": "fca32e3dd6a4300a368b893d10c71ad45d56e0f1",
+      "base_ref_source": "auto",
+      "diff_included": true
     }
   ],
   "sweep_checkpoints": {
     "first-round": "completed",
-    "final-ready": "pending"
+    "final-ready": "completed"
   }
 }
