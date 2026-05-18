@@ -110,10 +110,153 @@
       "base_ref": "290c16ec93162352699c6b1281bfe0f4986f1712",
       "base_ref_source": "auto",
       "diff_included": true
+    },
+    {
+      "round": 3,
+      "reviewers": [
+        {
+          "role": "primary",
+          "sweep_group": null,
+          "parent_round": 3,
+          "request": "r3-2026-05-18T1112-primary-request.md",
+          "response": "r3-2026-05-18T1112-primary-response.md",
+          "verdict": "ready",
+          "verdict_valid": true,
+          "returncode": 0,
+          "status": "ok",
+          "provider": "custom",
+          "caller_provider": "unknown",
+          "sandbox": null
+        },
+        {
+          "role": "sweep",
+          "sweep_group": 1,
+          "parent_round": 3,
+          "request": "r3-2026-05-18T1112-sweep1-request.md",
+          "response": "r3-2026-05-18T1112-sweep1-response.md",
+          "verdict": "revise",
+          "verdict_valid": true,
+          "returncode": 0,
+          "status": "ok",
+          "provider": "codex",
+          "caller_provider": "claude",
+          "sandbox": {
+            "repo_root": "/home/simon/Dev/sigreer/skills/superstar",
+            "scratch_dir": "/tmp/superstar-reviewer-p2-s1-tasktool-cli-core-P2-S1-post-slice-r3-sweep1-6sv0lq6l",
+            "response_dir": "docs/reviewer/p2-s1-tasktool-cli-core-P2-S1-post-slice/.reviewer-output/r3-sweep1",
+            "mode": "workspace-write-with-read-access"
+          }
+        }
+      ],
+      "status": "ok",
+      "returncode": 0,
+      "merged_verdict": "revise",
+      "merged_findings": "r3-merged-findings.md",
+      "request": "r3-2026-05-18T1112-primary-request.md",
+      "response": "r3-2026-05-18T1112-primary-response.md",
+      "resolution": "r2-resolution.md",
+      "resolution_parse_status": "ok",
+      "resolution_waiver": false,
+      "head_sha_at_request": "e96cb8c830d0d7fa0e49cb7cb028dc0525e3b57c",
+      "head_sha_after_round": "e96cb8c830d0d7fa0e49cb7cb028dc0525e3b57c",
+      "worktree_dirty_at_request": false,
+      "verdict": "ready",
+      "verdict_valid": true,
+      "findings_count": 4,
+      "blocking_findings_count": 0,
+      "base_ref": "290c16ec93162352699c6b1281bfe0f4986f1712",
+      "base_ref_source": "auto",
+      "diff_included": true
+    },
+    {
+      "round": 4,
+      "reviewers": [
+        {
+          "role": "primary",
+          "sweep_group": null,
+          "parent_round": 4,
+          "request": "r4-2026-05-18T1120-request.md",
+          "response": "r4-2026-05-18T1120-response.md",
+          "verdict": "revise",
+          "verdict_valid": true,
+          "returncode": 0,
+          "status": "ok",
+          "provider": "codex",
+          "caller_provider": "claude",
+          "sandbox": {
+            "repo_root": "/home/simon/Dev/sigreer/skills/superstar",
+            "scratch_dir": "/tmp/superstar-reviewer-p2-s1-tasktool-cli-core-P2-S1-post-slice-r4-primary-whet5o0l",
+            "response_dir": "docs/reviewer/p2-s1-tasktool-cli-core-P2-S1-post-slice/.reviewer-output/r4-primary",
+            "mode": "workspace-write-with-read-access"
+          }
+        }
+      ],
+      "status": "ok",
+      "returncode": 0,
+      "merged_verdict": "revise",
+      "merged_findings": null,
+      "request": "r4-2026-05-18T1120-request.md",
+      "response": "r4-2026-05-18T1120-response.md",
+      "resolution": "r3-resolution.md",
+      "resolution_parse_status": "unparseable",
+      "resolution_waiver": false,
+      "head_sha_at_request": "1e4996996c1d15d08bed9a169ade13588272020d",
+      "head_sha_after_round": "1e4996996c1d15d08bed9a169ade13588272020d",
+      "worktree_dirty_at_request": true,
+      "verdict": "revise",
+      "verdict_valid": true,
+      "findings_count": 4,
+      "blocking_findings_count": 0,
+      "base_ref": "e96cb8c830d0d7fa0e49cb7cb028dc0525e3b57c",
+      "base_ref_source": "auto",
+      "diff_included": true
+    },
+    {
+      "round": 5,
+      "reviewers": [
+        {
+          "role": "primary",
+          "sweep_group": null,
+          "parent_round": 5,
+          "request": "r5-2026-05-18T1124-request.md",
+          "response": "r5-2026-05-18T1124-response.md",
+          "verdict": "ready",
+          "verdict_valid": true,
+          "returncode": 0,
+          "status": "ok",
+          "provider": "codex",
+          "caller_provider": "claude",
+          "sandbox": {
+            "repo_root": "/home/simon/Dev/sigreer/skills/superstar",
+            "scratch_dir": "/tmp/superstar-reviewer-p2-s1-tasktool-cli-core-P2-S1-post-slice-r5-primary-8wtydas6",
+            "response_dir": "docs/reviewer/p2-s1-tasktool-cli-core-P2-S1-post-slice/.reviewer-output/r5-primary",
+            "mode": "workspace-write-with-read-access"
+          }
+        }
+      ],
+      "status": "ok",
+      "returncode": 0,
+      "merged_verdict": "ready",
+      "merged_findings": null,
+      "request": "r5-2026-05-18T1124-request.md",
+      "response": "r5-2026-05-18T1124-response.md",
+      "resolution": "r4-resolution.md",
+      "resolution_parse_status": "ok",
+      "resolution_waiver": false,
+      "head_sha_at_request": "1d2c71a98c5c6b6d1b149c2c0fd530113d5abb3f",
+      "head_sha_after_round": "1d2c71a98c5c6b6d1b149c2c0fd530113d5abb3f",
+      "worktree_dirty_at_request": true,
+      "verdict": "ready",
+      "verdict_valid": true,
+      "findings_count": 4,
+      "blocking_findings_count": 0,
+      "base_ref": "1e4996996c1d15d08bed9a169ade13588272020d",
+      "base_ref_source": "auto",
+      "diff_included": true
     }
   ],
   "sweep_checkpoints": {
     "first-round": "completed",
-    "final-ready": "pending"
+    "final-ready": "completed"
   }
 }

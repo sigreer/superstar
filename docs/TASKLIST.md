@@ -49,7 +49,7 @@ Pre-existing phase, reconstructed from `docs/specs/`, `docs/plans/`, and `docs/r
 
 Spec: [`docs/specs/2026-05-17-P2-tasktool-design.md`](specs/2026-05-17-P2-tasktool-design.md). Plan: _pending_.
 
-- ☐ **S1** CLI core: data model, canonical serializer, allocation, validation, reviewer-gate, and the create/set/close/block/note/ref/title/show/list/validate/schema/next-id/init commands. Plan: [`docs/plans/2026-05-17-p2-s1-tasktool-cli-core.md`](plans/2026-05-17-p2-s1-tasktool-cli-core.md).
+- ✅ **S1** `DONE 2026-05-18` — CLI core: data model, canonical serializer, allocation, validation, reviewer-gate, and the create/set/close/block/note/ref/title/show/list/validate/schema/next-id/init commands. Plan: [`docs/plans/2026-05-17-p2-s1-tasktool-cli-core.md`](plans/2026-05-17-p2-s1-tasktool-cli-core.md). Post-impl: 139 tests; reviewer chain at `docs/reviewer/p2-s1-tasktool-cli-core-P2-S1-post-slice/` (verdict `ready` at round 5).
 - ☐ **S2** Importer, render, brief, archive-phase; migrate this repo from `TASKLIST.md` to `tasklist.json`. Plan: _pending — written after S1 ships._
 - ☐ **S3** Rewrite `tasklist-discipline` skill; install pre-commit hook; touch up sibling skills (`writing-plans`, `external-review`, `project-setup`, `brainstorming`, `subagent-driven-development`). Plan: _pending — written after S2 ships._
 
