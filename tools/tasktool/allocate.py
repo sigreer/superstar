@@ -56,6 +56,12 @@ def next_slice_id(p: Project, phase_id: str, repo_root: Path) -> str:
             if phase_id.lower() in fp.name.lower():
                 for m in _SLICE_PAT.finditer(fp.name):
                     used.add(int(m.group(1)))
+    rev = repo_root / "docs/reviewer"
+    if rev.exists():
+        for fp in rev.iterdir():
+            if phase_id.lower() in fp.name.lower():
+                for m in _SLICE_PAT.finditer(fp.name):
+                    used.add(int(m.group(1)))
     n = max(used, default=0) + 1
     return f"S{n}"
 

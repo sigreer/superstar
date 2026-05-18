@@ -3129,8 +3129,8 @@ The slice-close itself is performed by the coordinator after `external-review --
 
 ## Post-implementation evidence
 
-- **Test count:** 138 tests pass (124 at initial implementation; +7 from r2 reviewer fixes F1/F2/F3; +7 from r3 reviewer fixes S1.F1/S1.F2/S1.F3)
-- **Commit range:** c363e8f (P2.S1: scaffold tasktool package and smoke test) → HEAD (r3 fixes)
+- **Test count:** 139 tests pass (124 at initial implementation; +7 from r2 reviewer fixes F1/F2/F3; +7 from r3 reviewer fixes S1.F1/S1.F2/S1.F3; +1 from r4 fix S1.F1 partial)
+- **Commit range:** c363e8f (P2.S1: scaffold tasktool package and smoke test) → HEAD (r4 fix)
 - **Public API status:** `load_project`, `save_project`, `dumps_canonical`, `loads_project`, and all model types (`Project`, `Phase`, `Slice`, `Task`, `CrossCutting`, `BlockedOn`, `Status`, `ArchivedPhase`, `SCHEMA_VERSION`) are exported via the `tasktool` package `__init__.py` with `__all__` (S1)
 - **Deferred to S2/S3:** `import`, `brief`, `render`, `archive-phase`, pre-commit hook template, `tasklist-discipline` skill rewrite, sibling skill touch-ups, actual TASKLIST→JSON migration
 - **Follow-up bugfix commits from r2 (F1/F2/F3):**
@@ -3141,5 +3141,7 @@ The slice-close itself is performed by the coordinator after `external-review --
   - S1.F1: compile `_PHASE_PAT`, `_SLICE_PAT`, `_TASK_PAT`, `_CROSS_PAT` with `re.IGNORECASE` so lowercase artifact filenames (e.g. `p2-s1-...`) are detected by `scan_orphan_ids` (`allocate.py`)
   - S1.F2: tighten schema enums — only slices may be `blocked`; tasks/phases/cross-cutting use `non_blocked_status_enum` (`schema_gen.py`)
   - S1.F3: re-export full public API from `tasktool/__init__.py` with `__all__` (`__init__.py`)
+- **Follow-up bugfix commits from r4 (S1.F1 partial — docs/reviewer/ scan gap):**
+  - S1.F1 (partial): extend `next_slice_id` in `allocate.py` to also scan `docs/reviewer/` folder names for orphan slice IDs of the matching phase, matching the existing `next_phase_id` / `scan_orphan_ids` behavior
 
 These are explicitly out-of-scope here. If you find yourself reaching for them, stop — they belong in their own slice.

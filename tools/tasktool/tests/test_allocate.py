@@ -74,6 +74,14 @@ class SliceAllocTests(unittest.TestCase):
             from tasktool.allocate import next_followup_letter
             self.assertEqual(next_followup_letter(p, "P1", "S1", Path(td)), "S1b")
 
+    def test_orphan_slice_in_reviewer_folder(self):
+        p = Project(project="demo")
+        p.phases.append(Phase(id="P2", title="a", created="2026-05-17"))
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "docs/reviewer/p2-s3-post-slice").mkdir(parents=True)
+            self.assertEqual(next_slice_id(p, "P2", root), "S4")
+
 class TaskAllocTests(unittest.TestCase):
     def test_first_task(self):
         p = Project(project="demo")
