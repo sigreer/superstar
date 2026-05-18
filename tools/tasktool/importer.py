@@ -3,6 +3,15 @@ import re
 from dataclasses import dataclass, field
 from tasktool.model import Project, Phase, Status
 
+
+@dataclass(slots=True)
+class _PhaseMatch:
+    id: str
+    title: str
+    status: Status
+    closed: str | None
+    warning: str | None
+
 EMOJI_TO_STATUS = {
     "✅": Status.DONE,
     "🚧": Status.IN_PROGRESS,
@@ -33,8 +42,7 @@ class ParseResult:
     warnings: list[str] = field(default_factory=list)
 
 
-def _match_phase_header(line: str):
-    """Return (id, title, status, closed, warning) or None."""
+def _match_phase_header(line: str) -> _PhaseMatch | None:
     m = PHASE_HEADER_RE.match(line)
     if m:
         emoji = m.group("emoji")
@@ -45,22 +53,35 @@ def _match_phase_header(line: str):
             dm = PHASE_DONE_TAG_RE.match(tag)
             if dm:
                 closed = dm.group("date")
-        return m.group("id"), m.group("title").strip(), status, closed, None
+        return _PhaseMatch(
+            id=m.group("id"),
+            title=m.group("title").strip(),
+            status=status,
+            closed=closed,
+            warning=None,
+        )
     m = PHASE_HEADER_BLOCKED_RE.match(line)
     if m:
         # Plan says: blocked-fallback warns + coerces to READY.
-        warn = "blocked status not allowed on phase; coerced to ready"
-        return m.group("id"), m.group("title").strip(), Status.READY, None, warn
+        return _PhaseMatch(
+            id=m.group("id"),
+            title=m.group("title").strip(),
+            status=Status.READY,
+            closed=None,
+            warning="blocked status not allowed on phase; coerced to ready",
+        )
     return None
 
 
 def parse_tasklist_md(text: str) -> ParseResult:
     """Forgiving parser for TASKLIST.md.
 
-    Currently handles phase headers and post-header Spec:/Plan: lines.
-    Anything else is ignored (silently — slice/cross-cut/archive parsing
-    arrives in later tasks). Lines that look header-shaped but fail to
-    match are surfaced as warnings.
+    At this stage the parser only recognises phase headers (and the
+    Spec:/Plan: lines that may follow within a short window). Every other
+    line is silently skipped. Slice, cross-cutting, and archive parsing —
+    along with their associated warning policies — arrive in later tasks.
+    The parser never raises; ambiguous tokens become entries in
+    ``ParseResult.warnings`` for the caller to decide on.
     """
     project = Project(project="<imported>")
     warnings: list[str] = []
@@ -72,15 +93,15 @@ def parse_tasklist_md(text: str) -> ParseResult:
         line = lines[i]
         header = _match_phase_header(line)
         if header is not None:
-            pid, title, status, closed, warn = header
-            if warn:
-                warnings.append(f"line {i + 1}: {warn}")
+            if header.warning:
+                warnings.append(f"line {i + 1}: {header.warning}")
             phase = Phase(
-                id=pid,
-                title=title,
+                id=header.id,
+                title=header.title,
+                # Sentinel: markdown has no real created-date for phases.
                 created="1970-01-01",
-                status=status,
-                closed=closed,
+                status=header.status,
+                closed=header.closed,
             )
             # Sniff a short window of following lines for Spec:/Plan:.
             j = i + 1
