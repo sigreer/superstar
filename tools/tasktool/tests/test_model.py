@@ -53,3 +53,22 @@ class ConstructionTests(unittest.TestCase):
     def test_blocked_on_external(self):
         b = BlockedOn(kind="external", value="vendor X")
         self.assertEqual(b.value, "vendor X")
+
+
+class PublicAPITests(unittest.TestCase):
+    """Verify the package-level public API promised by the spec."""
+
+    def test_import_load_project_and_project(self):
+        """from tasktool import load_project, Project must succeed."""
+        import tasktool
+        self.assertTrue(callable(tasktool.load_project))
+        self.assertIs(tasktool.Project, Project)
+
+    def test_all_exports_present(self):
+        import tasktool
+        for name in [
+            "load_project", "save_project", "dumps_canonical", "loads_project",
+            "Project", "Phase", "Slice", "Task", "CrossCutting", "BlockedOn",
+            "Status", "ArchivedPhase", "SCHEMA_VERSION",
+        ]:
+            self.assertTrue(hasattr(tasktool, name), f"tasktool.{name} missing")

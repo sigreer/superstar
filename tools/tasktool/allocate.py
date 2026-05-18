@@ -4,10 +4,10 @@ import re
 from pathlib import Path
 from tasktool.model import Project
 
-_PHASE_PAT = re.compile(r"\bP(\d+)\b")
-_SLICE_PAT = re.compile(r"\bS(\d+)([a-z]?)\b")
-_TASK_PAT = re.compile(r"\bT(\d+)\b")
-_CROSS_PAT = re.compile(r"\bX(\d+)\b")
+_PHASE_PAT = re.compile(r"\bP(\d+)\b", re.IGNORECASE)
+_SLICE_PAT = re.compile(r"\bS(\d+)([a-z]?)\b", re.IGNORECASE)
+_TASK_PAT = re.compile(r"\bT(\d+)\b", re.IGNORECASE)
+_CROSS_PAT = re.compile(r"\bX(\d+)\b", re.IGNORECASE)
 
 def scan_orphan_ids(repo_root: Path, kind: str) -> set[int]:
     """Scan docs/specs, docs/plans, docs/reviewer folder names for IDs of the given kind.

@@ -3129,12 +3129,17 @@ The slice-close itself is performed by the coordinator after `external-review --
 
 ## Post-implementation evidence
 
-- **Test count:** 131 tests pass (124 at initial implementation; +7 from r2 reviewer fixes F1/F2/F3)
-- **Commit range:** c363e8f (P2.S1: scaffold tasktool package and smoke test) → HEAD (r2 fixes)
+- **Test count:** 138 tests pass (124 at initial implementation; +7 from r2 reviewer fixes F1/F2/F3; +7 from r3 reviewer fixes S1.F1/S1.F2/S1.F3)
+- **Commit range:** c363e8f (P2.S1: scaffold tasktool package and smoke test) → HEAD (r3 fixes)
+- **Public API status:** `load_project`, `save_project`, `dumps_canonical`, `loads_project`, and all model types (`Project`, `Phase`, `Slice`, `Task`, `CrossCutting`, `BlockedOn`, `Status`, `ArchivedPhase`, `SCHEMA_VERSION`) are exported via the `tasktool` package `__init__.py` with `__all__` (S1)
 - **Deferred to S2/S3:** `import`, `brief`, `render`, `archive-phase`, pre-commit hook template, `tasklist-discipline` skill rewrite, sibling skill touch-ups, actual TASKLIST→JSON migration
 - **Follow-up bugfix commits from r2 (F1/F2/F3):**
   - F1: resolve relative `--reviewer-chain` paths against `repo_root` in `discover_chain` (`reviewer_gate.py`)
   - F2: boundary-aware segment matching in `discover_chain` — `p1-s1` no longer matches `p1-s10-post-slice`
   - F3: removed `blocked` from `set --status` argparse choices in `cli.py`; users must use `tasktool block` instead
+- **Follow-up bugfix commits from r3 (S1.F1/S1.F2/S1.F3):**
+  - S1.F1: compile `_PHASE_PAT`, `_SLICE_PAT`, `_TASK_PAT`, `_CROSS_PAT` with `re.IGNORECASE` so lowercase artifact filenames (e.g. `p2-s1-...`) are detected by `scan_orphan_ids` (`allocate.py`)
+  - S1.F2: tighten schema enums — only slices may be `blocked`; tasks/phases/cross-cutting use `non_blocked_status_enum` (`schema_gen.py`)
+  - S1.F3: re-export full public API from `tasktool/__init__.py` with `__all__` (`__init__.py`)
 
 These are explicitly out-of-scope here. If you find yourself reaching for them, stop — they belong in their own slice.

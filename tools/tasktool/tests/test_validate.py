@@ -148,6 +148,64 @@ class PathWarningTests(unittest.TestCase):
             warnings = find_path_warnings(p, Path(td))
         self.assertEqual(warnings, [])
 
+class SchemaEnumTests(unittest.TestCase):
+    def _get_schema(self):
+        from tasktool.schema_gen import build_schema
+        return build_schema()
+
+    def _find_kind(self, schema, pattern):
+        """Return properties dict for items matching id pattern in schema."""
+        def _walk(obj):
+            if isinstance(obj, dict):
+                props = obj.get("properties", {})
+                id_pat = props.get("id", {}).get("pattern", "")
+                if pattern in id_pat:
+                    return props
+                for v in obj.values():
+                    result = _walk(v)
+                    if result is not None:
+                        return result
+            elif isinstance(obj, list):
+                for v in obj:
+                    result = _walk(v)
+                    if result is not None:
+                        return result
+            return None
+        return _walk(schema)
+
+    def test_task_status_has_no_blocked(self):
+        """Task status enum must not contain 'blocked'."""
+        schema = self._get_schema()
+        task_props = self._find_kind(schema, r"^T\d+$")
+        self.assertIsNotNone(task_props, "task schema not found")
+        task_status_enum = task_props["status"]["enum"]
+        self.assertNotIn("blocked", task_status_enum)
+
+    def test_slice_status_has_blocked(self):
+        """Slice status enum must contain 'blocked'."""
+        schema = self._get_schema()
+        slice_props = self._find_kind(schema, r"^S\d+")
+        self.assertIsNotNone(slice_props, "slice schema not found")
+        slice_status_enum = slice_props["status"]["enum"]
+        self.assertIn("blocked", slice_status_enum)
+
+    def test_phase_status_has_no_blocked(self):
+        """Phase status enum must not contain 'blocked'."""
+        schema = self._get_schema()
+        phase_props = self._find_kind(schema, r"^P\d+$")
+        self.assertIsNotNone(phase_props, "phase schema not found")
+        phase_status_enum = phase_props["status"]["enum"]
+        self.assertNotIn("blocked", phase_status_enum)
+
+    def test_cross_status_has_no_blocked(self):
+        """Cross-cutting status enum must not contain 'blocked'."""
+        schema = self._get_schema()
+        cross_props = self._find_kind(schema, r"^X\d+$")
+        self.assertIsNotNone(cross_props, "cross schema not found")
+        cross_status_enum = cross_props["status"]["enum"]
+        self.assertNotIn("blocked", cross_status_enum)
+
+
 class StrictFormatTests(unittest.TestCase):
     def test_canonical_passes(self):
         p = Project(project="demo")

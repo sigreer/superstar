@@ -5,7 +5,8 @@ import json
 from tasktool.model import SCHEMA_VERSION
 
 def build_schema() -> dict:
-    status_enum = ["ready", "in_progress", "blocked", "done"]
+    slice_status_enum = ["ready", "in_progress", "blocked", "done"]
+    non_blocked_status_enum = ["ready", "in_progress", "done"]
     date_str = {"type": "string", "pattern": r"^\d{4}-\d{2}-\d{2}$"}
     nullable_date = {"oneOf": [date_str, {"type": "null"}]}
     blocked_on = {
@@ -29,7 +30,7 @@ def build_schema() -> dict:
             "id": {"type": "string", "pattern": r"^T\d+$"},
             "title": {"type": "string"},
             "created": date_str,
-            "status": {"enum": status_enum},
+            "status": {"enum": non_blocked_status_enum},
             "closed": nullable_date,
             "refs": {"type": "array", "items": {"type": "string"}},
             "notes": {"type": "string"},
@@ -43,7 +44,7 @@ def build_schema() -> dict:
             "id": {"type": "string", "pattern": r"^S\d+[a-z]?$"},
             "title": {"type": "string"},
             "created": date_str,
-            "status": {"enum": status_enum},
+            "status": {"enum": slice_status_enum},
             "closed": nullable_date,
             "blocked_on": blocked_on,
             "plan_path": {"oneOf": [{"type": "string"}, {"type": "null"}]},
@@ -61,7 +62,7 @@ def build_schema() -> dict:
             "id": {"type": "string", "pattern": r"^P\d+$"},
             "title": {"type": "string"},
             "created": date_str,
-            "status": {"enum": status_enum},
+            "status": {"enum": non_blocked_status_enum},
             "closed": nullable_date,
             "spec_path": {"oneOf": [{"type": "string"}, {"type": "null"}]},
             "plan_path": {"oneOf": [{"type": "string"}, {"type": "null"}]},
@@ -78,7 +79,7 @@ def build_schema() -> dict:
             "id": {"type": "string", "pattern": r"^X\d+$"},
             "title": {"type": "string"},
             "created": date_str,
-            "status": {"enum": status_enum},
+            "status": {"enum": non_blocked_status_enum},
             "closed": nullable_date,
             "refs": {"type": "array", "items": {"type": "string"}},
             "notes": {"type": "string"},
