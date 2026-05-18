@@ -1,6 +1,6 @@
 ---
 name: project-setup
-description: Use when the user says "init project for superstar", "set up this project", or similar. Audits the current repo for the conventions the other skills depend on (TASKLIST.md, doc dirs, reviewer CLI, hooks) and offers to scaffold anything missing.
+description: Use when the user says "init project for superstar", "set up this project", or similar. Audits the current repo for the conventions the other skills depend on (docs/tasklist.json, doc dirs, reviewer CLI, pre-commit hook) and offers to scaffold anything missing.
 ---
 
 # Project Setup
@@ -12,7 +12,7 @@ Audit the current repo against the conventions the rest of the superstar skills 
 ## When to use
 
 - User explicitly asks: "init project for superstar", "set up this project for superstar", "superstar setup", etc.
-- A skill discovers a missing convention mid-flow (e.g. `[[tasklist-discipline]]` asked to update TASKLIST.md but the file is absent) and the user asks to scaffold it.
+- A skill discovers a missing convention mid-flow (e.g. `[[tasklist-discipline]]` asked to update `docs/tasklist.json` via tasktool but the file is absent) and the user asks to scaffold it.
 - A new fork or new repo where the planning/review workflow has never been used.
 
 Do **not** invoke automatically. The user must request it.
@@ -23,7 +23,8 @@ For each check the skill must report **status** (`present` / `missing` / `partia
 
 | # | Check                                                    | Pass criteria                                                          | Scaffold action                                                              |
 |---|----------------------------------------------------------|------------------------------------------------------------------------|------------------------------------------------------------------------------|
-| 1 | `docs/TASKLIST.md`                                       | File exists with the standard header + status legend.                  | Copy from `skills/tasklist-discipline/templates/TASKLIST.template.md`, fill in `<project-name>` and the current date. |
+| 1 | `docs/tasklist.json`                                     | File exists and validates clean (`tasktool validate`).                 | `tasktool init --project <name>`.                                            |
+| 1b| `.git/hooks/pre-commit` (tasktool hook)                  | Tasktool hook installed (`grep -q 'tasktool-pre-commit-hook' .git/hooks/pre-commit`). | `bash tools/tasktool/install.sh --hook` (or the equivalent for non-superstar repos). |
 | 2 | `docs/specs/` directory                                  | Directory exists.                                                      | `mkdir -p docs/specs` and add a `.gitkeep`.                                  |
 | 3 | `docs/plans/` directory                                  | Directory exists.                                                      | `mkdir -p docs/plans` and add a `.gitkeep`.                                  |
 | 4 | `docs/handoffs/` directory                               | Directory exists.                                                      | `mkdir -p docs/handoffs` and add a `.gitkeep`.                               |
@@ -43,7 +44,7 @@ For each check the skill must report **status** (`present` / `missing` / `partia
 4. **Offer scaffolding.** For each `missing` or `partial` item, ask the user whether to scaffold it. Allow "all", "none", or per-item selection.
 5. **Apply.** For each accepted item, run the scaffold action. Use `git add -N` (intent-to-add) on new empty files so `.gitkeep`s show up in `git status` but aren't auto-staged.
 6. **Verify.** Re-run the audit and confirm everything the user accepted is now `present`. Print the new table.
-7. **Report.** Summarise what was created, what was skipped, and what manual action (if any) is still required — e.g. installing the reviewer command, editing the placeholder fields in `TASKLIST.md`.
+7. **Report.** Summarise what was created, what was skipped, and what manual action (if any) is still required — e.g. installing the reviewer command, populating the north-star or first phase title via `tasktool create`.
 
 ## Legacy migration (when superpowers artefacts are present)
 
@@ -147,14 +148,14 @@ Order rows by dependency: a row that scaffolds a directory must precede a row th
 
 | Thought                                                        | Reality                                                                |
 |----------------------------------------------------------------|------------------------------------------------------------------------|
-| "TASKLIST.md is missing, I'll just create it"                  | Run the audit, present the table, ask. Don't write without consent.    |
+| "`docs/tasklist.json` is missing, I'll just create it"         | Run the audit, present the table, ask. Don't `tasktool init` without consent. |
 | "The user said 'set up everything', skip the confirmations"   | Confirm the *list* once, then proceed. Don't write files without showing what.|
 | "AGENT_REVIEWER_CMD is unset, I'll edit their shell rc"        | Out of scope. Print the suggested value and stop.                      |
 | "Existing CLAUDE.md is fine, I'll rewrite it cleaner"          | No. Append a section if needed; never rewrite.                         |
 
 ## Integration
 
-- `[[tasklist-discipline]]` — provides the TASKLIST.md template.
+- `[[tasklist-discipline]]` — describes tasktool conventions; the CLI itself ships the canonical scaffold via `tasktool init`.
 - `[[external-review]]` — provides the reviewer script and the `AGENT_REVIEWER_CMD` expectation.
 - `[[writing-plans]]` — relies on the `docs/specs/`, `docs/plans/`, `docs/handoffs/` tree.
 - `[[subagent-driven-development]]` — relies on `docs/reviewer/` for chain folders.
