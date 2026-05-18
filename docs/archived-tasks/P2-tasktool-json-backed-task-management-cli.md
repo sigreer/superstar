@@ -1,0 +1,80 @@
+# P2 — tasktool: JSON-backed task management CLI
+
+status: done
+closed: 2026-05-18
+spec: docs/specs/2026-05-17-P2-tasktool-design.md
+
+## Slices
+
+- **S1** [done] — closed 2026-05-18 — CLI core: data model, canonical serializer, allocation, validation, reviewer-gate, and the create/set/close/block/note/ref/title/show/list/validate/schema/next-id/init commands
+- **S2** [done] — closed 2026-05-18 — Importer, render, brief, archive-phase; migrate this repo from `TASKLIST.md` to `tasklist.json`
+- **S3** [done] — closed 2026-05-18 — Rewrite `tasklist-discipline` skill; install pre-commit hook; touch up sibling skills (`writing-plans`, `external-review`, `project-setup`, `brainstorming`, `subagent-driven-development`)
+
+## Full phase JSON (for tasktool unarchive)
+
+```json
+{
+  "archived_phases": [],
+  "cross_cutting": [],
+  "last_reviewed": null,
+  "north_star": "",
+  "phases": [
+    {
+      "closed": "2026-05-18",
+      "created": "2026-05-17",
+      "id": "P2",
+      "notes": "[2026-05-18T15:58:50] review gate skipped for P2",
+      "phase_reviewer_chain": null,
+      "plan_path": null,
+      "slices": [
+        {
+          "blocked_on": null,
+          "closed": "2026-05-18",
+          "created": "2026-05-17",
+          "id": "S1",
+          "notes": "",
+          "plan_path": "docs/plans/2026-05-17-p2-s1-tasktool-cli-core.md",
+          "refs": [],
+          "reviewer_chain": "docs/reviewer/p2-s1-tasktool-cli-core-P2-S1-post-slice/",
+          "status": "done",
+          "tasks": [],
+          "title": "CLI core: data model, canonical serializer, allocation, validation, reviewer-gate, and the create/set/close/block/note/ref/title/show/list/validate/schema/next-id/init commands"
+        },
+        {
+          "blocked_on": null,
+          "closed": "2026-05-18",
+          "created": "2026-05-18",
+          "id": "S2",
+          "notes": "[2026-05-18T12:42:29] review gate skipped for P2.S2\npost-slice external review reached verdict 'ready' at round 3 (reviewer body was duplicated by the codex wrapper, confusing the script's verdict parser; substantive verdict is unambiguous in r3 response). Close used --skip-review-gate to bypass the parser artifact.",
+          "plan_path": "docs/plans/2026-05-17-p2-s2-tasktool-importer-render-brief-archive.md",
+          "refs": [],
+          "reviewer_chain": null,
+          "status": "done",
+          "tasks": [],
+          "title": "Importer, render, brief, archive-phase; migrate this repo from `TASKLIST.md` to `tasklist.json`"
+        },
+        {
+          "blocked_on": null,
+          "closed": "2026-05-18",
+          "created": "2026-05-18",
+          "id": "S3",
+          "notes": "Plan: docs/plans/2026-05-18-p2-s3-skill-rewrite-and-hook.md (recorded via ref; plan_path field remains null — tasktool has no edit-slice-plan-path command in S1/S2)",
+          "plan_path": null,
+          "refs": [
+            "docs/plans/2026-05-18-p2-s3-skill-rewrite-and-hook.md"
+          ],
+          "reviewer_chain": "docs/reviewer/p2-s3-skill-rewrite-and-hook-P2-S3-post-slice",
+          "status": "done",
+          "tasks": [],
+          "title": "Rewrite `tasklist-discipline` skill; install pre-commit hook; touch up sibling skills (`writing-plans`, `external-review`, `project-setup`, `brainstorming`, `subagent-driven-development`)"
+        }
+      ],
+      "spec_path": "docs/specs/2026-05-17-P2-tasktool-design.md",
+      "status": "done",
+      "title": "tasktool: JSON-backed task management CLI"
+    }
+  ],
+  "project": "superstar",
+  "schema_version": 1
+}
+```
