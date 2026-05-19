@@ -5,7 +5,7 @@
 # Codex's local marketplace installer currently does not materialize symlinked
 # payload directories reliably. This wrapper installs the plugin, then copies the
 # local wrapper payload with symlinks followed so the versioned cache contains
-# real skills/assets for new Codex sessions.
+# real skills, hooks, tools, and assets for new Codex sessions.
 
 set -euo pipefail
 
@@ -33,7 +33,8 @@ Options:
 Publishes plugins/superstar into:
   <cache-root>/<marketplace>/<plugin>/<version>/
 
-The script follows symlinks so cache/<version>/skills is a real directory.
+The script follows symlinks so cache/<version>/skills, hooks, and tools are
+real directories/files.
 EOF
 }
 
@@ -107,10 +108,19 @@ if data.get("name") != plugin:
     raise SystemExit(f"cache manifest name mismatch: {data.get('name')!r} != {plugin!r}")
 if data.get("version") != expected:
     raise SystemExit(f"cache manifest version mismatch: {data.get('version')!r} != {expected!r}")
-for rel in ("skills/using-superstar/SKILL.md", "skills/project-setup/SKILL.md", "skills/using-git-worktrees/SKILL.md", "assets"):
+for rel in (
+    "skills/using-superstar/SKILL.md",
+    "skills/project-setup/SKILL.md",
+    "skills/using-git-worktrees/SKILL.md",
+    "hooks/run-hook.cmd",
+    "hooks/agent-finished",
+    "tools/tasktool/notify.py",
+    "assets",
+):
     if not (cache / rel).exists():
         raise SystemExit(f"cache missing required payload: {rel}")
-if (cache / "skills").is_symlink():
-    raise SystemExit("cache skills payload is still a symlink; expected materialized directory")
+for rel in ("skills", "hooks", "tools", "assets"):
+    if (cache / rel).is_symlink():
+        raise SystemExit(f"cache {rel} payload is still a symlink; expected materialized path")
 print(f"PASS: {plugin} cache is materialized at {cache}")
 PY
