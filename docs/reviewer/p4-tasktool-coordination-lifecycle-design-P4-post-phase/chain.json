@@ -67,10 +67,67 @@
       "base_ref": null,
       "base_ref_source": null,
       "diff_included": false
+    },
+    {
+      "round": 2,
+      "reviewers": [
+        {
+          "role": "primary",
+          "sweep_group": null,
+          "parent_round": 2,
+          "request": "r2-2026-05-19T2342-primary-request.md",
+          "response": "r2-2026-05-19T2342-primary-response.md",
+          "verdict": "ready with small edits",
+          "verdict_valid": true,
+          "returncode": 0,
+          "status": "ok",
+          "provider": "custom",
+          "caller_provider": "unknown",
+          "sandbox": null
+        },
+        {
+          "role": "sweep",
+          "sweep_group": 1,
+          "parent_round": 2,
+          "request": "r2-2026-05-19T2342-sweep1-request.md",
+          "response": "r2-2026-05-19T2342-sweep1-response.md",
+          "verdict": "ready with small edits",
+          "verdict_valid": true,
+          "returncode": 0,
+          "status": "ok",
+          "provider": "claude",
+          "caller_provider": "codex",
+          "sandbox": {
+            "repo_root": "/home/simon/Dev/sigreer/skills/superstar/.worktrees/p4-s2-lifecycle",
+            "scratch_dir": "/tmp/superstar-reviewer-p4-tasktool-coordination-lifecycle-design-P4-post-phase-r2-sweep1-emyqi4cy",
+            "response_dir": "docs/reviewer/p4-tasktool-coordination-lifecycle-design-P4-post-phase/.reviewer-output/r2-sweep1",
+            "mode": "plan-read-only"
+          }
+        }
+      ],
+      "status": "ok",
+      "returncode": 0,
+      "merged_verdict": "ready with small edits",
+      "merged_findings": "r2-merged-findings.md",
+      "request": "r2-2026-05-19T2342-primary-request.md",
+      "response": "r2-2026-05-19T2342-primary-response.md",
+      "resolution": "r1-resolution.md",
+      "resolution_parse_status": "ok",
+      "resolution_waiver": false,
+      "head_sha_at_request": "ff19dfb5479465b8bd73281aff1353b1f2073aee",
+      "head_sha_after_round": "ff19dfb5479465b8bd73281aff1353b1f2073aee",
+      "worktree_dirty_at_request": false,
+      "verdict": "ready with small edits",
+      "verdict_valid": true,
+      "findings_count": 10,
+      "blocking_findings_count": 0,
+      "base_ref": "c4deda7b70104772306e05847161d6b73f379a2a",
+      "base_ref_source": "auto",
+      "diff_included": true
     }
   ],
   "sweep_checkpoints": {
     "first-round": "completed",
-    "final-ready": "pending"
+    "final-ready": "completed"
   }
 }

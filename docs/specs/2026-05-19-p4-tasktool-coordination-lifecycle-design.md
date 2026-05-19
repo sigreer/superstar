@@ -153,6 +153,7 @@ Close behavior:
 - Closing tasks and cross-cutting items from `ready` remains allowed for now, because they are often small bookkeeping rows.
 - Closing slices from `ready` is refused unless `--allow-ready-close` is supplied.
 - `--allow-ready-close` appends an audit note with timestamp and reason.
+- The ready-close override is exposed on both `tasktool close` and `tasktool set --status done`; both paths write the same audit-note shape.
 - Closing phases from `ready` remains allowed only through `archive-phase`; phase lifecycle is already gated by completed slices.
 
 This targets the recurring operational pain without making every tiny task transition noisy.
