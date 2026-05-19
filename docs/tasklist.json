@@ -11,6 +11,12 @@
       "archived_path": "docs/archived-tasks/P4-tasktool-coordination-and-lifecycle-auth.md",
       "id": "P4",
       "title": "Tasktool coordination and lifecycle authority"
+    },
+    {
+      "archived_date": "2026-05-19",
+      "archived_path": "docs/archived-tasks/P3-phase-planning-workflow.md",
+      "id": "P3",
+      "title": "Phase planning workflow"
     }
   ],
   "cross_cutting": [
@@ -153,96 +159,6 @@
       "started": null,
       "status": "done",
       "title": "External-reviewer work (historical)"
-    },
-    {
-      "closed": null,
-      "created": "2026-05-19",
-      "id": "P3",
-      "notes": "",
-      "phase_reviewer_chain": null,
-      "plan_path": null,
-      "planning_path": "docs/specs/2026-05-19-p3-phase-planning-design.md",
-      "slices": [
-        {
-          "blocked_on": null,
-          "closed": null,
-          "created": "2026-05-19",
-          "depends_on": [],
-          "id": "S1",
-          "notes": "",
-          "parallel_group": "foundation",
-          "plan_path": null,
-          "planning_status": "ratified",
-          "refs": [],
-          "reviewer_chain": null,
-          "started": null,
-          "status": "ready",
-          "tasks": [],
-          "title": "Schema and validation foundation"
-        },
-        {
-          "blocked_on": null,
-          "closed": null,
-          "created": "2026-05-19",
-          "depends_on": [
-            "P3.S1"
-          ],
-          "id": "S2",
-          "notes": "",
-          "parallel_group": "cli",
-          "plan_path": null,
-          "planning_status": "ratified",
-          "refs": [],
-          "reviewer_chain": null,
-          "started": null,
-          "status": "ready",
-          "tasks": [],
-          "title": "Scheduling CLI"
-        },
-        {
-          "blocked_on": null,
-          "closed": null,
-          "created": "2026-05-19",
-          "depends_on": [
-            "P3.S1"
-          ],
-          "id": "S3",
-          "notes": "",
-          "parallel_group": "workflow",
-          "plan_path": null,
-          "planning_status": "ratified",
-          "refs": [],
-          "reviewer_chain": null,
-          "started": null,
-          "status": "ready",
-          "tasks": [],
-          "title": "Workflow skill and integration docs"
-        },
-        {
-          "blocked_on": null,
-          "closed": null,
-          "created": "2026-05-19",
-          "depends_on": [
-            "P3.S3",
-            "P3.S2"
-          ],
-          "id": "S4",
-          "notes": "",
-          "parallel_group": "closeout",
-          "plan_path": null,
-          "planning_status": "ratified",
-          "refs": [],
-          "reviewer_chain": null,
-          "started": null,
-          "status": "ready",
-          "tasks": [],
-          "title": "Bootstrap migration and dogfood pass"
-        }
-      ],
-      "spec_path": "docs/specs/2026-05-19-p3-phase-planning-design.md",
-      "started": null,
-      "status": "ready",
-      "title": "Phase planning workflow"
     }
   ],
   "project": "superstar",
