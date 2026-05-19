@@ -24,6 +24,11 @@ def _build_parser() -> argparse.ArgumentParser:
                         help="Skip `git add` after mutating writes (default: best-effort stage).")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
+    p_config = sub.add_parser("config")
+    config_sub = p_config.add_subparsers(dest="config_cmd", required=True)
+    p_config_auth = config_sub.add_parser("init-authority")
+    p_config_auth.add_argument("--branch", default="main")
+
     p_init = sub.add_parser("init")
     p_init.add_argument("--project", default=None,
                         help="project name (defaults to repo_root directory name)")
@@ -170,7 +175,13 @@ def main(argv: list[str]) -> int:
     commands.STAGE_AFTER_WRITE = not args.no_stage
 
     try:
-        if args.cmd == "init":
+        if args.cmd == "config":
+            if args.config_cmd == "init-authority":
+                commands.cmd_config_init_authority(
+                    repo_root=root,
+                    branch=args.branch,
+                )
+        elif args.cmd == "init":
             commands.cmd_init(repo_root=root, project=args.project, north_star=args.north_star, force=args.force)
         elif args.cmd == "create":
             if args.create_kind == "phase":

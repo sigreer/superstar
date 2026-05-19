@@ -367,3 +367,16 @@ class SetStatusTests(unittest.TestCase):
             self.assertNotIn("ValidationError", r.stderr)
         finally:
             t.cleanup()
+
+
+def test_config_init_authority_writes_project_config(tmp_path):
+    r = run_cli(
+        "config", "init-authority",
+        "--branch", "main",
+        cwd=tmp_path,
+    )
+    assert r.returncode == 0, r.stdout + r.stderr
+    data = json.loads((tmp_path / ".tasktool" / "config.json").read_text())
+    assert data["tasklist"]["mutation_mode"] == "authoritative-checkout"
+    assert "authoritative_root" not in data["tasklist"]
+    assert data["tasklist"]["authoritative_branch"] == "main"

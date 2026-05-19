@@ -3,6 +3,7 @@ from __future__ import annotations
 import datetime as _dt
 import subprocess as _subprocess
 from pathlib import Path
+from tasktool.config import TasklistConfig, TasktoolConfig, save_config
 from tasktool.model import (
     Project, Phase, Slice, Task, CrossCutting, BlockedOn, Status, PlanningStatus,
 )
@@ -65,6 +66,18 @@ def _notify_status(*, qid: str, kind: str, status: Status, title: str) -> None:
         )
     except Exception:
         pass
+
+# ───── config ─────
+
+def cmd_config_init_authority(*, repo_root: Path, branch: str) -> None:
+    cfg = TasktoolConfig(
+        tasklist=TasklistConfig(
+            mutation_mode="authoritative-checkout",
+            authoritative_branch=branch,
+        )
+    )
+    save_config(repo_root, cfg)
+    _git_stage(repo_root, repo_root / ".tasktool" / "config.json")
 
 # ───── init ─────
 
