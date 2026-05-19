@@ -14,6 +14,7 @@
       "id": "X1",
       "notes": "Changed external-review default prompt transport from argv to stdin so the bundled Codex reviewer-agent receives prompts via codex exec '-' and avoids argv length failures.",
       "refs": [],
+      "started": null,
       "status": "done",
       "title": "Default external-review prompt transport to stdin"
     },
@@ -23,6 +24,7 @@
       "id": "X2",
       "notes": "Added repo-local tools/tasktool/tasktool launcher, updated tasklist/project-setup docs to prefer it, and taught the pre-commit hook to use the repo-local launcher before falling back to a global tasktool shim.",
       "refs": [],
+      "started": null,
       "status": "done",
       "title": "Add repo-local tasktool launcher"
     },
@@ -35,6 +37,7 @@
         "skills/external-review/scripts/external-reviewer.py",
         "skills/external-review/tests/test_heading_style_verdict.py"
       ],
+      "started": null,
       "status": "done",
       "title": "Spot fix: parse bold external-review verdict headings"
     },
@@ -46,6 +49,7 @@
       "refs": [
         "tools/tasktool/importer.py"
       ],
+      "started": null,
       "status": "done",
       "title": "Spot fix: broaden legacy tasklist importer compatibility"
     },
@@ -60,6 +64,7 @@
         "hooks/hooks-cursor.json",
         "tests/claude-code/test-agent-finished-hook.sh"
       ],
+      "started": null,
       "status": "done",
       "title": "Add finished-agent notification hook"
     },
@@ -74,6 +79,7 @@
         "tests/claude-code/test-hook-config.sh",
         "tests/claude-code/test-agent-finished-hook.sh"
       ],
+      "started": null,
       "status": "done",
       "title": "Fix Codex finished-agent hook compatibility"
     },
@@ -89,6 +95,7 @@
         "tests/codex-plugin-sync/test-version-drift.sh",
         "tests/codex-plugin-sync/test-local-marketplace.sh"
       ],
+      "started": null,
       "status": "done",
       "title": "Fix Superstar Codex plugin payload version drift"
     },
@@ -106,6 +113,7 @@
         "tools/tasktool/tests/conftest.py",
         "tests/claude-code/test-agent-finished-hook.sh"
       ],
+      "started": null,
       "status": "done",
       "title": "Move semantic notifications from agent hooks to tasktool status changes"
     },
@@ -118,6 +126,7 @@
         "tools/tasktool/notify.py",
         "tools/tasktool/tests/test_notify.py"
       ],
+      "started": null,
       "status": "done",
       "title": "Coalesce bursty tasktool audio notifications"
     }
@@ -135,6 +144,7 @@
       "planning_path": null,
       "slices": [],
       "spec_path": null,
+      "started": null,
       "status": "done",
       "title": "External-reviewer work (historical)"
     },
@@ -159,6 +169,7 @@
           "planning_status": "ratified",
           "refs": [],
           "reviewer_chain": null,
+          "started": null,
           "status": "ready",
           "tasks": [],
           "title": "Schema and validation foundation"
@@ -177,6 +188,7 @@
           "planning_status": "ratified",
           "refs": [],
           "reviewer_chain": null,
+          "started": null,
           "status": "ready",
           "tasks": [],
           "title": "Scheduling CLI"
@@ -195,6 +207,7 @@
           "planning_status": "ratified",
           "refs": [],
           "reviewer_chain": null,
+          "started": null,
           "status": "ready",
           "tasks": [],
           "title": "Workflow skill and integration docs"
@@ -214,12 +227,14 @@
           "planning_status": "ratified",
           "refs": [],
           "reviewer_chain": null,
+          "started": null,
           "status": "ready",
           "tasks": [],
           "title": "Bootstrap migration and dogfood pass"
         }
       ],
       "spec_path": "docs/specs/2026-05-19-p3-phase-planning-design.md",
+      "started": null,
       "status": "ready",
       "title": "Phase planning workflow"
     },
@@ -244,6 +259,7 @@
           "planning_status": "ratified",
           "refs": [],
           "reviewer_chain": "docs/reviewer/p4-tasktool-coordination-lifecycle-P4-S1-post-slice",
+          "started": null,
           "status": "done",
           "tasks": [],
           "title": "Authoritative tasklist mutations"
@@ -262,12 +278,14 @@
           "planning_status": "ratified",
           "refs": [],
           "reviewer_chain": null,
-          "status": "ready",
+          "started": "2026-05-19",
+          "status": "in_progress",
           "tasks": [],
           "title": "Lifecycle status enforcement"
         }
       ],
       "spec_path": null,
+      "started": null,
       "status": "ready",
       "title": "Tasktool coordination and lifecycle authority"
     }

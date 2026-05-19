@@ -243,6 +243,8 @@ def test_worker_set_done_records_reviewer_chain_in_authority(tmp_path):
     chain.mkdir(parents=True)
     (chain / "chain.json").write_text('{"rounds":[{"round":1,"merged_verdict":"ready","status":"ok"}]}')
 
+    r = _tasktool(worker, "start", "P1.S1")
+    assert r.returncode == 0, r.stdout + r.stderr
     r = _tasktool(worker, "set", "P1.S1", "--status", "done", "--reviewer-chain", str(chain))
     assert r.returncode == 0, r.stdout + r.stderr
     authority = json.loads((root / "docs/tasklist.json").read_text())

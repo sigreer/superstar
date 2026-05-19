@@ -163,12 +163,14 @@ class SetStatusTests(unittest.TestCase):
 
     def test_set_slice_done_passes_with_chain(self):
         _write_passing_chain(self.t.root, "p1-s1-post-slice", "ready")
+        commands.cmd_start(repo_root=self.t.root, id="P1.S1")
         commands.cmd_set(repo_root=self.t.root, id="P1.S1", status="done")
         p = load_project(self.t.root / "docs/tasklist.json")
         self.assertEqual(p.phases[0].slices[0].status, Status.DONE)
         self.assertIsNotNone(p.phases[0].slices[0].reviewer_chain)
 
     def test_set_slice_done_skip_gate(self):
+        commands.cmd_start(repo_root=self.t.root, id="P1.S1")
         commands.cmd_set(
             repo_root=self.t.root, id="P1.S1", status="done", skip_review_gate=True,
         )

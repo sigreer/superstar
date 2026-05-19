@@ -360,6 +360,11 @@ def cmd_set(
             raise CommandError(f"only slices can be blocked; {qid} is a {kind}")
         if new_status == Status.DONE and kind in ("slice", "phase"):
             _apply_review_gate(repo_root, item, qid, kind, reviewer_chain, skip_review_gate)
+        if new_status == Status.DONE and kind == "slice" and getattr(item, "started", None) is None:
+            raise CommandError(
+                f"{qid} must be started before close; run `tasktool start {qid}` first, "
+                f"or use `tasktool close {qid} --allow-ready-close --reason ...` if applicable"
+            )
         if new_status == Status.IN_PROGRESS:
             _start_item(qid, item)
         else:
