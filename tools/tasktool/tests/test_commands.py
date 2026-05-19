@@ -1,8 +1,11 @@
 # tools/tasktool/tests/test_commands.py
 from __future__ import annotations
+import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 from tasktool import commands
 from tasktool.serialize import load_project
 from tasktool.model import Status
@@ -97,6 +100,20 @@ class CreateTests(unittest.TestCase):
         new_id = commands.cmd_create_cross(repo_root=self.t.root, title="docs cleanup")
         self.assertEqual(new_id, "X1")
 
+    def test_create_emits_ready_notification(self):
+        log = self.t.root / "notify.jsonl"
+        with patch.dict(
+            os.environ,
+            {"SUPERSTAR_NOTIFY_DISABLE": "0", "SUPERSTAR_NOTIFY_DRY_RUN": "1", "SUPERSTAR_NOTIFY_LOG": str(log)},
+        ):
+            new_id = commands.cmd_create_phase(repo_root=self.t.root, title="Tasktool")
+        events = [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines()]
+        self.assertEqual(new_id, "P1")
+        self.assertEqual(events[-1]["type"], "tasktool-status")
+        self.assertEqual(events[-1]["id"], "P1")
+        self.assertEqual(events[-1]["status"], "ready")
+        self.assertEqual(events[-1]["message"], "P1 ready: Tasktool")
+
 import json
 
 def _write_passing_chain(root: Path, name: str, verdict: str = "ready") -> Path:
@@ -122,6 +139,18 @@ class SetStatusTests(unittest.TestCase):
         commands.cmd_set(repo_root=self.t.root, id="P1.S1.T1", status="in_progress")
         p = load_project(self.t.root / "docs/tasklist.json")
         self.assertEqual(p.phases[0].slices[0].tasks[0].status, Status.IN_PROGRESS)
+
+    def test_set_task_in_progress_emits_notification(self):
+        log = self.t.root / "notify.jsonl"
+        with patch.dict(
+            os.environ,
+            {"SUPERSTAR_NOTIFY_DISABLE": "0", "SUPERSTAR_NOTIFY_DRY_RUN": "1", "SUPERSTAR_NOTIFY_LOG": str(log)},
+        ):
+            commands.cmd_set(repo_root=self.t.root, id="P1.S1.T1", status="in_progress")
+        events = [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines()]
+        self.assertEqual(events[-1]["id"], "P1.S1.T1")
+        self.assertEqual(events[-1]["status"], "in_progress")
+        self.assertEqual(events[-1]["message"], "P1.S1.T1 in progress: T1")
 
     def test_set_task_done_auto_stamps_closed(self):
         commands.cmd_set(repo_root=self.t.root, id="P1.S1.T1", status="done")
@@ -158,15 +187,23 @@ class CloseTests(unittest.TestCase):
 
     def test_close_slice_with_chain_and_refs(self):
         _write_passing_chain(self.t.root, "p1-s1-post-slice", "ready")
-        commands.cmd_close(
-            repo_root=self.t.root, id="P1.S1",
-            refs=["docs/a.md", "docs/b.md"], note="post-impl",
-        )
+        log = self.t.root / "notify.jsonl"
+        with patch.dict(
+            os.environ,
+            {"SUPERSTAR_NOTIFY_DISABLE": "0", "SUPERSTAR_NOTIFY_DRY_RUN": "1", "SUPERSTAR_NOTIFY_LOG": str(log)},
+        ):
+            commands.cmd_close(
+                repo_root=self.t.root, id="P1.S1",
+                refs=["docs/a.md", "docs/b.md"], note="post-impl",
+            )
         p = load_project(self.t.root / "docs/tasklist.json")
         s = p.phases[0].slices[0]
         self.assertEqual(s.status, Status.DONE)
         self.assertEqual(s.refs, ["docs/a.md", "docs/b.md"])
         self.assertIn("post-impl", s.notes)
+        events = [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines()]
+        self.assertEqual(events[-1]["id"], "P1.S1")
+        self.assertEqual(events[-1]["status"], "done")
 
 class BlockTests(unittest.TestCase):
     def setUp(self):
@@ -179,12 +216,20 @@ class BlockTests(unittest.TestCase):
         self.t.cleanup()
 
     def test_block_slice_by_id(self):
-        commands.cmd_block(repo_root=self.t.root, slice_id="P1.S1", on="P1.S2")
+        log = self.t.root / "notify.jsonl"
+        with patch.dict(
+            os.environ,
+            {"SUPERSTAR_NOTIFY_DISABLE": "0", "SUPERSTAR_NOTIFY_DRY_RUN": "1", "SUPERSTAR_NOTIFY_LOG": str(log)},
+        ):
+            commands.cmd_block(repo_root=self.t.root, slice_id="P1.S1", on="P1.S2")
         p = load_project(self.t.root / "docs/tasklist.json")
         s = p.phases[0].slices[0]
         self.assertEqual(s.status, Status.BLOCKED)
         self.assertEqual(s.blocked_on.kind, "id")
         self.assertEqual(s.blocked_on.value, "P1.S2")
+        events = [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines()]
+        self.assertEqual(events[-1]["id"], "P1.S1")
+        self.assertEqual(events[-1]["status"], "blocked")
 
     def test_block_external(self):
         commands.cmd_block(repo_root=self.t.root, slice_id="P1.S1", on="external:vendor")
@@ -200,11 +245,30 @@ class BlockTests(unittest.TestCase):
 
     def test_unblock(self):
         commands.cmd_block(repo_root=self.t.root, slice_id="P1.S1", on="P1.S2")
-        commands.cmd_unblock(repo_root=self.t.root, slice_id="P1.S1")
+        log = self.t.root / "notify.jsonl"
+        with patch.dict(
+            os.environ,
+            {"SUPERSTAR_NOTIFY_DISABLE": "0", "SUPERSTAR_NOTIFY_DRY_RUN": "1", "SUPERSTAR_NOTIFY_LOG": str(log)},
+        ):
+            commands.cmd_unblock(repo_root=self.t.root, slice_id="P1.S1")
         p = load_project(self.t.root / "docs/tasklist.json")
         s = p.phases[0].slices[0]
         self.assertEqual(s.status, Status.READY)
         self.assertIsNone(s.blocked_on)
+        events = [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines()]
+        self.assertEqual(events[-1]["status"], "ready")
+
+    def test_unblock_resume_emits_in_progress_notification(self):
+        commands.cmd_block(repo_root=self.t.root, slice_id="P1.S1", on="P1.S2")
+        log = self.t.root / "notify.jsonl"
+        with patch.dict(
+            os.environ,
+            {"SUPERSTAR_NOTIFY_DISABLE": "0", "SUPERSTAR_NOTIFY_DRY_RUN": "1", "SUPERSTAR_NOTIFY_LOG": str(log)},
+        ):
+            commands.cmd_unblock(repo_root=self.t.root, slice_id="P1.S1", resume=True)
+        events = [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines()]
+        self.assertEqual(events[-1]["id"], "P1.S1")
+        self.assertEqual(events[-1]["status"], "in_progress")
 
 class SchedulingTests(unittest.TestCase):
     def setUp(self):

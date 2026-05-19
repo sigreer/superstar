@@ -53,16 +53,73 @@
       "closed": "2026-05-19",
       "created": "2026-05-19",
       "id": "X5",
-      "notes": "User-requested hook update completed outside the normal workflow for speed. Adds Stop/SubagentStop finished-agent notifications, milestone message derivation from final agent text/transcript payloads, Hypr TTS config reuse with OPENAI_API_KEY fallback, and non-TTS ding fallbacks.",
+      "notes": "User-requested hook update completed outside the normal workflow for speed. Adds Stop/SubagentStop finished-agent notifications, milestone message derivation from final agent text/transcript payloads, Hypr TTS config reuse with OPENAI_API_KEY fallback, and non-TTS ding fallbacks.\nSuperseded by X8: final-text milestone parsing was removed; agent hooks now emit generic dings and semantic spoken notifications come from tasktool status changes.",
       "refs": [
         "hooks/agent-finished",
-        "hooks/agent_finished_message.py",
         "hooks/hooks.json",
         "hooks/hooks-cursor.json",
         "tests/claude-code/test-agent-finished-hook.sh"
       ],
       "status": "done",
       "title": "Add finished-agent notification hook"
+    },
+    {
+      "closed": "2026-05-19",
+      "created": "2026-05-19",
+      "id": "X6",
+      "notes": "Codex startup skips Stop/SubagentStop notification hooks when hooks.json uses async=true; fix should preserve finished-agent notification behavior while avoiding unsupported async hook registration in Codex.\nSet finished-agent Stop/SubagentStop hook registrations to async=false for Codex compatibility. The hook now backgrounds real notification playback internally so synchronous hook registration returns quickly while dry-run tests remain foreground and deterministic.",
+      "refs": [
+        "hooks/hooks.json",
+        "hooks/agent-finished",
+        "tests/claude-code/test-hook-config.sh",
+        "tests/claude-code/test-agent-finished-hook.sh"
+      ],
+      "status": "done",
+      "title": "Fix Codex finished-agent hook compatibility"
+    },
+    {
+      "closed": "2026-05-19",
+      "created": "2026-05-19",
+      "id": "X7",
+      "notes": "Codex reported superstar/6.0.0 because the installable local marketplace payload under plugins/superstar still declared version 6.0.0 and the version bump audit did not track that embedded manifest.\n\nBumped the embedded Codex plugin payload manifest to 6.0.1 and added it to the version bump check. Reinstalled superstar@superstar-dev, then rebuilt the 6.0.1 runtime cache as a materialized copy of this checkout with .agents excluded so Codex sees the full skills/hooks tree while codex plugin list still reports installed/enabled. Final probe shows cache version 6.0.1, skills/hooks present, and no async-hook warning.",
+      "refs": [
+        ".version-bump.json",
+        "plugins/superstar/.codex-plugin/plugin.json",
+        ".agents/plugins/marketplace.json",
+        "tests/codex-plugin-sync/test-version-drift.sh",
+        "tests/codex-plugin-sync/test-local-marketplace.sh"
+      ],
+      "status": "done",
+      "title": "Fix Superstar Codex plugin payload version drift"
+    },
+    {
+      "closed": "2026-05-19",
+      "created": "2026-05-19",
+      "id": "X8",
+      "notes": "Move semantic spoken notifications to tasktool status transitions for ready/in_progress/blocked/done. Keep agent Stop/SubagentStop hooks as generic completion dings only, with different sound styles for Claude and Codex.\nAgent Stop/SubagentStop hooks now emit generic harness-specific dings only. Semantic spoken notifications moved to tasktool status events for ready, in_progress, blocked, and done, including create, set, close, block, unblock, and archive-phase paths.",
+      "refs": [
+        "hooks/agent-finished",
+        "tools/tasktool/notify.py",
+        "tools/tasktool/commands.py",
+        "tools/tasktool/tests/test_notify.py",
+        "tools/tasktool/tests/test_commands.py",
+        "tools/tasktool/tests/conftest.py",
+        "tests/claude-code/test-agent-finished-hook.sh"
+      ],
+      "status": "done",
+      "title": "Move semantic notifications from agent hooks to tasktool status changes"
+    },
+    {
+      "closed": "2026-05-19",
+      "created": "2026-05-19",
+      "id": "X9",
+      "notes": "Rapid tasktool status changes currently spawn independent notifier processes, causing overlapping TTS/audio. Add a single-audio queue with at most three queued tasktool events; overflow should collapse to a single 'multiple other events' summary and drop further items.\nAdded a file-backed notification queue shared by agent dings and tasktool TTS. Only one worker drains audio at a time. Queue capacity is three pending events; overflow keeps the first two pending items and replaces the rest with a single 'Multiple other events' summary, dropping further burst items while the summary remains queued.",
+      "refs": [
+        "tools/tasktool/notify.py",
+        "tools/tasktool/tests/test_notify.py"
+      ],
+      "status": "done",
+      "title": "Coalesce bursty tasktool audio notifications"
     }
   ],
   "last_reviewed": "2026-05-18",

@@ -13,6 +13,7 @@ from tasktool.allocate import (
 )
 from tasktool.ids import split_qualified, kind_of, is_slice_id, parse_id
 from tasktool.reviewer_gate import check_gate, GateError, GatePass
+from tasktool.notify import notify_tasktool_status
 
 class CommandError(RuntimeError):
     pass
@@ -54,6 +55,17 @@ def _save(repo_root: Path, p: Project) -> None:
     save_project(p, path)
     _git_stage(repo_root, path)
 
+def _notify_status(*, qid: str, kind: str, status: Status, title: str) -> None:
+    try:
+        notify_tasktool_status(
+            work_id=qid,
+            kind=kind,
+            status=status.value,
+            title=title,
+        )
+    except Exception:
+        pass
+
 # ───── init ─────
 
 def cmd_init(*, repo_root: Path, project: str | None = None, north_star: str = "", force: bool = False) -> None:
@@ -75,11 +87,13 @@ def cmd_create_phase(
 ) -> str:
     p = _load(repo_root)
     new_id = next_phase_id(p, repo_root)
-    p.phases.append(Phase(
+    phase = Phase(
         id=new_id, title=title, created=_today(),
         spec_path=spec, plan_path=plan, planning_path=planning,
-    ))
+    )
+    p.phases.append(phase)
     _save(repo_root, p)
+    _notify_status(qid=new_id, kind="phase", status=phase.status, title=phase.title)
     return new_id
 
 def cmd_create_slice(
@@ -96,18 +110,22 @@ def cmd_create_slice(
     else:
         new_id = next_followup_letter(p, phase_id, follow_up, repo_root)
     deps = [_resolve_dependency_id(p, dep) for dep in (depends_on or [])]
-    phase.slices.append(Slice(
+    slc = Slice(
         id=new_id, title=title, created=_today(), plan_path=plan,
         depends_on=deps, parallel_group=parallel_group,
-    ))
+    )
+    phase.slices.append(slc)
     _save(repo_root, p)
+    _notify_status(qid=f"{phase_id}.{new_id}", kind="slice", status=slc.status, title=slc.title)
     return new_id
 
 def cmd_create_cross(*, repo_root: Path, title: str) -> str:
     p = _load(repo_root)
     new_id = next_cross_id(p, repo_root)
-    p.cross_cutting.append(CrossCutting(id=new_id, title=title, created=_today()))
+    item = CrossCutting(id=new_id, title=title, created=_today())
+    p.cross_cutting.append(item)
     _save(repo_root, p)
+    _notify_status(qid=new_id, kind="cross", status=item.status, title=item.title)
     return new_id
 
 # ───── set / close / block / unblock ─────
@@ -155,8 +173,10 @@ def cmd_create_task(*, repo_root: Path, slice_id: str, title: str) -> str:
     phase = next(ph for ph in p.phases if ph.id == phase_part)
     slc = next(s for s in phase.slices if s.id == slice_part)
     new_id = next_task_id(p, phase_part, slice_part)
-    slc.tasks.append(Task(id=new_id, title=title, created=_today()))
+    task = Task(id=new_id, title=title, created=_today())
+    slc.tasks.append(task)
     _save(repo_root, p)
+    _notify_status(qid=f"{phase_part}.{slice_part}.{new_id}", kind="task", status=task.status, title=task.title)
     return new_id
 
 def _find_item(p: Project, id: str):
@@ -230,6 +250,7 @@ def cmd_set(
     if new_status == Status.DONE and item.closed is None:
         item.closed = _today()
     _save(repo_root, p)
+    _notify_status(qid=qid, kind=kind, status=item.status, title=item.title)
 
 def cmd_close(
     *, repo_root: Path, id: str,
@@ -255,6 +276,7 @@ def cmd_close(
     if note:
         item.notes = (item.notes + "\n" + note).strip() if item.notes else note
     _save(repo_root, p)
+    _notify_status(qid=qid, kind=kind, status=item.status, title=item.title)
 
 def cmd_block(*, repo_root: Path, slice_id: str, on: str) -> None:
     p = _load(repo_root)
@@ -268,6 +290,7 @@ def cmd_block(*, repo_root: Path, slice_id: str, on: str) -> None:
         item.blocked_on = BlockedOn(kind="id", value=on)
     item.status = Status.BLOCKED
     _save(repo_root, p)
+    _notify_status(qid=_qid, kind="slice", status=item.status, title=item.title)
 
 def cmd_unblock(*, repo_root: Path, slice_id: str, resume: bool = False) -> None:
     p = _load(repo_root)
@@ -277,6 +300,7 @@ def cmd_unblock(*, repo_root: Path, slice_id: str, resume: bool = False) -> None
     item.blocked_on = None
     item.status = Status.IN_PROGRESS if resume else Status.READY
     _save(repo_root, p)
+    _notify_status(qid=_qid, kind="slice", status=item.status, title=item.title)
 
 def cmd_deps(
     *, repo_root: Path, slice_id: str,
@@ -749,6 +773,7 @@ def cmd_archive_phase(
     archive_path.write_text(summary_text, encoding="utf-8")
     _save(repo_root, p)
     _git_stage(repo_root, archive_path)
+    _notify_status(qid=phase_id, kind="phase", status=Status.DONE, title=phase.title)
 
 def cmd_brief(*, repo_root: Path, id: str) -> str:
     from tasktool.brief import brief as _brief
