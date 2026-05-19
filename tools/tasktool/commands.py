@@ -338,6 +338,13 @@ def _start_item(qid: str, item, *, resume: bool = False) -> None:
     if getattr(item, "started", None) is None:
         item.started = _today()
 
+def _apply_ready_close_override(qid: str, item, *, reason: str | None) -> None:
+    if not reason or not reason.strip():
+        raise CommandError(f"{qid} ready-close override requires --reason")
+    ts = _dt.datetime.now().isoformat(timespec="seconds")
+    audit = f"[{ts}] ready-close override for {qid}: {reason.strip()}"
+    item.notes = (item.notes + "\n" + audit).strip() if item.notes else audit
+
 def cmd_start(*, repo_root: Path, id: str, resume: bool = False) -> None:
     with _write_context(repo_root) as write_root:
         p = _load(write_root)
@@ -350,6 +357,7 @@ def cmd_start(*, repo_root: Path, id: str, resume: bool = False) -> None:
 def cmd_set(
     *, repo_root: Path, id: str, status: str,
     reviewer_chain: Path | None = None, skip_review_gate: bool = False,
+    allow_ready_close: bool = False, reason: str | None = None,
 ) -> None:
     with _write_context(repo_root) as write_root:
         p = _load(write_root)
@@ -361,10 +369,12 @@ def cmd_set(
         if new_status == Status.DONE and kind in ("slice", "phase"):
             _apply_review_gate(repo_root, item, qid, kind, reviewer_chain, skip_review_gate)
         if new_status == Status.DONE and kind == "slice" and getattr(item, "started", None) is None:
-            raise CommandError(
-                f"{qid} must be started before close; run `tasktool start {qid}` first, "
-                f"or use `tasktool close {qid} --allow-ready-close --reason ...` if applicable"
-            )
+            if not allow_ready_close:
+                raise CommandError(
+                    f"{qid} must be started before close; run `tasktool start {qid}` first, "
+                    f"or use `tasktool set {qid} --status done --allow-ready-close --reason ...` if applicable"
+                )
+            _apply_ready_close_override(qid, item, reason=reason)
         if new_status == Status.IN_PROGRESS:
             _start_item(qid, item)
         else:
@@ -394,11 +404,7 @@ def cmd_close(
         if kind == "slice" and getattr(item, "started", None) is None:
             if not allow_ready_close:
                 raise CommandError(f"{qid} must be started before close; run `tasktool start {qid}` first")
-            if not reason or not reason.strip():
-                raise CommandError(f"{qid} ready-close override requires --reason")
-            ts = _dt.datetime.now().isoformat(timespec="seconds")
-            audit = f"[{ts}] ready-close override for {qid}: {reason.strip()}"
-            item.notes = (item.notes + "\n" + audit).strip() if item.notes else audit
+            _apply_ready_close_override(qid, item, reason=reason)
         item.status = Status.DONE
         item.closed = closed_date or _today()
         if refs:

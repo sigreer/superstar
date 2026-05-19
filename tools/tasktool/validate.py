@@ -51,8 +51,12 @@ def _check_dates(
     _check_date(created, scope, "created")
     _check_date(started, scope, "started")
     _check_date(closed, scope, "closed")
+    if started is not None and started < created:
+        raise ValidationError(f"{scope}: started {started} precedes created {created}")
     if closed is not None and closed < created:
         raise ValidationError(f"{scope}: closed {closed} precedes created {created}")
+    if started is not None and closed is not None and closed < started:
+        raise ValidationError(f"{scope}: closed {closed} precedes started {started}")
 
 def _check_task(t: Task, scope: str) -> None:
     _check_id(t.id, _TASK_RE, scope)

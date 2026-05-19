@@ -129,6 +129,25 @@ class DateOrderTests(unittest.TestCase):
         with self.assertRaises(ValidationError):
             validate_project(p)
 
+    def test_started_before_created_rejected(self):
+        p = _project_with_slice(started="2026-05-16")
+        p.phases[0].slices[0].created = "2026-05-17"
+        with self.assertRaises(ValidationError) as ctx:
+            validate_project(p)
+        self.assertIn("started", str(ctx.exception))
+        self.assertIn("precedes created", str(ctx.exception))
+
+    def test_closed_before_started_rejected(self):
+        p = _project_with_slice(
+            started="2026-05-18",
+            status=Status.DONE,
+            closed="2026-05-17",
+        )
+        with self.assertRaises(ValidationError) as ctx:
+            validate_project(p)
+        self.assertIn("closed", str(ctx.exception))
+        self.assertIn("precedes started", str(ctx.exception))
+
 class DateFormatTests(unittest.TestCase):
     def test_malformed_created_rejected(self):
         p = _project_with_slice()

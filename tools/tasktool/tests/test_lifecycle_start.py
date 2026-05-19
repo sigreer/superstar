@@ -144,10 +144,54 @@ def test_set_done_ready_slice_refuses_without_start(tmp_path):
     assert r.returncode == 1
     assert "must be started before close" in r.stderr
     assert "tasktool start P1.S1" in r.stderr
-    assert "tasktool close P1.S1 --allow-ready-close --reason" in r.stderr
+    assert "tasktool set P1.S1 --status done --allow-ready-close --reason" in r.stderr
     sl = tasklist(tmp_path)["phases"][0]["slices"][0]
     assert sl["status"] == "ready"
     assert sl["closed"] is None
+
+
+def test_set_done_ready_slice_override_requires_reason(tmp_path):
+    seed(tmp_path)
+    chain = ready_chain(tmp_path)
+    r = run(
+        tmp_path,
+        "set",
+        "P1.S1",
+        "--status",
+        "done",
+        "--reviewer-chain",
+        str(chain),
+        "--allow-ready-close",
+    )
+    assert r.returncode == 1
+    assert "requires --reason" in r.stderr
+    sl = tasklist(tmp_path)["phases"][0]["slices"][0]
+    assert sl["status"] == "ready"
+    assert sl["closed"] is None
+
+
+def test_set_done_ready_slice_override_records_note(tmp_path):
+    seed(tmp_path)
+    chain = ready_chain(tmp_path)
+    r = run(
+        tmp_path,
+        "set",
+        "P1.S1",
+        "--status",
+        "done",
+        "--reviewer-chain",
+        str(chain),
+        "--allow-ready-close",
+        "--reason",
+        "legacy scripted close before start existed",
+    )
+    assert r.returncode == 0, r.stdout + r.stderr
+    sl = tasklist(tmp_path)["phases"][0]["slices"][0]
+    assert sl["status"] == "done"
+    assert sl["started"] is None
+    assert sl["closed"]
+    assert "ready-close override for P1.S1: legacy scripted close before start existed" in sl["notes"]
+    assert sl["reviewer_chain"] == "docs/reviewer/p1-s1-post-slice"
 
 
 def test_set_done_started_slice_records_reviewer_chain(tmp_path):

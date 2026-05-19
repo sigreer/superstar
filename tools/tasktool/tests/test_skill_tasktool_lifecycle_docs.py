@@ -19,6 +19,8 @@ def test_tasklist_discipline_documents_authority_and_start_workflow() -> None:
     assert "tasktool start <slice-id>" in text
     assert "set <id> --status in_progress" in text
     assert "compatibility" in text
+    assert "tasktool unblock <slice-id> --resume" in text
+    assert "stamps `started` when needed" in text
 
 
 def test_using_git_worktrees_allows_routed_tasktool_writes_from_worktrees() -> None:

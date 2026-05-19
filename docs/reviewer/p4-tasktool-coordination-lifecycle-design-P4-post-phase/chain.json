@@ -1,0 +1,76 @@
+{
+  "schema_version": 1,
+  "chain": "p4-tasktool-coordination-lifecycle-design-P4-post-phase",
+  "kind": "post-phase",
+  "target": "docs/specs/2026-05-19-p4-tasktool-coordination-lifecycle-design.md",
+  "work_id": "P4",
+  "legacy_migrated": false,
+  "rounds": [
+    {
+      "round": 1,
+      "reviewers": [
+        {
+          "role": "primary",
+          "sweep_group": null,
+          "parent_round": 1,
+          "request": "r1-2026-05-19T2328-primary-request.md",
+          "response": "r1-2026-05-19T2328-primary-response.md",
+          "verdict": "ready with small edits",
+          "verdict_valid": true,
+          "returncode": 0,
+          "status": "ok",
+          "provider": "claude",
+          "caller_provider": "codex",
+          "sandbox": {
+            "repo_root": "/home/simon/Dev/sigreer/skills/superstar/.worktrees/p4-s2-lifecycle",
+            "scratch_dir": "/tmp/superstar-reviewer-p4-tasktool-coordination-lifecycle-design-P4-post-phase-r1-primary-8xt9zbk_",
+            "response_dir": "docs/reviewer/p4-tasktool-coordination-lifecycle-design-P4-post-phase/.reviewer-output/r1-primary",
+            "mode": "plan-read-only"
+          }
+        },
+        {
+          "role": "sweep",
+          "sweep_group": 1,
+          "parent_round": 1,
+          "request": "r1-2026-05-19T2328-sweep1-request.md",
+          "response": "r1-2026-05-19T2328-sweep1-response.md",
+          "verdict": "revise",
+          "verdict_valid": true,
+          "returncode": 0,
+          "status": "ok",
+          "provider": "claude",
+          "caller_provider": "codex",
+          "sandbox": {
+            "repo_root": "/home/simon/Dev/sigreer/skills/superstar/.worktrees/p4-s2-lifecycle",
+            "scratch_dir": "/tmp/superstar-reviewer-p4-tasktool-coordination-lifecycle-design-P4-post-phase-r1-sweep1-11bs924r",
+            "response_dir": "docs/reviewer/p4-tasktool-coordination-lifecycle-design-P4-post-phase/.reviewer-output/r1-sweep1",
+            "mode": "plan-read-only"
+          }
+        }
+      ],
+      "status": "ok",
+      "returncode": 0,
+      "merged_verdict": "revise",
+      "merged_findings": "r1-merged-findings.md",
+      "request": "r1-2026-05-19T2328-primary-request.md",
+      "response": "r1-2026-05-19T2328-primary-response.md",
+      "resolution": null,
+      "resolution_parse_status": null,
+      "resolution_waiver": false,
+      "head_sha_at_request": "c4deda7b70104772306e05847161d6b73f379a2a",
+      "head_sha_after_round": "c4deda7b70104772306e05847161d6b73f379a2a",
+      "worktree_dirty_at_request": true,
+      "verdict": "ready with small edits",
+      "verdict_valid": true,
+      "findings_count": 9,
+      "blocking_findings_count": 0,
+      "base_ref": null,
+      "base_ref_source": null,
+      "diff_included": false
+    }
+  ],
+  "sweep_checkpoints": {
+    "first-round": "completed",
+    "final-ready": "pending"
+  }
+}

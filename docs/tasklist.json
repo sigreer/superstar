@@ -253,7 +253,7 @@
           "created": "2026-05-19",
           "depends_on": [],
           "id": "S1",
-          "notes": "",
+          "notes": "P4.S1 is grandfathered under pre-P4.S2 lifecycle rules: it was closed before the started-field close guard and ready-close override audit note existed, so started remains null intentionally.",
           "parallel_group": "coordination",
           "plan_path": null,
           "planning_status": "ratified",
@@ -285,8 +285,8 @@
         }
       ],
       "spec_path": null,
-      "started": null,
-      "status": "ready",
+      "started": "2026-05-19",
+      "status": "in_progress",
       "title": "Tasktool coordination and lifecycle authority"
     }
   ],

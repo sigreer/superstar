@@ -178,6 +178,37 @@ class SetStatusTests(unittest.TestCase):
         self.assertEqual(p.phases[0].slices[0].status, Status.DONE)
         self.assertIn("review gate skipped", p.phases[0].slices[0].notes)
 
+    def test_set_slice_done_ready_override_requires_reason(self):
+        _write_passing_chain(self.t.root, "p1-s1-post-slice", "ready")
+        with self.assertRaises(commands.CommandError) as ctx:
+            commands.cmd_set(
+                repo_root=self.t.root,
+                id="P1.S1",
+                status="done",
+                allow_ready_close=True,
+            )
+        self.assertIn("requires --reason", str(ctx.exception))
+        p = load_project(self.t.root / "docs/tasklist.json")
+        self.assertEqual(p.phases[0].slices[0].status, Status.READY)
+
+    def test_set_slice_done_ready_override_records_audit_note(self):
+        _write_passing_chain(self.t.root, "p1-s1-post-slice", "ready")
+        commands.cmd_set(
+            repo_root=self.t.root,
+            id="P1.S1",
+            status="done",
+            allow_ready_close=True,
+            reason="legacy scripted close before lifecycle start existed",
+        )
+        p = load_project(self.t.root / "docs/tasklist.json")
+        slc = p.phases[0].slices[0]
+        self.assertEqual(slc.status, Status.DONE)
+        self.assertIsNone(slc.started)
+        self.assertIn(
+            "ready-close override for P1.S1: legacy scripted close before lifecycle start existed",
+            slc.notes,
+        )
+
 class CloseTests(unittest.TestCase):
     def setUp(self):
         self.t = _Tmp()
