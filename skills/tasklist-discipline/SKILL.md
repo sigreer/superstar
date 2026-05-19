@@ -21,6 +21,8 @@ Prefer the repo-local launcher `tools/tasktool/tasktool` when it exists; it work
 
 Onboarding has a hard setup boundary: after `[[project-setup]]` creates or imports `docs/tasklist.json`, installs hooks, vendors `scripts/external-reviewer.py`, moves legacy `docs/superpowers/` files, or edits `CLAUDE.md` / `AGENTS.md`, that setup/migration must be committed, stashed, or explicitly paused before implementation work begins.
 
+**Implementation isolation boundary:** If tasklist work is tied to starting, continuing, reviewing, or closing an implementation slice, invoke `[[using-git-worktrees]]` before tasktool status/ref/note/close mutations for an active implementation slice. `tasktool set`, `tasktool ref`, `tasktool note`, `tasktool close`, and reviewer-chain registration are not harmless bookkeeping when run from a shared checkout: they dirty the slice evidence set. A normal `main`/`master` checkout is planning/setup/read-only by default unless the user explicitly opts out of isolation in the current turn.
+
 ## Conceptual model
 
 | Scope | Short form | Fully-qualified |
@@ -108,6 +110,7 @@ Creating a new slice or X-item is allocation/tracking only. It does not authoriz
 | "I'll just renumber IDs to match execution order." | No. IDs are stable. Execution order lives in the array order; IDs preserve creation order. |
 | "Setup files are just scaffolding; I'll leave them dirty while implementing." | No. Setup/migration artifacts make post-slice review scope ambiguous. Resolve the setup boundary first. |
 | "I created a follow-up slice/X-item, so I can knock it out in this worktree." | No. Allocation is not implementation permission. Follow-up work gets deferred or gets its own isolated worktree. |
+| "I only need to add refs or flip the row before creating the worktree." | No. For an active implementation slice, tasktool refs/status/notes are part of the slice artifact set. Isolate first. |
 | "The slice is currently blocked, so I'll add `blocked_on` to model the phase plan." | No. Use `depends_on` for planned sequencing. Use `blocked_on` only for active runtime blockers. |
 
 ## Integration

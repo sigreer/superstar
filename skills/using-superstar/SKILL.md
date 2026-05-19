@@ -99,14 +99,16 @@ These thoughts mean STOP—you're rationalizing:
 When multiple skills could apply, use this order:
 
 1. **Setup skills** (project-setup) — when the user asks to initialise a project or a workflow precondition is missing.
-2. **Process skills** (brainstorming, debugging, phase-planning, tasklist-discipline) — these determine HOW to approach the task.
-3. **Implementation skills** (writing-plans, subagent-driven-development, executing-plans) — these guide execution.
-4. **Gating skills** (external-review, verification-before-completion) — run at the boundaries (spec/plan written, slice/phase done).
+2. **Implementation isolation preflight** (using-git-worktrees) — before executing any plan, starting/continuing a slice, dispatching implementation subagents, editing files, running artifact-producing tests, writing reviewer chains, or making tasktool status/ref/note/close mutations for an active implementation slice. A normal `main`/`master` checkout is planning/setup/read-only by default unless the user explicitly opts out in the current turn.
+3. **Process skills** (brainstorming, debugging, phase-planning, tasklist-discipline) — these determine HOW to approach the task.
+4. **Implementation skills** (writing-plans, subagent-driven-development, executing-plans) — these guide execution.
+5. **Gating skills** (external-review, verification-before-completion) — run at the boundaries (spec/plan written, slice/phase done).
 
 "Let's build X" → brainstorming first, then writing-plans, then subagent-driven-development.
 "What should the next phase be?" → phase-planning first, then brainstorming/writing-plans once a phase shape is chosen.
 "Fix this bug" → debugging first, then domain-specific skills.
 "Init project for superstar" → project-setup.
+"Continue/implement/close slice P2.S3" → using-git-worktrees first, then tasklist-discipline / subagent-driven-development as needed.
 
 ## Skill Types
 

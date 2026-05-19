@@ -23,10 +23,11 @@ For each check the skill must report **status** (`present` / `missing` / `partia
 
 | # | Check                                                    | Pass criteria                                                          | Scaffold action                                                              |
 |---|----------------------------------------------------------|------------------------------------------------------------------------|------------------------------------------------------------------------------|
+| 0 | Local git repo                                           | `git rev-parse --is-inside-work-tree` succeeds.                        | `git init` before installing hooks or running git-backed verification.        |
 | 1 | `docs/tasklist.json`                                     | File exists and validates clean (`tools/tasktool/tasktool validate`, or `tasktool validate` when the global shim is installed). | `tools/tasktool/tasktool init --project <name>`.                             |
 | 1b| `.git/hooks/pre-commit` (tasktool hook)                  | Tasktool hook installed (`grep -q 'tasktool-pre-commit-hook' .git/hooks/pre-commit`). | `bash tools/tasktool/install.sh --hook` (or the equivalent for non-superstar repos). |
 | 1c| Legacy `docs/TASKLIST.md` import decision                | If `docs/TASKLIST.md` exists, the user has explicitly chosen `tasktool import docs/TASKLIST.md --project <name>` or chosen to start with a new empty tracker. | Show `tools/tasktool/tasktool import docs/TASKLIST.md --dry-run --project <name>`, surface warnings, then ask whether to import, start empty, or stop. |
-| 1d| Implementation worktree location                         | `.gitignore` ignores `.worktrees/` (or an explicit repo-standard worktree directory such as `worktrees/`). | Add `.worktrees/` to `.gitignore` (create the file if needed). Do not create per-slice worktrees here; `[[using-git-worktrees]]` owns that. |
+| 1d| Implementation worktree location                         | `git check-ignore -q .worktrees/` succeeds (or the repo's explicit worktree directory such as `worktrees/` succeeds). | Add `.worktrees/` to `.gitignore` (create the file if needed). Do not create per-slice worktrees here; `[[using-git-worktrees]]` owns that. |
 | 2 | `docs/specs/` directory                                  | Directory exists.                                                      | `mkdir -p docs/specs` and add a `.gitkeep`.                                  |
 | 3 | `docs/plans/` directory                                  | Directory exists.                                                      | `mkdir -p docs/plans` and add a `.gitkeep`.                                  |
 | 4 | `docs/handoffs/` directory                               | Directory exists.                                                      | `mkdir -p docs/handoffs` and add a `.gitkeep`.                               |
@@ -45,7 +46,7 @@ For each check the skill must report **status** (`present` / `missing` / `partia
 3. **Report findings.** Present the table to the user. Use the standard `present` / `missing` / `partial` language.
 4. **Offer scaffolding.** For each `missing` or `partial` item, ask the user whether to scaffold it. Allow "all", "none", or per-item selection.
 5. **Apply.** For each accepted item, run the scaffold action. Use `git add -N` (intent-to-add) on new empty files so `.gitkeep`s show up in `git status` but aren't auto-staged.
-6. **Verify.** Re-run the audit and confirm everything the user accepted is now `present`. Print the new table.
+6. **Verify.** Re-run the audit and confirm everything the user accepted is now `present`. Include `git check-ignore -q .worktrees/` in verification when the worktree-location row is accepted. Print the new table.
 7. **Run the setup boundary.** Follow "Setup boundary before implementation" below.
 8. **Report.** Summarise what was created, what was skipped, what must be committed or stashed before feature work, and what manual action (if any) is still required — e.g. installing the reviewer command, importing `docs/TASKLIST.md`, populating the north-star or first phase title via `tasktool create`.
 
