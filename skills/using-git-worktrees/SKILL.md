@@ -11,6 +11,8 @@ Ensure work happens in an isolated workspace. Prefer your platform's native work
 
 **Core principle:** Detect existing isolation first. Then use native tools. Then fall back to git. Never fight the harness.
 
+**Implementation rule:** For slice/task implementation work, isolation is required unless the human partner explicitly says in the current turn to work in the current checkout. A normal repo checkout on `main`/`master` is read-only/planning-only by default: do not edit files, run artifact-producing tests, write reviewer chains, or mutate tasktool state for an implementation slice there without that explicit opt-out.
+
 **Announce at start:** "I'm using the using-git-worktrees skill to set up an isolated workspace."
 
 ## Step 0: Detect Existing Isolation
@@ -38,7 +40,9 @@ Report with branch state:
 
 **If `GIT_DIR == GIT_COMMON` (or in a submodule):** You are in a normal repo checkout.
 
-Has the user already indicated their worktree preference in your instructions? If not, ask for consent before creating a worktree:
+If this is implementation work from `[[executing-plans]]`, `[[subagent-driven-development]]`, or any slice/task handoff, do not ask for routine consent. Create or enter an isolated worktree unless the human partner explicitly opted out in the current turn. If the current branch is `main` or `master`, treat it as planning/review-only unless that opt-out exists.
+
+For ad-hoc or non-implementation use, has the user already indicated their worktree preference in your instructions? If not, ask for consent before creating a worktree:
 
 > "Would you like me to set up an isolated worktree? It protects your current branch from changes."
 
@@ -50,7 +54,7 @@ Honor any existing declared preference without asking. If the user declines cons
 
 ### 1a. Native Worktree Tools (preferred)
 
-The user has asked for an isolated workspace (Step 0 consent). Do you already have a way to create a worktree? It might be a tool with a name like `EnterWorktree`, `WorktreeCreate`, a `/worktree` command, or a `--worktree` flag. If you do, use it and skip to Step 3.
+The user has asked for an isolated workspace, or implementation context requires one. Do you already have a way to create a worktree? It might be a tool with a name like `EnterWorktree`, `WorktreeCreate`, a `/worktree` command, or a `--worktree` flag. If you do, use it and skip to Step 3.
 
 Native tools handle directory placement, branch creation, and cleanup automatically. Using `git worktree add` when you have a native tool creates phantom state your harness can't see or manage.
 
@@ -156,6 +160,8 @@ Ready to implement <feature-name>
 | Situation | Action |
 |-----------|--------|
 | Already in linked worktree | Skip creation (Step 0) |
+| Implementation work in normal checkout | Create/enter an isolated worktree unless current-turn opt-out exists |
+| Normal checkout on `main`/`master` | Planning/review-only by default |
 | In a submodule | Treat as normal repo (Step 0 guard) |
 | Native worktree tool available | Use it (Step 1a) |
 | No native tool | Git worktree fallback (Step 1b) |
@@ -200,6 +206,8 @@ Ready to implement <feature-name>
 
 **Never:**
 - Create a worktree when Step 0 detects existing isolation
+- Implement a slice/task in a normal `main`/`master` checkout without current-turn explicit opt-out
+- Reuse one slice's active worktree for another slice's implementation
 - Use `git worktree add` when you have a native worktree tool (e.g., `EnterWorktree`). This is the #1 mistake — if you have it, use it.
 - Skip Step 1a by jumping straight to Step 1b's git commands
 - Create worktree without verifying it's ignored (project-local)
@@ -208,6 +216,7 @@ Ready to implement <feature-name>
 
 **Always:**
 - Run Step 0 detection first
+- Verify implementation work is in a linked worktree, or create one, before editing or running artifact-producing commands
 - Prefer native tools over git fallback
 - Follow directory priority: existing > global legacy > instruction file > default
 - Verify directory is ignored for project-local

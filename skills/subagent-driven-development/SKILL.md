@@ -30,7 +30,11 @@ Execute plan by dispatching fresh subagent per task, with two-stage in-loop revi
 
 Plans are organised into **slices** (and slices into **tasks**) per `[[tasklist-discipline]]`. The coordinator tracks slice and phase boundaries explicitly.
 
+Before dispatching any implementation subagent, run `[[using-git-worktrees]]` as the first executable gate and verify the coordinator is operating from an isolated worktree for the active slice. Implementation requires one isolated worktree per active slice unless the human partner explicitly opts out in the current turn. A normal repo checkout on `main`/`master` is read-only/planning-only by default: do not edit files, run artifact-producing tests, write reviewer chains, or mutate tasktool status for an implementation slice there without that explicit opt-out.
+
 Before dispatching implementation work for a phase, run `tasktool schedule <phase-id>` and `tasktool ready-slices <phase-id>`. Only dispatch slices returned by `ready-slices`; they have no unfinished `depends_on` entries and are not runtime-blocked. Slices sharing a `parallel_group` are candidates for parallel execution when their file scopes do not overlap. If implementation discovers a real sequencing dependency, stop dispatch for the affected slice and update the row with `tasktool deps`; do not encode planned sequencing as `blocked_on`.
+
+Parallel slices must run in separate worktrees. Same repo, different branch, or different TodoWrite entry is not isolation if the filesystem checkout is shared. When two slices are both active, each slice's implementers, reviewer-chain writes, verification artifacts, and tasktool status mutations stay inside that slice's worktree until merge-back.
 
 **Two reviews, two scopes — do not conflate them:**
 
@@ -42,7 +46,7 @@ Before dispatching implementation work for a phase, run `tasktool schedule <phas
 The per-task internal reviews approving every task in a slice **does not** satisfy the slice-boundary external review. They have different scopes (one task vs. the whole slice) and different reviewers. Both are required.
 
 - **At the end of each slice** (all the slice's tasks closed, in-loop internal reviews passed):
-  1. Run `git status --short`. If setup/migration artifacts, unrelated reviewer chains, legacy path moves, or other dirty files outside the slice scope are present, stop and resolve that boundary before review.
+  1. Run `git status --short`. If setup/migration artifacts, unrelated reviewer chains, legacy path moves, unrelated tasklist mutations, files from another slice, or other dirty files outside the slice scope are present, stop and resolve that boundary before review.
   2. Invoke `[[external-review]]` with `--kind post-slice`, passing the plan as `--file` and the spec + `docs/tasklist.json` as `--context`.
   3. Read the verdict. On `ready` / `ready with small edits`, proceed.
   4. On `merged_verdict: revise` (or `verdict_valid: false`), **dispatch a fix subagent** with the previous response file as input. The fix subagent MUST write `docs/reviewer/<chain>/r{N}-resolution.md` per the contract in `[[external-review]]` before signaling completion. Wait for completion. Re-submit. Iterate.
@@ -314,6 +318,8 @@ Done!
 
 **Process reds (also never):**
 - Start implementation on main/master branch without explicit user consent
+- Dispatch implementation before `[[using-git-worktrees]]` verifies the slice worktree
+- Use one active slice's worktree for another slice's implementation
 - Skip in-loop reviews (spec compliance OR code quality)
 - Skip external-review at slice or phase boundaries
 - Proceed with unfixed issues or `revise` verdicts

@@ -26,6 +26,7 @@ For each check the skill must report **status** (`present` / `missing` / `partia
 | 1 | `docs/tasklist.json`                                     | File exists and validates clean (`tools/tasktool/tasktool validate`, or `tasktool validate` when the global shim is installed). | `tools/tasktool/tasktool init --project <name>`.                             |
 | 1b| `.git/hooks/pre-commit` (tasktool hook)                  | Tasktool hook installed (`grep -q 'tasktool-pre-commit-hook' .git/hooks/pre-commit`). | `bash tools/tasktool/install.sh --hook` (or the equivalent for non-superstar repos). |
 | 1c| Legacy `docs/TASKLIST.md` import decision                | If `docs/TASKLIST.md` exists, the user has explicitly chosen `tasktool import docs/TASKLIST.md --project <name>` or chosen to start with a new empty tracker. | Show `tools/tasktool/tasktool import docs/TASKLIST.md --dry-run --project <name>`, surface warnings, then ask whether to import, start empty, or stop. |
+| 1d| Implementation worktree location                         | `.gitignore` ignores `.worktrees/` (or an explicit repo-standard worktree directory such as `worktrees/`). | Add `.worktrees/` to `.gitignore` (create the file if needed). Do not create per-slice worktrees here; `[[using-git-worktrees]]` owns that. |
 | 2 | `docs/specs/` directory                                  | Directory exists.                                                      | `mkdir -p docs/specs` and add a `.gitkeep`.                                  |
 | 3 | `docs/plans/` directory                                  | Directory exists.                                                      | `mkdir -p docs/plans` and add a `.gitkeep`.                                  |
 | 4 | `docs/handoffs/` directory                               | Directory exists.                                                      | `mkdir -p docs/handoffs` and add a `.gitkeep`.                               |
@@ -55,7 +56,7 @@ Setup is its own change. Do not continue into `[[brainstorming]]`, `[[writing-pl
 After any accepted scaffold or legacy migration:
 
 1. Run `git status --short` and classify every dirty path as one of:
-   - setup/migration (`docs/tasklist.json`, `docs/specs/`, `docs/plans/`, `docs/handoffs/`, `docs/reviewer/`, `docs/archived-tasks/`, `scripts/external-reviewer.py`, `.git/hooks/pre-commit`, `CLAUDE.md` / `AGENTS.md` / `GEMINI.md`, legacy `docs/superpowers/` moves);
+   - setup/migration (`docs/tasklist.json`, `.gitignore` worktree-ignore entries, `docs/specs/`, `docs/plans/`, `docs/handoffs/`, `docs/reviewer/`, `docs/archived-tasks/`, `scripts/external-reviewer.py`, `.git/hooks/pre-commit`, `CLAUDE.md` / `AGENTS.md` / `GEMINI.md`, legacy `docs/superpowers/` moves);
    - feature implementation;
    - local noise or user-owned changes.
 2. Run `tools/tasktool/tasktool validate` when the repo-local launcher exists, otherwise `tasktool validate`.

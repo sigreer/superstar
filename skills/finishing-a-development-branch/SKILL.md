@@ -118,20 +118,39 @@ Which option?
 
 #### Option 1: Merge Locally
 
+Use this safe merge-back pattern for isolated worktrees:
+
+1. Verify in the feature worktree first.
+2. Return to the integration branch.
+3. Ensure unrelated dirty state is absent, or stash it with a clear name.
+4. Merge or fast-forward the feature branch.
+5. Rerun verification on the merged result.
+6. Restore unrelated dirty state if it was stashed.
+7. Clean up the worktree only after merge and verification succeed.
+
 ```bash
-# Get main repo root for CWD safety
-MAIN_ROOT=$(git -C "$(git rev-parse --git-common-dir)/.." rev-parse --show-toplevel)
-cd "$MAIN_ROOT"
-
-# Merge first — verify success before removing anything
-git checkout <base-branch>
-git pull
-git merge <feature-branch>
-
-# Verify tests on merged result
+# In the feature worktree
 <test command>
 
-# Only after merge succeeds: cleanup worktree (Step 6), then delete branch
+# Get main repo root for CWD safety, then return to integration branch
+MAIN_ROOT=$(git -C "$(git rev-parse --git-common-dir)/.." rev-parse --show-toplevel)
+cd "$MAIN_ROOT"
+git checkout <base-branch>
+
+# If unrelated dirty state exists, stash it before merging
+git status --short
+git stash push -u -m "pre-merge unrelated state before <feature-branch>"  # only when needed
+
+# Merge first — verify success before removing anything
+git merge --ff-only <feature-branch>  # use non-ff merge only when the project expects it
+
+# Verify tests on merged result before cleanup
+<test command>
+
+# Restore unrelated dirty state if it was stashed
+git stash pop  # only if you stashed above
+
+# Only after merge and verification succeed: cleanup worktree (Step 6), then delete branch
 ```
 
 Then: Cleanup worktree (Step 6), then delete branch:

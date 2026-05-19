@@ -76,7 +76,16 @@ For `post-slice` and `post-phase`, run a scope preflight before invoking the rev
 git status --short
 ```
 
-If the status includes setup/migration artifacts, legacy path moves, untracked vendored reviewer scripts, copied chain output from unrelated work, or any dirty files outside the slice/phase scope, stop and resolve the setup boundary first. A reviewer is expected to fail a boundary review when the artifact set is ambiguous.
+If the status includes unrelated dirty files, setup/migration artifacts, legacy path moves, untracked vendored reviewer scripts, copied chain output from unrelated work, unrelated reviewer chains, unrelated tasklist mutations, files from another slice, or any dirty files outside the slice/phase scope, stop and resolve the boundary first. This is a hard blocker, not reviewer discretion: do not invoke `post-slice` or `post-phase` review against an ambiguous artifact set.
+
+Use the requested `--work-id` to judge scope before review:
+
+- `docs/reviewer/<this-chain>/...` for the current work is allowed; reviewer chain folders for another slice/phase are blockers.
+- `docs/tasklist.json` changes are allowed only when they correspond to the current slice/phase closeout; allocation/status changes for other work are blockers.
+- Dirty implementation files must belong to the current slice/phase evidence set; files from another slice must move to that slice's worktree or be merged separately before review.
+- A normal `main`/`master` checkout is planning/review-only by default; post-slice/post-phase review should run from the slice/phase implementation worktree unless the human partner explicitly opted out of isolation in the current turn.
+
+A reviewer is expected to fail a boundary review when the artifact set is ambiguous, but the coordinator should block before spending reviewer time.
 
 ```bash
 python3 scripts/external-reviewer.py review \

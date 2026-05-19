@@ -15,6 +15,17 @@ Load plan, review critically, execute all tasks, report when complete.
 
 ## The Process
 
+### Step 0: Verify Implementation Workspace
+
+Before reading the plan as executable work, run `[[using-git-worktrees]]` as the first executable gate. Verify one of these is true:
+
+- You are already in a linked worktree for this slice/work item; or
+- You created or entered a new isolated worktree for this slice/work item.
+
+If you are in a normal repo checkout, especially on `main` or `master`, it is read-only/planning-only by default. Do not edit files, run tests that create artifacts, write reviewer chains, or mutate tasktool state for the implementation slice there unless the human partner explicitly opts out of isolation in the current turn.
+
+Parallel or adjacent slices require separate worktrees. Same repo on a different branch is not enough if the workspace is shared.
+
 ### Step 1: Load and Review Plan
 1. Read plan file
 2. Review critically - identify any questions or concerns about the plan
@@ -83,6 +94,7 @@ After all tasks, slices, and the phase are closed:
 - Reference skills when plan says to
 - Stop when blocked, don't guess
 - Never start implementation on main/master branch without explicit user consent
+- Never start implementation before the `[[using-git-worktrees]]` first executable gate verifies an isolated workspace or a current-turn opt-out
 - **Internal review ≠ external review.** Per-task internal review is in-loop and may run more than once per task. External review is a separate, out-of-loop gate at slice and phase boundaries. One does not satisfy the other.
 - **Never flip a slice or phase to ✅ before its external review returns a `ready` verdict.**
 

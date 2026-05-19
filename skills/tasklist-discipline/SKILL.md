@@ -87,6 +87,8 @@ tools/tasktool/tasktool validate --normalise
 | Bug surfaced by review | Inline task if cheap; follow-up slice if it deserves its own scope. |
 | Cross-cutting, unscheduled | `tools/tasktool/tasktool create cross --title …` |
 
+Creating a new slice or X-item is allocation/tracking only. It does not authorize implementing that work in the current slice worktree. If the discovery is truly incidental to the active slice, add an in-slice task and keep going. If it is real follow-up work, record it and defer until the current slice closes, or create a separate isolated worktree for that follow-up after the current slice boundary is clean.
+
 ## Referencing items in artifacts
 
 - Specs, plans, reviewer chain folders: fully-qualified ID at first mention (`P9.S3a`), short form afterwards.
@@ -105,6 +107,7 @@ tools/tasktool/tasktool validate --normalise
 | "I'll bring back `docs/TASKLIST.md` for readability." | The hook refuses commits that touch it. Use `tasktool render` if you want markdown. |
 | "I'll just renumber IDs to match execution order." | No. IDs are stable. Execution order lives in the array order; IDs preserve creation order. |
 | "Setup files are just scaffolding; I'll leave them dirty while implementing." | No. Setup/migration artifacts make post-slice review scope ambiguous. Resolve the setup boundary first. |
+| "I created a follow-up slice/X-item, so I can knock it out in this worktree." | No. Allocation is not implementation permission. Follow-up work gets deferred or gets its own isolated worktree. |
 | "The slice is currently blocked, so I'll add `blocked_on` to model the phase plan." | No. Use `depends_on` for planned sequencing. Use `blocked_on` only for active runtime blockers. |
 
 ## Integration
