@@ -266,7 +266,7 @@
         },
         {
           "blocked_on": null,
-          "closed": null,
+          "closed": "2026-05-19",
           "created": "2026-05-19",
           "depends_on": [
             "P4.S1"
@@ -277,9 +277,9 @@
           "plan_path": null,
           "planning_status": "ratified",
           "refs": [],
-          "reviewer_chain": null,
+          "reviewer_chain": "docs/reviewer/p4-tasktool-coordination-lifecycle-P4-S2-post-slice",
           "started": "2026-05-19",
-          "status": "in_progress",
+          "status": "done",
           "tasks": [],
           "title": "Lifecycle status enforcement"
         }
