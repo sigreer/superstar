@@ -171,6 +171,19 @@ def test_worker_mutation_updates_authority_not_worker(tmp_path):
 
     authority = json.loads((root / "docs/tasklist.json").read_text())
     assert authority["phases"][0]["slices"][0]["status"] == "in_progress"
+    assert authority["phases"][0]["slices"][0]["started"]
+
+
+def test_worker_start_routes_to_authority(tmp_path):
+    root, worker = _authority_with_worker(tmp_path)
+    before_worker = (worker / "docs/tasklist.json").read_text()
+    r = _tasktool(worker, "start", "P1.S1")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "authoritative checkout" in r.stderr
+    assert (worker / "docs/tasklist.json").read_text() == before_worker
+    data = json.loads((root / "docs/tasklist.json").read_text())
+    assert data["phases"][0]["slices"][0]["status"] == "in_progress"
+    assert data["phases"][0]["slices"][0]["started"]
 
 
 def test_authoritative_checkout_write_uses_same_lock(tmp_path):

@@ -65,6 +65,10 @@ def _build_parser() -> argparse.ArgumentParser:
     p_set.add_argument("--reviewer-chain", type=Path)
     p_set.add_argument("--skip-review-gate", action="store_true")
 
+    p_start = sub.add_parser("start")
+    p_start.add_argument("id")
+    p_start.add_argument("--resume", action="store_true")
+
     p_close = sub.add_parser("close")
     p_close.add_argument("id")
     p_close.add_argument("--refs", default="")
@@ -210,6 +214,8 @@ def main(argv: list[str]) -> int:
                 repo_root=root, id=args.id, status=args.status,
                 reviewer_chain=args.reviewer_chain, skip_review_gate=args.skip_review_gate,
             )
+        elif args.cmd == "start":
+            commands.cmd_start(repo_root=root, id=args.id, resume=args.resume)
         elif args.cmd == "close":
             refs = [r for r in args.refs.split(",") if r] if args.refs else None
             commands.cmd_close(

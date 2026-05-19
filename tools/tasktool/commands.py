@@ -327,6 +327,26 @@ def _apply_review_gate(
     else:
         item.phase_reviewer_chain = rel
 
+def _start_item(qid: str, item, *, resume: bool = False) -> None:
+    if item.status == Status.DONE:
+        raise CommandError(f"{qid} is already done")
+    if item.status == Status.BLOCKED:
+        if not resume:
+            raise CommandError(f"{qid} is blocked; use start --resume to clear blocked_on")
+        item.blocked_on = None
+    item.status = Status.IN_PROGRESS
+    if getattr(item, "started", None) is None:
+        item.started = _today()
+
+def cmd_start(*, repo_root: Path, id: str, resume: bool = False) -> None:
+    with _write_context(repo_root) as write_root:
+        p = _load(write_root)
+        qid, _container, item = _find_item(p, id)
+        kind = parse_id(qid)[0]
+        _start_item(qid, item, resume=resume)
+        _save(write_root, p)
+        _notify_status(qid=qid, kind=kind, status=item.status, title=item.title)
+
 def cmd_set(
     *, repo_root: Path, id: str, status: str,
     reviewer_chain: Path | None = None, skip_review_gate: bool = False,
@@ -340,7 +360,10 @@ def cmd_set(
             raise CommandError(f"only slices can be blocked; {qid} is a {kind}")
         if new_status == Status.DONE and kind in ("slice", "phase"):
             _apply_review_gate(repo_root, item, qid, kind, reviewer_chain, skip_review_gate)
-        item.status = new_status
+        if new_status == Status.IN_PROGRESS:
+            _start_item(qid, item)
+        else:
+            item.status = new_status
         if new_status == Status.DONE and item.closed is None:
             item.closed = _today()
         _save(write_root, p)
@@ -395,7 +418,10 @@ def cmd_unblock(*, repo_root: Path, slice_id: str, resume: bool = False) -> None
             raise CommandError(f"unblock only works on slices; {slice_id} is a {kind_of(slice_id)}")
         _qid, _container, item = _find_item(p, slice_id)
         item.blocked_on = None
-        item.status = Status.IN_PROGRESS if resume else Status.READY
+        if resume:
+            _start_item(_qid, item, resume=True)
+        else:
+            item.status = Status.READY
         _save(write_root, p)
         _notify_status(qid=_qid, kind="slice", status=item.status, title=item.title)
 
