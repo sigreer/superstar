@@ -42,8 +42,14 @@ def _check_date(value: str | None, scope: str, field: str) -> None:
             f"{scope}.{field}: invalid calendar date {value!r}: {e}"
         ) from e
 
-def _check_dates(created: str, closed: str | None, scope: str) -> None:
+def _check_dates(
+    created: str,
+    started: str | None,
+    closed: str | None,
+    scope: str,
+) -> None:
     _check_date(created, scope, "created")
+    _check_date(started, scope, "started")
     _check_date(closed, scope, "closed")
     if closed is not None and closed < created:
         raise ValidationError(f"{scope}: closed {closed} precedes created {created}")
@@ -53,7 +59,7 @@ def _check_task(t: Task, scope: str) -> None:
     _require(t.status != Status.BLOCKED, f"{scope}: tasks cannot be blocked (slice-only)")
     if t.status == Status.DONE:
         _require(t.closed is not None, f"{scope}: status=done requires closed date")
-    _check_dates(t.created, t.closed, scope)
+    _check_dates(t.created, t.started, t.closed, scope)
 
 def _check_slice(s: Slice, scope: str) -> None:
     _check_id(s.id, _SLICE_RE, scope)
@@ -67,7 +73,7 @@ def _check_slice(s: Slice, scope: str) -> None:
         _require(s.status == Status.BLOCKED, f"{scope}: blocked_on without blocked status")
     if s.status == Status.DONE:
         _require(s.closed is not None, f"{scope}: status=done requires closed date")
-    _check_dates(s.created, s.closed, scope)
+    _check_dates(s.created, s.started, s.closed, scope)
     seen: set[str] = set()
     for t in s.tasks:
         sub = f"{scope}.{t.id}"
@@ -80,7 +86,7 @@ def _check_phase(p: Phase, scope: str) -> None:
     _require(p.status != Status.BLOCKED, f"{scope}: phases cannot be blocked")
     if p.status == Status.DONE:
         _require(p.closed is not None, f"{scope}: status=done requires closed date")
-    _check_dates(p.created, p.closed, scope)
+    _check_dates(p.created, p.started, p.closed, scope)
     seen: set[str] = set()
     for s in p.slices:
         sub = f"{scope}.{s.id}"
@@ -93,7 +99,7 @@ def _check_cross(c: CrossCutting, scope: str) -> None:
     _require(c.status != Status.BLOCKED, f"{scope}: cross-cutting cannot be blocked")
     if c.status == Status.DONE:
         _require(c.closed is not None, f"{scope}: status=done requires closed date")
-    _check_dates(c.created, c.closed, scope)
+    _check_dates(c.created, c.started, c.closed, scope)
 
 def validate_project(p: Project) -> None:
     """Raise ValidationError on rule violation. Returns None on clean."""

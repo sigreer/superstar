@@ -172,6 +172,44 @@ class DateFormatTests(unittest.TestCase):
         with self.assertRaises(ValidationError):
             validate_project(p)
 
+    def test_malformed_slice_started_rejected(self):
+        p = _project_with_slice(started="20260517")
+        with self.assertRaises(ValidationError):
+            validate_project(p)
+
+    def test_malformed_phase_started_rejected(self):
+        p = _project_with_slice()
+        p.phases[0].started = "20260517"
+        with self.assertRaises(ValidationError):
+            validate_project(p)
+
+    def test_malformed_task_started_rejected(self):
+        p = _project_with_slice()
+        p.phases[0].slices[0].tasks.append(
+            Task(id="T1", title="t", created="2026-05-17", started="2026-W20-7"),
+        )
+        with self.assertRaises(ValidationError):
+            validate_project(p)
+
+    def test_malformed_cross_cutting_started_rejected(self):
+        p = _project_with_slice()
+        p.cross_cutting.append(
+            CrossCutting(id="X1", title="x", created="2026-05-17", started="2026-02-31"),
+        )
+        with self.assertRaises(ValidationError):
+            validate_project(p)
+
+    def test_started_none_accepted(self):
+        p = _project_with_slice(started=None)
+        p.phases[0].started = None
+        p.phases[0].slices[0].tasks.append(
+            Task(id="T1", title="t", created="2026-05-17", started=None),
+        )
+        p.cross_cutting.append(
+            CrossCutting(id="X1", title="x", created="2026-05-17", started=None),
+        )
+        validate_project(p)
+
 class PathWarningTests(unittest.TestCase):
     def test_missing_ref_emits_warning(self):
         from tasktool.validate import find_path_warnings
