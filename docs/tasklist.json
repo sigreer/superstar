@@ -234,7 +234,7 @@
       "slices": [
         {
           "blocked_on": null,
-          "closed": null,
+          "closed": "2026-05-19",
           "created": "2026-05-19",
           "depends_on": [],
           "id": "S1",
@@ -243,8 +243,8 @@
           "plan_path": null,
           "planning_status": "ratified",
           "refs": [],
-          "reviewer_chain": null,
-          "status": "in_progress",
+          "reviewer_chain": "docs/reviewer/p4-tasktool-coordination-lifecycle-P4-S1-post-slice",
+          "status": "done",
           "tasks": [],
           "title": "Authoritative tasklist mutations"
         },
