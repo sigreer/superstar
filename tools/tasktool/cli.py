@@ -76,6 +76,8 @@ def _build_parser() -> argparse.ArgumentParser:
     p_close.add_argument("--note")
     p_close.add_argument("--reviewer-chain", type=Path)
     p_close.add_argument("--skip-review-gate", action="store_true")
+    p_close.add_argument("--allow-ready-close", action="store_true")
+    p_close.add_argument("--reason")
 
     p_block = sub.add_parser("block")
     p_block.add_argument("slice_id")
@@ -222,6 +224,7 @@ def main(argv: list[str]) -> int:
                 repo_root=root, id=args.id, refs=refs,
                 closed_date=args.closed_date, note=args.note,
                 reviewer_chain=args.reviewer_chain, skip_review_gate=args.skip_review_gate,
+                allow_ready_close=args.allow_ready_close, reason=args.reason,
             )
         elif args.cmd == "block":
             commands.cmd_block(repo_root=root, slice_id=args.slice_id, on=args.on)

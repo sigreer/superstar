@@ -192,6 +192,7 @@ class CloseTests(unittest.TestCase):
             os.environ,
             {"SUPERSTAR_NOTIFY_DISABLE": "0", "SUPERSTAR_NOTIFY_DRY_RUN": "1", "SUPERSTAR_NOTIFY_LOG": str(log)},
         ):
+            commands.cmd_start(repo_root=self.t.root, id="P1.S1")
             commands.cmd_close(
                 repo_root=self.t.root, id="P1.S1",
                 refs=["docs/a.md", "docs/b.md"], note="post-impl",
@@ -312,6 +313,7 @@ class SchedulingTests(unittest.TestCase):
         out = commands.cmd_ready_slices(repo_root=self.t.root, phase_id="P1")
         self.assertIn("P1.S1", out)
         self.assertNotIn("P1.S2", out)
+        commands.cmd_start(repo_root=self.t.root, id="P1.S1")
         commands.cmd_close(repo_root=self.t.root, id="P1.S1", skip_review_gate=True)
         out = commands.cmd_ready_slices(repo_root=self.t.root, phase_id="P1")
         self.assertIn("P1.S2", out)
@@ -534,6 +536,7 @@ class ArchivePhaseTests(unittest.TestCase):
             commands.cmd_init(repo_root=t.root, project="demo")
             pid = commands.cmd_create_phase(repo_root=t.root, title="A phase")
             sid = commands.cmd_create_slice(repo_root=t.root, phase_id=pid, title="Only slice")
+            commands.cmd_start(repo_root=t.root, id=f"{pid}.{sid}")
             commands.cmd_close(
                 repo_root=t.root, id=f"{pid}.{sid}",
                 skip_review_gate=True,

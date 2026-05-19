@@ -89,3 +89,50 @@ def test_start_done_item_refuses(tmp_path):
     r = run(tmp_path, "start", "P1.S1")
     assert r.returncode == 1
     assert "already done" in r.stderr
+
+
+def test_close_ready_slice_refuses_without_override(tmp_path):
+    seed(tmp_path)
+    chain = tmp_path / "docs" / "reviewer" / "p1-s1-post-slice"
+    chain.mkdir(parents=True)
+    (chain / "chain.json").write_text('{"rounds":[{"round":1,"merged_verdict":"ready","status":"ok"}]}')
+    r = run(tmp_path, "close", "P1.S1", "--reviewer-chain", str(chain))
+    assert r.returncode == 1
+    assert "must be started before close" in r.stderr
+    sl = tasklist(tmp_path)["phases"][0]["slices"][0]
+    assert sl["status"] == "ready"
+    assert sl["closed"] is None
+
+
+def test_close_ready_slice_override_requires_reason(tmp_path):
+    seed(tmp_path)
+    chain = tmp_path / "docs" / "reviewer" / "p1-s1-post-slice"
+    chain.mkdir(parents=True)
+    (chain / "chain.json").write_text('{"rounds":[{"round":1,"merged_verdict":"ready","status":"ok"}]}')
+    r = run(tmp_path, "close", "P1.S1", "--reviewer-chain", str(chain), "--allow-ready-close")
+    assert r.returncode == 1
+    assert "requires --reason" in r.stderr
+    sl = tasklist(tmp_path)["phases"][0]["slices"][0]
+    assert sl["status"] == "ready"
+    assert sl["closed"] is None
+
+
+def test_close_ready_slice_override_records_note(tmp_path):
+    seed(tmp_path)
+    chain = tmp_path / "docs" / "reviewer" / "p1-s1-post-slice"
+    chain.mkdir(parents=True)
+    (chain / "chain.json").write_text('{"rounds":[{"round":1,"merged_verdict":"ready","status":"ok"}]}')
+    r = run(
+        tmp_path,
+        "close",
+        "P1.S1",
+        "--reviewer-chain",
+        str(chain),
+        "--allow-ready-close",
+        "--reason",
+        "legacy slice closed before start existed",
+    )
+    assert r.returncode == 0, r.stdout + r.stderr
+    sl = tasklist(tmp_path)["phases"][0]["slices"][0]
+    assert sl["status"] == "done"
+    assert "ready-close override for P1.S1: legacy slice closed before start existed" in sl["notes"]

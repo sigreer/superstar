@@ -374,6 +374,7 @@ def cmd_close(
     refs: list[str] | None = None, closed_date: str | None = None,
     note: str | None = None,
     reviewer_chain: Path | None = None, skip_review_gate: bool = False,
+    allow_ready_close: bool = False, reason: str | None = None,
 ) -> None:
     with _write_context(repo_root) as write_root:
         p = _load(write_root)
@@ -385,6 +386,14 @@ def cmd_close(
             _apply_review_gate(repo_root, item, qid, kind, reviewer_chain, skip_review_gate)
         else:
             raise CommandError(f"cannot close {kind} {qid}")
+        if kind == "slice" and getattr(item, "started", None) is None:
+            if not allow_ready_close:
+                raise CommandError(f"{qid} must be started before close; run `tasktool start {qid}` first")
+            if not reason or not reason.strip():
+                raise CommandError(f"{qid} ready-close override requires --reason")
+            ts = _dt.datetime.now().isoformat(timespec="seconds")
+            audit = f"[{ts}] ready-close override for {qid}: {reason.strip()}"
+            item.notes = (item.notes + "\n" + audit).strip() if item.notes else audit
         item.status = Status.DONE
         item.closed = closed_date or _today()
         if refs:

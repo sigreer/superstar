@@ -170,6 +170,7 @@ class ReviewGateE2ETests(unittest.TestCase):
                 '{"rounds":[{"round":1,"merged_verdict":"ready","status":"ok"}]}',
                 encoding="utf-8",
             )
+            run_cli("start", "P1.S1", cwd=t.root)
             r = run_cli("close", "P1.S1", cwd=t.root)
             self.assertEqual(r.returncode, 0, r.stderr)
         finally:
@@ -181,6 +182,7 @@ class ReviewGateE2ETests(unittest.TestCase):
             run_cli("init", "--project", "demo", cwd=t.root)
             run_cli("create", "phase", "--title", "P", cwd=t.root)
             run_cli("create", "slice", "P1", "--title", "S", cwd=t.root)
+            run_cli("start", "P1.S1", cwd=t.root)
             r = run_cli("close", "P1.S1", "--skip-review-gate", cwd=t.root)
             self.assertEqual(r.returncode, 0, r.stderr)
         finally:
@@ -192,6 +194,7 @@ class ReviewGateE2ETests(unittest.TestCase):
             run_cli("init", "--project", "demo", cwd=t.root)
             run_cli("create", "phase", "--title", "Phase to archive", cwd=t.root)
             run_cli("create", "slice", "P1", "--title", "Slice", cwd=t.root)
+            run_cli("start", "P1.S1", cwd=t.root)
             run_cli("close", "P1.S1", "--skip-review-gate", cwd=t.root)
             r = run_cli("archive-phase", "P1", "--skip-review-gate", cwd=t.root)
             self.assertEqual(r.returncode, 0, r.stderr)
@@ -228,6 +231,7 @@ class ReviewGateE2ETests(unittest.TestCase):
             self.assertIn("ambiguous", r.stderr.lower())
             # `close P2.S1` is unambiguous; the qualified id must hit p2-s1-post-slice
             # exclusively, not also match p1-s1-post-slice.
+            run_cli("start", "P2.S1", cwd=t.root)
             r = run_cli("close", "P2.S1", cwd=t.root)
             self.assertEqual(r.returncode, 0, r.stderr)
         finally:
@@ -260,6 +264,7 @@ class ReviewGateE2ETests(unittest.TestCase):
             # `close S1` resolves to P2.S1 (the only S1 in the data), then the gate
             # searches with token 'p2-s1' and finds exactly one chain. Pre-fix this
             # would have searched with 's1' and matched both → spurious ambiguity.
+            run_cli("start", "S1", cwd=t.root)
             r = run_cli("close", "S1", cwd=t.root)
             self.assertEqual(r.returncode, 0, r.stderr)
         finally:
@@ -279,6 +284,7 @@ class ReviewGateE2ETests(unittest.TestCase):
                 encoding="utf-8",
             )
             # Pass a relative path — should succeed without ValueError traceback.
+            run_cli("start", "P1.S1", cwd=t.root)
             r = run_cli("close", "P1.S1", "--reviewer-chain", "docs/reviewer/p1-s1-post-slice",
                         cwd=t.root)
             self.assertEqual(r.returncode, 0, r.stderr)

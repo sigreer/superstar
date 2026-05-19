@@ -226,6 +226,9 @@ def test_worker_close_records_reviewer_chain_in_authority(tmp_path):
     (chain / "chain.json").write_text('{"rounds":[{"round":1,"merged_verdict":"ready","status":"ok"}]}')
     before_worker = (worker / "docs/tasklist.json").read_text()
 
+    r = _tasktool(worker, "start", "P1.S1")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert (worker / "docs/tasklist.json").read_text() == before_worker
     r = _tasktool(worker, "close", "P1.S1", "--reviewer-chain", str(chain))
     assert r.returncode == 0, r.stdout + r.stderr
     assert (worker / "docs/tasklist.json").read_text() == before_worker
@@ -317,6 +320,7 @@ def test_routed_import_writes_authority_only(tmp_path):
 
 def test_routed_archive_phase_writes_authority_archive_artifact(tmp_path):
     root, worker = _authority_with_worker(tmp_path)
+    assert_worker_tasklist_unchanged(root, worker, "start", "P1.S1")
     assert_worker_tasklist_unchanged(root, worker, "close", "P1.S1", "--skip-review-gate")
     chain = worker / "docs" / "reviewer" / "p1-post-phase"
     chain.mkdir(parents=True)
