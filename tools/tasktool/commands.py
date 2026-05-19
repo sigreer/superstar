@@ -1,9 +1,11 @@
 # tools/tasktool/commands.py
 from __future__ import annotations
 import datetime as _dt
+import sys
 import subprocess as _subprocess
+from contextlib import contextmanager
 from pathlib import Path
-from tasktool.config import TasklistConfig, TasktoolConfig, save_config
+from tasktool.config import TasklistConfig, TasktoolConfig, load_config, save_config
 from tasktool.model import (
     Project, Phase, Slice, Task, CrossCutting, BlockedOn, Status, PlanningStatus,
 )
@@ -15,6 +17,13 @@ from tasktool.allocate import (
 from tasktool.ids import split_qualified, kind_of, is_slice_id, parse_id
 from tasktool.reviewer_gate import check_gate, GateError, GatePass
 from tasktool.notify import notify_tasktool_status
+from tasktool.worktree import (
+    AuthorityError,
+    find_authoritative_root,
+    tasklist_has_unsafe_dirty_state,
+    tasktool_lock,
+    validate_authoritative_checkout,
+)
 
 class CommandError(RuntimeError):
     pass
@@ -67,6 +76,43 @@ def _notify_status(*, qid: str, kind: str, status: Status, title: str) -> None:
     except Exception:
         pass
 
+def _resolve_write_root(repo_root: Path) -> tuple[Path, bool, str]:
+    cfg = load_config(repo_root)
+    if cfg.tasklist.mutation_mode == "local":
+        return repo_root, False, cfg.tasklist.mutation_mode
+    try:
+        authoritative = find_authoritative_root(repo_root, branch=cfg.tasklist.authoritative_branch)
+        validate_authoritative_checkout(
+            authoritative,
+            expected_branch=cfg.tasklist.authoritative_branch,
+            caller_root=repo_root,
+        )
+    except AuthorityError as exc:
+        raise CommandError(str(exc)) from exc
+    return authoritative, repo_root.resolve() != authoritative.resolve(), cfg.tasklist.mutation_mode
+
+@contextmanager
+def _write_context(repo_root: Path):
+    write_root, routed, mode = _resolve_write_root(repo_root)
+    if mode == "authoritative-checkout":
+        try:
+            with tasktool_lock(repo_root):
+                if tasklist_has_unsafe_dirty_state(write_root):
+                    raise CommandError(
+                        "authoritative docs/tasklist.json has unstaged changes; "
+                        "commit, stash, or normalise them before running tasktool"
+                    )
+                if routed:
+                    print(
+                        f"tasktool: routed mutation to authoritative checkout: {write_root}",
+                        file=sys.stderr,
+                    )
+                yield write_root
+        except AuthorityError as exc:
+            raise CommandError(str(exc)) from exc
+    else:
+        yield write_root
+
 # ───── config ─────
 
 def cmd_config_init_authority(*, repo_root: Path, branch: str) -> None:
@@ -84,12 +130,13 @@ def cmd_config_init_authority(*, repo_root: Path, branch: str) -> None:
 def cmd_init(*, repo_root: Path, project: str | None = None, north_star: str = "", force: bool = False) -> None:
     """Create empty tasklist.json. If `project` is omitted, derive from repo_root.name
     (matches spec §7.1 syntax `init [--project NAME]`)."""
-    path = _tasklist_path(repo_root)
-    if path.exists() and not force:
-        raise CommandError(f"{path}: already exists. Pass --force to overwrite.")
-    path.parent.mkdir(parents=True, exist_ok=True)
-    project_name = project or repo_root.name
-    _save(repo_root, Project(project=project_name, north_star=north_star, last_reviewed=_today()))
+    with _write_context(repo_root) as write_root:
+        path = _tasklist_path(write_root)
+        if path.exists() and not force:
+            raise CommandError(f"{path}: already exists. Pass --force to overwrite.")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        project_name = project or repo_root.name
+        _save(write_root, Project(project=project_name, north_star=north_star, last_reviewed=_today()))
 
 # ───── create ─────
 
@@ -98,48 +145,51 @@ def cmd_create_phase(
     spec: str | None = None, plan: str | None = None,
     planning: str | None = None,
 ) -> str:
-    p = _load(repo_root)
-    new_id = next_phase_id(p, repo_root)
-    phase = Phase(
-        id=new_id, title=title, created=_today(),
-        spec_path=spec, plan_path=plan, planning_path=planning,
-    )
-    p.phases.append(phase)
-    _save(repo_root, p)
-    _notify_status(qid=new_id, kind="phase", status=phase.status, title=phase.title)
-    return new_id
+    with _write_context(repo_root) as write_root:
+        p = _load(write_root)
+        new_id = next_phase_id(p, write_root)
+        phase = Phase(
+            id=new_id, title=title, created=_today(),
+            spec_path=spec, plan_path=plan, planning_path=planning,
+        )
+        p.phases.append(phase)
+        _save(write_root, p)
+        _notify_status(qid=new_id, kind="phase", status=phase.status, title=phase.title)
+        return new_id
 
 def cmd_create_slice(
     *, repo_root: Path, phase_id: str, title: str,
     follow_up: str | None = None, plan: str | None = None,
     depends_on: list[str] | None = None, parallel_group: str | None = None,
 ) -> str:
-    p = _load(repo_root)
-    phase = next((ph for ph in p.phases if ph.id == phase_id), None)
-    if phase is None:
-        raise CommandError(f"phase {phase_id} not found")
-    if follow_up is None:
-        new_id = next_slice_id(p, phase_id, repo_root)
-    else:
-        new_id = next_followup_letter(p, phase_id, follow_up, repo_root)
-    deps = [_resolve_dependency_id(p, dep) for dep in (depends_on or [])]
-    slc = Slice(
-        id=new_id, title=title, created=_today(), plan_path=plan,
-        depends_on=deps, parallel_group=parallel_group,
-    )
-    phase.slices.append(slc)
-    _save(repo_root, p)
-    _notify_status(qid=f"{phase_id}.{new_id}", kind="slice", status=slc.status, title=slc.title)
-    return new_id
+    with _write_context(repo_root) as write_root:
+        p = _load(write_root)
+        phase = next((ph for ph in p.phases if ph.id == phase_id), None)
+        if phase is None:
+            raise CommandError(f"phase {phase_id} not found")
+        if follow_up is None:
+            new_id = next_slice_id(p, phase_id, write_root)
+        else:
+            new_id = next_followup_letter(p, phase_id, follow_up, write_root)
+        deps = [_resolve_dependency_id(p, dep) for dep in (depends_on or [])]
+        slc = Slice(
+            id=new_id, title=title, created=_today(), plan_path=plan,
+            depends_on=deps, parallel_group=parallel_group,
+        )
+        phase.slices.append(slc)
+        _save(write_root, p)
+        _notify_status(qid=f"{phase_id}.{new_id}", kind="slice", status=slc.status, title=slc.title)
+        return new_id
 
 def cmd_create_cross(*, repo_root: Path, title: str) -> str:
-    p = _load(repo_root)
-    new_id = next_cross_id(p, repo_root)
-    item = CrossCutting(id=new_id, title=title, created=_today())
-    p.cross_cutting.append(item)
-    _save(repo_root, p)
-    _notify_status(qid=new_id, kind="cross", status=item.status, title=item.title)
-    return new_id
+    with _write_context(repo_root) as write_root:
+        p = _load(write_root)
+        new_id = next_cross_id(p, write_root)
+        item = CrossCutting(id=new_id, title=title, created=_today())
+        p.cross_cutting.append(item)
+        _save(write_root, p)
+        _notify_status(qid=new_id, kind="cross", status=item.status, title=item.title)
+        return new_id
 
 # ───── set / close / block / unblock ─────
 
@@ -178,19 +228,20 @@ def _resolve_dependency_id(p: Project, id: str) -> str:
 def cmd_create_task(*, repo_root: Path, slice_id: str, title: str) -> str:
     """Now accepts unambiguous short slice IDs via _resolve_id. Replaces the
     fully-qualified-only version from Task 8."""
-    p = _load(repo_root)
-    qid = _resolve_id(p, slice_id)
-    if parse_id(qid)[0] != "slice":
-        raise CommandError(f"task creation requires a slice id, got {slice_id!r} ({parse_id(qid)[0]})")
-    phase_part, slice_part, _ = split_qualified(qid)
-    phase = next(ph for ph in p.phases if ph.id == phase_part)
-    slc = next(s for s in phase.slices if s.id == slice_part)
-    new_id = next_task_id(p, phase_part, slice_part)
-    task = Task(id=new_id, title=title, created=_today())
-    slc.tasks.append(task)
-    _save(repo_root, p)
-    _notify_status(qid=f"{phase_part}.{slice_part}.{new_id}", kind="task", status=task.status, title=task.title)
-    return new_id
+    with _write_context(repo_root) as write_root:
+        p = _load(write_root)
+        qid = _resolve_id(p, slice_id)
+        if parse_id(qid)[0] != "slice":
+            raise CommandError(f"task creation requires a slice id, got {slice_id!r} ({parse_id(qid)[0]})")
+        phase_part, slice_part, _ = split_qualified(qid)
+        phase = next(ph for ph in p.phases if ph.id == phase_part)
+        slc = next(s for s in phase.slices if s.id == slice_part)
+        new_id = next_task_id(p, phase_part, slice_part)
+        task = Task(id=new_id, title=title, created=_today())
+        slc.tasks.append(task)
+        _save(write_root, p)
+        _notify_status(qid=f"{phase_part}.{slice_part}.{new_id}", kind="task", status=task.status, title=task.title)
+        return new_id
 
 def _find_item(p: Project, id: str):
     """Returns (qid, container_list, item). Accepts fully-qualified or unambiguous short.
@@ -227,21 +278,33 @@ def _find_item(p: Project, id: str):
     return qid, phase.slices, slc
 
 def _apply_review_gate(
-    repo_root: Path, p: Project, item, id: str, kind_label: str,
+    invocation_root: Path, write_root: Path, p: Project, item, id: str, kind_label: str,
     reviewer_chain: Path | None, skip_review_gate: bool,
 ) -> None:
     """Mutates item to record reviewer_chain or skip note."""
+    invocation_root = invocation_root.resolve()
     if skip_review_gate:
         ts = _dt.datetime.now().isoformat(timespec="seconds")
         note = f"[{ts}] review gate skipped for {id}"
         item.notes = (item.notes + "\n" + note).strip() if item.notes else note
         return
     gate_kind = "post-slice" if kind_label == "slice" else "post-phase"
+    if reviewer_chain is not None:
+        resolved = (
+            reviewer_chain.resolve()
+            if reviewer_chain.is_absolute()
+            else (invocation_root / reviewer_chain).resolve()
+        )
+        try:
+            resolved.relative_to(invocation_root)
+        except ValueError as exc:
+            raise CommandError(f"reviewer chain is outside repository: {reviewer_chain}") from exc
+        reviewer_chain = resolved
     try:
-        result = check_gate(repo_root, id, gate_kind, explicit=reviewer_chain)
+        result = check_gate(invocation_root, id, gate_kind, explicit=reviewer_chain)
     except GateError as e:
         raise CommandError(f"review gate failed: {e}") from e
-    rel = result.chain.relative_to(repo_root).as_posix()
+    rel = result.chain.resolve().relative_to(invocation_root).as_posix()
     if kind_label == "slice":
         item.reviewer_chain = rel
     else:
@@ -251,19 +314,20 @@ def cmd_set(
     *, repo_root: Path, id: str, status: str,
     reviewer_chain: Path | None = None, skip_review_gate: bool = False,
 ) -> None:
-    p = _load(repo_root)
-    qid, _container, item = _find_item(p, id)
-    new_status = Status(status)
-    kind = parse_id(qid)[0]
-    if new_status == Status.BLOCKED and kind != "slice":
-        raise CommandError(f"only slices can be blocked; {qid} is a {kind}")
-    if new_status == Status.DONE and kind in ("slice", "phase"):
-        _apply_review_gate(repo_root, p, item, qid, kind, reviewer_chain, skip_review_gate)
-    item.status = new_status
-    if new_status == Status.DONE and item.closed is None:
-        item.closed = _today()
-    _save(repo_root, p)
-    _notify_status(qid=qid, kind=kind, status=item.status, title=item.title)
+    with _write_context(repo_root) as write_root:
+        p = _load(write_root)
+        qid, _container, item = _find_item(p, id)
+        new_status = Status(status)
+        kind = parse_id(qid)[0]
+        if new_status == Status.BLOCKED and kind != "slice":
+            raise CommandError(f"only slices can be blocked; {qid} is a {kind}")
+        if new_status == Status.DONE and kind in ("slice", "phase"):
+            _apply_review_gate(repo_root, write_root, p, item, qid, kind, reviewer_chain, skip_review_gate)
+        item.status = new_status
+        if new_status == Status.DONE and item.closed is None:
+            item.closed = _today()
+        _save(write_root, p)
+        _notify_status(qid=qid, kind=kind, status=item.status, title=item.title)
 
 def cmd_close(
     *, repo_root: Path, id: str,
@@ -271,49 +335,52 @@ def cmd_close(
     note: str | None = None,
     reviewer_chain: Path | None = None, skip_review_gate: bool = False,
 ) -> None:
-    p = _load(repo_root)
-    qid, _container, item = _find_item(p, id)
-    kind = parse_id(qid)[0]
-    if kind == "task" or kind == "cross":
-        pass  # no gate; just close
-    elif kind in ("slice", "phase"):
-        _apply_review_gate(repo_root, p, item, qid, kind, reviewer_chain, skip_review_gate)
-    else:
-        raise CommandError(f"cannot close {kind} {qid}")
-    item.status = Status.DONE
-    item.closed = closed_date or _today()
-    if refs:
-        for r in refs:
-            if r not in item.refs:
-                item.refs.append(r)
-    if note:
-        item.notes = (item.notes + "\n" + note).strip() if item.notes else note
-    _save(repo_root, p)
-    _notify_status(qid=qid, kind=kind, status=item.status, title=item.title)
+    with _write_context(repo_root) as write_root:
+        p = _load(write_root)
+        qid, _container, item = _find_item(p, id)
+        kind = parse_id(qid)[0]
+        if kind == "task" or kind == "cross":
+            pass  # no gate; just close
+        elif kind in ("slice", "phase"):
+            _apply_review_gate(repo_root, write_root, p, item, qid, kind, reviewer_chain, skip_review_gate)
+        else:
+            raise CommandError(f"cannot close {kind} {qid}")
+        item.status = Status.DONE
+        item.closed = closed_date or _today()
+        if refs:
+            for r in refs:
+                if r not in item.refs:
+                    item.refs.append(r)
+        if note:
+            item.notes = (item.notes + "\n" + note).strip() if item.notes else note
+        _save(write_root, p)
+        _notify_status(qid=qid, kind=kind, status=item.status, title=item.title)
 
 def cmd_block(*, repo_root: Path, slice_id: str, on: str) -> None:
-    p = _load(repo_root)
-    if not is_slice_id(slice_id):
-        raise CommandError(f"block only works on slices; {slice_id} is a {kind_of(slice_id)}")
-    _qid, _container, item = _find_item(p, slice_id)
-    if on.startswith("external:"):
-        item.blocked_on = BlockedOn(kind="external", value=on[len("external:"):])
-    else:
-        parse_id(on)  # validate
-        item.blocked_on = BlockedOn(kind="id", value=on)
-    item.status = Status.BLOCKED
-    _save(repo_root, p)
-    _notify_status(qid=_qid, kind="slice", status=item.status, title=item.title)
+    with _write_context(repo_root) as write_root:
+        p = _load(write_root)
+        if not is_slice_id(slice_id):
+            raise CommandError(f"block only works on slices; {slice_id} is a {kind_of(slice_id)}")
+        _qid, _container, item = _find_item(p, slice_id)
+        if on.startswith("external:"):
+            item.blocked_on = BlockedOn(kind="external", value=on[len("external:"):])
+        else:
+            parse_id(on)  # validate
+            item.blocked_on = BlockedOn(kind="id", value=on)
+        item.status = Status.BLOCKED
+        _save(write_root, p)
+        _notify_status(qid=_qid, kind="slice", status=item.status, title=item.title)
 
 def cmd_unblock(*, repo_root: Path, slice_id: str, resume: bool = False) -> None:
-    p = _load(repo_root)
-    if not is_slice_id(slice_id):
-        raise CommandError(f"unblock only works on slices; {slice_id} is a {kind_of(slice_id)}")
-    _qid, _container, item = _find_item(p, slice_id)
-    item.blocked_on = None
-    item.status = Status.IN_PROGRESS if resume else Status.READY
-    _save(repo_root, p)
-    _notify_status(qid=_qid, kind="slice", status=item.status, title=item.title)
+    with _write_context(repo_root) as write_root:
+        p = _load(write_root)
+        if not is_slice_id(slice_id):
+            raise CommandError(f"unblock only works on slices; {slice_id} is a {kind_of(slice_id)}")
+        _qid, _container, item = _find_item(p, slice_id)
+        item.blocked_on = None
+        item.status = Status.IN_PROGRESS if resume else Status.READY
+        _save(write_root, p)
+        _notify_status(qid=_qid, kind="slice", status=item.status, title=item.title)
 
 def cmd_deps(
     *, repo_root: Path, slice_id: str,
@@ -321,37 +388,40 @@ def cmd_deps(
 ) -> None:
     if (add is None) == (remove is None):
         raise CommandError("cmd_deps requires exactly one of add/remove")
-    p = _load(repo_root)
-    qid, _container, item = _find_item(p, slice_id)
-    if parse_id(qid)[0] != "slice":
-        raise CommandError(f"deps only works on slices; {qid} is a {parse_id(qid)[0]}")
-    dep = _resolve_dependency_id(p, add or remove or "")
-    if add is not None and dep not in item.depends_on:
-        item.depends_on.append(dep)
-    elif remove is not None and dep in item.depends_on:
-        item.depends_on.remove(dep)
-    _save(repo_root, p)
+    with _write_context(repo_root) as write_root:
+        p = _load(write_root)
+        qid, _container, item = _find_item(p, slice_id)
+        if parse_id(qid)[0] != "slice":
+            raise CommandError(f"deps only works on slices; {qid} is a {parse_id(qid)[0]}")
+        dep = _resolve_dependency_id(p, add or remove or "")
+        if add is not None and dep not in item.depends_on:
+            item.depends_on.append(dep)
+        elif remove is not None and dep in item.depends_on:
+            item.depends_on.remove(dep)
+        _save(write_root, p)
 
 def cmd_ratify(
     *, repo_root: Path, slice_id: str,
     status: str = "ratified", parallel_group: str | None = None,
 ) -> None:
-    p = _load(repo_root)
-    qid, _container, item = _find_item(p, slice_id)
-    if parse_id(qid)[0] != "slice":
-        raise CommandError(f"ratify only works on slices; {qid} is a {parse_id(qid)[0]}")
-    item.planning_status = PlanningStatus(status)
-    if parallel_group is not None:
-        item.parallel_group = parallel_group or None
-    _save(repo_root, p)
+    with _write_context(repo_root) as write_root:
+        p = _load(write_root)
+        qid, _container, item = _find_item(p, slice_id)
+        if parse_id(qid)[0] != "slice":
+            raise CommandError(f"ratify only works on slices; {qid} is a {parse_id(qid)[0]}")
+        item.planning_status = PlanningStatus(status)
+        if parallel_group is not None:
+            item.parallel_group = parallel_group or None
+        _save(write_root, p)
 
 def cmd_phase_planning_path(*, repo_root: Path, phase_id: str, path: str | None) -> None:
-    p = _load(repo_root)
-    qid, _container, item = _find_item(p, phase_id)
-    if parse_id(qid)[0] != "phase":
-        raise CommandError(f"planning-path only works on phases; {qid} is a {parse_id(qid)[0]}")
-    item.planning_path = path
-    _save(repo_root, p)
+    with _write_context(repo_root) as write_root:
+        p = _load(write_root)
+        qid, _container, item = _find_item(p, phase_id)
+        if parse_id(qid)[0] != "phase":
+            raise CommandError(f"planning-path only works on phases; {qid} is a {parse_id(qid)[0]}")
+        item.planning_path = path
+        _save(write_root, p)
 
 # ───── note / ref / title ─────
 
@@ -361,13 +431,14 @@ def cmd_note(
 ) -> None:
     if (append is None) == (replace is None):
         raise CommandError("cmd_note requires exactly one of append/replace")
-    p = _load(repo_root)
-    _qid, _container, item = _find_item(p, id)
-    if append is not None:
-        item.notes = (item.notes + "\n" + append).strip() if item.notes else append
-    else:
-        item.notes = replace or ""
-    _save(repo_root, p)
+    with _write_context(repo_root) as write_root:
+        p = _load(write_root)
+        _qid, _container, item = _find_item(p, id)
+        if append is not None:
+            item.notes = (item.notes + "\n" + append).strip() if item.notes else append
+        else:
+            item.notes = replace or ""
+        _save(write_root, p)
 
 def cmd_ref(
     *, repo_root: Path, id: str,
@@ -375,21 +446,23 @@ def cmd_ref(
 ) -> None:
     if (add is None) == (remove is None):
         raise CommandError("cmd_ref requires exactly one of add/remove")
-    p = _load(repo_root)
-    qid, _container, item = _find_item(p, id)
-    if not hasattr(item, "refs"):
-        raise CommandError(f"{qid}: this item kind does not have refs")
-    if add is not None and add not in item.refs:
-        item.refs.append(add)
-    elif remove is not None and remove in item.refs:
-        item.refs.remove(remove)
-    _save(repo_root, p)
+    with _write_context(repo_root) as write_root:
+        p = _load(write_root)
+        qid, _container, item = _find_item(p, id)
+        if not hasattr(item, "refs"):
+            raise CommandError(f"{qid}: this item kind does not have refs")
+        if add is not None and add not in item.refs:
+            item.refs.append(add)
+        elif remove is not None and remove in item.refs:
+            item.refs.remove(remove)
+        _save(write_root, p)
 
 def cmd_title(*, repo_root: Path, id: str, new: str) -> None:
-    p = _load(repo_root)
-    _qid, _container, item = _find_item(p, id)
-    item.title = new
-    _save(repo_root, p)
+    with _write_context(repo_root) as write_root:
+        p = _load(write_root)
+        _qid, _container, item = _find_item(p, id)
+        item.title = new
+        _save(write_root, p)
 
 # ───── show / list / next-id ─────
 
@@ -625,6 +698,30 @@ def cmd_validate(
     normalise: bool = False,
     check_orphans: list[str] | None = None,
 ) -> tuple[int, str]:
+    if normalise:
+        with _write_context(repo_root) as write_root:
+            return _cmd_validate_at_root(
+                repo_root=write_root,
+                format=format,
+                strict_format=strict_format,
+                normalise=normalise,
+                check_orphans=check_orphans,
+            )
+    return _cmd_validate_at_root(
+        repo_root=repo_root,
+        format=format,
+        strict_format=strict_format,
+        normalise=normalise,
+        check_orphans=check_orphans,
+    )
+
+def _cmd_validate_at_root(
+    *, repo_root: Path,
+    format: str,
+    strict_format: bool,
+    normalise: bool,
+    check_orphans: list[str] | None,
+) -> tuple[int, str]:
     from tasktool.validate import (
         validate_project, ValidationError, strict_format_check, normalise_file,
         find_path_warnings, validate_orphan_filenames,
@@ -685,12 +782,13 @@ def cmd_import(
     warnings_text = "\n".join(result.warnings)
     if dry_run:
         return 0, dumps_canonical(result.project), warnings_text
-    target = _tasklist_path(repo_root)
-    if target.exists() and not force:
-        raise CommandError(f"{target}: already exists. Pass --force to overwrite.")
-    target.parent.mkdir(parents=True, exist_ok=True)
-    _save(repo_root, result.project)
-    return 0, f"wrote {target}\n", warnings_text
+    with _write_context(repo_root) as write_root:
+        target = _tasklist_path(write_root)
+        if target.exists() and not force:
+            raise CommandError(f"{target}: already exists. Pass --force to overwrite.")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        _save(write_root, result.project)
+        return 0, f"wrote {target}\n", warnings_text
 
 def cmd_render(*, repo_root: Path, format: str = "markdown") -> str:
     from tasktool.render import render_project
@@ -716,11 +814,29 @@ def cmd_archive_phase(
     refuses if any slice is not done; applies post-phase review gate; writes
     docs/archived-tasks/<pid>-<slug>.md containing a summary + canonical JSON;
     moves phase from project.phases to project.archived_phases."""
+    with _write_context(repo_root) as write_root:
+        _cmd_archive_phase_at_root(
+            invocation_root=repo_root,
+            write_root=write_root,
+            phase_id=phase_id,
+            reviewer_chain=reviewer_chain,
+            skip_review_gate=skip_review_gate,
+        )
+
+def _cmd_archive_phase_at_root(
+    *,
+    invocation_root: Path,
+    write_root: Path,
+    phase_id: str,
+    reviewer_chain: Path | None,
+    skip_review_gate: bool,
+) -> None:
+    """Archive a completed phase after the caller has selected the write root."""
     import sys as _sys
     from tasktool.model import ArchivedPhase
     from tasktool.serialize import dumps_canonical
 
-    p = _load(repo_root)
+    p = _load(write_root)
     phase = next((ph for ph in p.phases if ph.id == phase_id), None)
     if phase is None:
         raise CommandError(f"phase {phase_id} not found")
@@ -731,7 +847,7 @@ def cmd_archive_phase(
         )
     if skip_review_gate:
         print(f"warning: review gate skipped for {phase_id}", file=_sys.stderr)
-    _apply_review_gate(repo_root, p, phase, phase_id, "phase",
+    _apply_review_gate(invocation_root, write_root, p, phase, phase_id, "phase",
                        reviewer_chain, skip_review_gate)
     if phase.status != Status.DONE:
         phase.status = Status.DONE
@@ -739,7 +855,7 @@ def cmd_archive_phase(
 
     slug = _slugify(phase.title)
     archive_rel = f"docs/archived-tasks/{phase_id}-{slug}.md"
-    archive_path = repo_root / archive_rel
+    archive_path = write_root / archive_rel
 
     # Build archive content in memory (no disk side effects yet).
     sub_project = Project(project=p.project)
@@ -784,8 +900,8 @@ def cmd_archive_phase(
     # Now write.
     archive_path.parent.mkdir(parents=True, exist_ok=True)
     archive_path.write_text(summary_text, encoding="utf-8")
-    _save(repo_root, p)
-    _git_stage(repo_root, archive_path)
+    _save(write_root, p)
+    _git_stage(write_root, archive_path)
     _notify_status(qid=phase_id, kind="phase", status=Status.DONE, title=phase.title)
 
 def cmd_brief(*, repo_root: Path, id: str) -> str:
