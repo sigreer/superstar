@@ -74,11 +74,6 @@ def has_unmerged_paths(root: Path) -> bool:
     return bool(out)
 
 
-def tasklist_dirty(root: Path) -> bool:
-    result = _git(root, "status", "--porcelain", "--", "docs/tasklist.json", check=False)
-    return bool(result.stdout.strip())
-
-
 def tasklist_has_unsafe_dirty_state(root: Path) -> bool:
     """Return True when tasklist has unstaged changes.
 

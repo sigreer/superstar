@@ -56,11 +56,29 @@ def test_same_repository_true_for_linked_worktree(tmp_path):
     assert same_repository(root, worker)
 
 
+def test_same_repository_false_for_unrelated_repos(tmp_path):
+    left_parent = tmp_path / "left"
+    right_parent = tmp_path / "right"
+    left_parent.mkdir()
+    right_parent.mkdir()
+    left = _repo(left_parent)
+    right = _repo(right_parent)
+    assert same_repository(left, right) is False
+
+
 def test_find_authoritative_root_uses_branch_worktree(tmp_path):
     root = _repo(tmp_path)
     worker = tmp_path / "worker"
     _git(root, "worktree", "add", "-b", "worker", str(worker))
     assert find_authoritative_root(worker, branch="main") == root
+
+
+def test_find_authoritative_root_uses_env_override(tmp_path, monkeypatch):
+    root = _repo(tmp_path)
+    worker = tmp_path / "worker"
+    _git(root, "worktree", "add", "-b", "worker", str(worker))
+    monkeypatch.setenv("TASKTOOL_AUTHORITY_ROOT", str(root))
+    assert find_authoritative_root(worker, branch="missing") == root
 
 
 def test_find_authoritative_root_fails_closed_when_missing(tmp_path):

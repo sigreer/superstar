@@ -380,3 +380,15 @@ def test_config_init_authority_writes_project_config(tmp_path):
     assert data["tasklist"]["mutation_mode"] == "authoritative-checkout"
     assert "authoritative_root" not in data["tasklist"]
     assert data["tasklist"]["authoritative_branch"] == "main"
+
+
+def test_config_init_authority_rejects_wrong_checkout_branch(tmp_path):
+    subprocess.run(["git", "init", "-b", "feature"], cwd=tmp_path, check=True, text=True, capture_output=True)
+    r = run_cli(
+        "config", "init-authority",
+        "--branch", "main",
+        cwd=tmp_path,
+    )
+    assert r.returncode == 1
+    assert "expected branch main" in r.stderr
+    assert not (tmp_path / ".tasktool" / "config.json").exists()

@@ -20,6 +20,7 @@ from tasktool.notify import notify_tasktool_status
 from tasktool.worktree import (
     AuthorityError,
     find_authoritative_root,
+    git_current_branch,
     tasklist_has_unsafe_dirty_state,
     tasktool_lock,
     validate_authoritative_checkout,
@@ -76,10 +77,10 @@ def _notify_status(*, qid: str, kind: str, status: Status, title: str) -> None:
     except Exception:
         pass
 
-def _resolve_write_root(repo_root: Path) -> tuple[Path, bool, str]:
+def _resolve_write_root(repo_root: Path) -> tuple[Path, bool, str, str]:
     cfg = load_config(repo_root)
     if cfg.tasklist.mutation_mode == "local":
-        return repo_root, False, cfg.tasklist.mutation_mode
+        return repo_root, False, cfg.tasklist.mutation_mode, cfg.tasklist.authoritative_branch
     try:
         authoritative = find_authoritative_root(repo_root, branch=cfg.tasklist.authoritative_branch)
         validate_authoritative_checkout(
@@ -89,14 +90,24 @@ def _resolve_write_root(repo_root: Path) -> tuple[Path, bool, str]:
         )
     except AuthorityError as exc:
         raise CommandError(str(exc)) from exc
-    return authoritative, repo_root.resolve() != authoritative.resolve(), cfg.tasklist.mutation_mode
+    return (
+        authoritative,
+        repo_root.resolve() != authoritative.resolve(),
+        cfg.tasklist.mutation_mode,
+        cfg.tasklist.authoritative_branch,
+    )
 
 @contextmanager
 def _write_context(repo_root: Path):
-    write_root, routed, mode = _resolve_write_root(repo_root)
+    write_root, routed, mode, authoritative_branch = _resolve_write_root(repo_root)
     if mode == "authoritative-checkout":
         try:
             with tasktool_lock(repo_root):
+                validate_authoritative_checkout(
+                    write_root,
+                    expected_branch=authoritative_branch,
+                    caller_root=repo_root,
+                )
                 if tasklist_has_unsafe_dirty_state(write_root):
                     raise CommandError(
                         "authoritative docs/tasklist.json has unstaged changes; "
@@ -116,6 +127,12 @@ def _write_context(repo_root: Path):
 # ───── config ─────
 
 def cmd_config_init_authority(*, repo_root: Path, branch: str) -> None:
+    try:
+        current_branch = git_current_branch(repo_root)
+    except Exception:
+        current_branch = ""
+    if current_branch and current_branch != branch:
+        raise CommandError(f"current checkout is on {current_branch!r}; expected branch {branch}")
     cfg = TasktoolConfig(
         tasklist=TasklistConfig(
             mutation_mode="authoritative-checkout",
@@ -278,7 +295,7 @@ def _find_item(p: Project, id: str):
     return qid, phase.slices, slc
 
 def _apply_review_gate(
-    invocation_root: Path, write_root: Path, p: Project, item, id: str, kind_label: str,
+    invocation_root: Path, item, id: str, kind_label: str,
     reviewer_chain: Path | None, skip_review_gate: bool,
 ) -> None:
     """Mutates item to record reviewer_chain or skip note."""
@@ -322,7 +339,7 @@ def cmd_set(
         if new_status == Status.BLOCKED and kind != "slice":
             raise CommandError(f"only slices can be blocked; {qid} is a {kind}")
         if new_status == Status.DONE and kind in ("slice", "phase"):
-            _apply_review_gate(repo_root, write_root, p, item, qid, kind, reviewer_chain, skip_review_gate)
+            _apply_review_gate(repo_root, item, qid, kind, reviewer_chain, skip_review_gate)
         item.status = new_status
         if new_status == Status.DONE and item.closed is None:
             item.closed = _today()
@@ -342,7 +359,7 @@ def cmd_close(
         if kind == "task" or kind == "cross":
             pass  # no gate; just close
         elif kind in ("slice", "phase"):
-            _apply_review_gate(repo_root, write_root, p, item, qid, kind, reviewer_chain, skip_review_gate)
+            _apply_review_gate(repo_root, item, qid, kind, reviewer_chain, skip_review_gate)
         else:
             raise CommandError(f"cannot close {kind} {qid}")
         item.status = Status.DONE
@@ -847,7 +864,7 @@ def _cmd_archive_phase_at_root(
         )
     if skip_review_gate:
         print(f"warning: review gate skipped for {phase_id}", file=_sys.stderr)
-    _apply_review_gate(invocation_root, write_root, p, phase, phase_id, "phase",
+    _apply_review_gate(invocation_root, phase, phase_id, "phase",
                        reviewer_chain, skip_review_gate)
     if phase.status != Status.DONE:
         phase.status = Status.DONE

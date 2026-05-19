@@ -244,7 +244,7 @@
           "planning_status": "ratified",
           "refs": [],
           "reviewer_chain": null,
-          "status": "ready",
+          "status": "in_progress",
           "tasks": [],
           "title": "Authoritative tasklist mutations"
         },
