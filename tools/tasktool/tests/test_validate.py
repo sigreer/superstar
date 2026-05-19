@@ -249,6 +249,13 @@ class SchemaEnumTests(unittest.TestCase):
         phase_props = self._find_kind(schema, r"^P\d+$")
         self.assertIn("planning_path", phase_props)
 
+    def test_lifecycle_items_include_started_date(self):
+        schema = self._get_schema()
+        for pattern in (r"^T\d+$", r"^S\d+", r"^P\d+$", r"^X\d+$"):
+            props = self._find_kind(schema, pattern)
+            self.assertIsNotNone(props)
+            self.assertEqual(props["started"]["oneOf"][0]["pattern"], r"^\d{4}-\d{2}-\d{2}$")
+
     def test_cross_status_has_no_blocked(self):
         """Cross-cutting status enum must not contain 'blocked'."""
         schema = self._get_schema()

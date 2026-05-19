@@ -53,6 +53,8 @@ def brief(p: Project, qid: str) -> str:
         assert ph is not None
         lines.append(f"# {qid} — {item.title}")
         lines.append(f"status: {item.status.value}")
+        if item.started:
+            lines.append(f"started: {item.started}")
         if item.plan_path:
             lines.append(f"plan: {item.plan_path}")
         if item.depends_on:
@@ -79,6 +81,8 @@ def brief(p: Project, qid: str) -> str:
         assert isinstance(item, Phase)
         lines.append(f"# {qid} — {item.title}")
         lines.append(f"status: {item.status.value}")
+        if item.started:
+            lines.append(f"started: {item.started}")
         if item.spec_path:
             lines.append(f"spec: {item.spec_path}")
         if item.plan_path:
@@ -90,14 +94,17 @@ def brief(p: Project, qid: str) -> str:
         for s in item.slices:
             deps = f" deps={','.join(s.depends_on)}" if s.depends_on else ""
             group = f" group={s.parallel_group}" if s.parallel_group else ""
+            started = f" started={s.started}" if s.started else ""
             lines.append(
-                f"  {s.id}  [{s.status.value}] planning={s.planning_status.value}"
+                f"  {s.id}  [{s.status.value}]{started} planning={s.planning_status.value}"
                 f"{group}{deps}  {s.title}"
             )
     elif kind == "task":
         assert isinstance(item, Task)
         lines.append(f"# {qid} — {item.title}")
         lines.append(f"status: {item.status.value}")
+        if item.started:
+            lines.append(f"started: {item.started}")
         if item.notes:
             lines.append(f"notes:\n{item.notes}")
         s = _slice_for(p, qid)
@@ -108,6 +115,8 @@ def brief(p: Project, qid: str) -> str:
         assert isinstance(item, CrossCutting)
         lines.append(f"# {qid} — {item.title}")
         lines.append(f"status: {item.status.value}")
+        if item.started:
+            lines.append(f"started: {item.started}")
         if item.refs:
             lines.append("refs:")
             for r in item.refs:

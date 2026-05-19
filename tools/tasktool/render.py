@@ -31,6 +31,10 @@ def _phase_tag(ph: Phase) -> str:
         return " `IN PROGRESS`"
     return ""
 
+def _started_part(item) -> str:
+    started = getattr(item, "started", None)
+    return f" Started: {started}." if started else ""
+
 def render_project(p: Project) -> str:
     lines: list[str] = [f"# {p.project}", ""]
     if p.last_reviewed:
@@ -40,6 +44,9 @@ def render_project(p: Project) -> str:
     for ph in p.phases:
         lines.append(f"## {ph.id} — {ph.title} {_non_slice_emoji(ph.status)}{_phase_tag(ph)}")
         lines.append("")
+        if ph.started:
+            lines.append(f"Started: {ph.started}.")
+            lines.append("")
         if ph.spec_path or ph.plan_path:
             spec = f"[`{ph.spec_path}`]({ph.spec_path})" if ph.spec_path else "_none_"
             plan = f"[`{ph.plan_path}`]({ph.plan_path})" if ph.plan_path else "_pending_"
@@ -56,13 +63,13 @@ def render_project(p: Project) -> str:
             planning_part = f" Planning: `{s.planning_status.value}`."
             lines.append(
                 f"- {STATUS_EMOJI[s.status]} **{s.id}**{_slice_tag(s)} — "
-                f"{title}.{planning_part}{group_part}{dep_part}{plan_part}"
+                f"{title}.{_started_part(s)}{planning_part}{group_part}{dep_part}{plan_part}"
             )
         lines.append("")
     if p.cross_cutting:
         lines += ["## Cross-cutting (`X*`)", ""]
         for c in p.cross_cutting:
-            lines.append(f"- {_non_slice_emoji(c.status)} **{c.id}** — {c.title}.")
+            lines.append(f"- {_non_slice_emoji(c.status)} **{c.id}** — {c.title}.{_started_part(c)}")
         lines.append("")
     if p.archived_phases:
         lines += ["## Archived phases", ""]

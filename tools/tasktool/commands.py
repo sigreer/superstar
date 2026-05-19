@@ -491,6 +491,8 @@ def cmd_show(*, repo_root: Path, id: str) -> str:
     p = _load(repo_root)
     qid, _container, item = _find_item(p, id)
     lines = [f"# {qid} — {item.title}", f"status: {item.status.value}"]
+    if getattr(item, "started", None):
+        lines.append(f"started: {item.started}")
     if getattr(item, "closed", None):
         lines.append(f"closed: {item.closed}")
     if getattr(item, "blocked_on", None):

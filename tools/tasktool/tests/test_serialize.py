@@ -73,3 +73,23 @@ class DiskIOTests(unittest.TestCase):
             save_project(p, path)
             on_disk = path.read_text(encoding="utf-8")
             self.assertEqual(on_disk, dumps_canonical(p))
+
+def test_started_field_round_trips_on_slice():
+    text = """{
+      "project": "demo",
+      "schema_version": 1,
+      "phases": [{
+        "id": "P1",
+        "title": "Phase",
+        "created": "2026-05-19",
+        "slices": [{
+          "id": "S1",
+          "title": "Slice",
+          "created": "2026-05-19",
+          "started": "2026-05-19"
+        }]
+      }]
+    }"""
+    p = loads_project(text)
+    assert p.phases[0].slices[0].started == "2026-05-19"
+    assert '"started": "2026-05-19"' in dumps_canonical(p)

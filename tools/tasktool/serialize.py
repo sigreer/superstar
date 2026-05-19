@@ -29,6 +29,7 @@ def from_dict(d: dict) -> Project:
     def _task(td):
         return Task(
             id=td["id"], title=td["title"], created=td["created"],
+            started=td.get("started"),
             status=_status(td.get("status", "ready")),
             closed=td.get("closed"),
             refs=list(td.get("refs", [])),
@@ -39,6 +40,7 @@ def from_dict(d: dict) -> Project:
     def _slice(sd):
         return Slice(
             id=sd["id"], title=sd["title"], created=sd["created"],
+            started=sd.get("started"),
             status=_status(sd.get("status", "ready")),
             closed=sd.get("closed"),
             blocked_on=_blocked(sd.get("blocked_on")),
@@ -54,6 +56,7 @@ def from_dict(d: dict) -> Project:
     def _phase(pd):
         return Phase(
             id=pd["id"], title=pd["title"], created=pd["created"],
+            started=pd.get("started"),
             status=_status(pd.get("status", "ready")),
             closed=pd.get("closed"),
             spec_path=pd.get("spec_path"),
@@ -66,6 +69,7 @@ def from_dict(d: dict) -> Project:
     def _cross(xd):
         return CrossCutting(
             id=xd["id"], title=xd["title"], created=xd["created"],
+            started=xd.get("started"),
             status=_status(xd.get("status", "ready")),
             closed=xd.get("closed"),
             refs=list(xd.get("refs", [])),

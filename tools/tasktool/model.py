@@ -26,6 +26,7 @@ class Task:
     id: str
     title: str
     created: str
+    started: str | None = None
     status: Status = Status.READY
     closed: str | None = None
     refs: list[str] = field(default_factory=list)
@@ -36,6 +37,7 @@ class Slice:
     id: str
     title: str
     created: str
+    started: str | None = None
     status: Status = Status.READY
     closed: str | None = None
     blocked_on: BlockedOn | None = None
@@ -53,6 +55,7 @@ class Phase:
     id: str
     title: str
     created: str
+    started: str | None = None
     status: Status = Status.READY
     closed: str | None = None
     spec_path: str | None = None
@@ -67,6 +70,7 @@ class CrossCutting:
     id: str
     title: str
     created: str
+    started: str | None = None
     status: Status = Status.READY
     closed: str | None = None
     refs: list[str] = field(default_factory=list)
