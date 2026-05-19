@@ -1,0 +1,37 @@
+1. Findings
+
+F1. Severity: blocking — The plan does not implement the spec’s dirty authoritative-tasklist guard. The spec requires validating that `authoritative_root/docs/tasklist.json` is not dirty before mutation (`docs/specs/2026-05-19-p4-tasktool-coordination-lifecycle-design.md:96-100`). The plan defines `tasklist_dirty()` but then explicitly defers the decision (`docs/plans/2026-05-19-p4-tasktool-coordination-lifecycle.md:391-393`, `439-451`) and the routing helper never uses it (`554-583`). That allows a routed command to load, rewrite, and stage unrelated dirty tasklist edits in the authoritative checkout, which is exactly the collision/attribution problem P4 is meant to prevent.
+
+F2. Severity: important — The routing verification is too narrow for the command surface the spec names. The spec includes `init`, all `create`, `block`, `unblock`, `deps`, `ratify`, `planning-path`, `note`, `ref`, `title`, `archive-phase`, `import`, and `validate --normalise` (`docs/specs/...design.md:65-85`), but the plan’s concrete routed tests cover only `set`, `close`, and later `start` (`docs/plans/...lifecycle.md:498-531`, `634-667`, `927-940`). This is risky because existing commands have command-specific side effects: `archive-phase` writes and stages `docs/archived-tasks/...` in addition to saving tasklist state (`tools/tasktool/commands.py:698-775`). A generic “wrap every mutating command” instruction (`docs/plans/...lifecycle.md:585-595`) is not enough to catch missed or mis-rooted side effects.
+
+F3. Severity: important — The plan’s own P4.S2 closeout is likely to fail after lifecycle enforcement lands. P4.S2 creates `tasktool start` in Task 5 (`docs/plans/...lifecycle.md:809-920`) and enforces “slice must be started before close” in Task 6 (`995-1023`), but the P4.S2 closeout calls `tasktool close P4.S2` without any preceding `tasktool start P4.S2` (`1157-1161`). Add an explicit self-start step once the command exists, before enabling or relying on the close guard.
+
+F4. Severity: minor — The new git-worktree tests commit without configuring git identity. `_repo()` runs `git commit` directly (`docs/plans/...lifecycle.md:268-275`), and `_seed_tasktool_repo()` commits again (`494-503`). The repo’s existing pytest autouse fixture only disables notifications (`tools/tasktool/tests/conftest.py:6-8`), while existing git-commit tests configure `user.email`/`user.name` locally. In clean CI or a fresh developer machine, these tests can fail before exercising tasktool behavior.
+
+2. Open questions / assumptions
+
+- Should dirty authoritative `docs/tasklist.json` be a hard failure whenever it is dirty before command load, or should the implementation allow already-staged canonical tasktool changes? The spec says “not dirty in a way that cannot be attributed,” but the plan needs an executable rule.
+- Should `archive-phase` route only tasklist writes, or should its archive markdown artifact also be created/staged in the authoritative checkout? The current command shape makes this decision necessary.
+
+3. Suggested document edits
+
+- Add a P4.S1 task that implements and tests authoritative tasklist dirty-state refusal before loading/mutating the project.
+- Add a routing test matrix for every spec-listed mutating command, with special tests for `archive-phase`, `import`, and `validate --normalise`.
+- Add `tasktool start P4.S2` to the P4.S2 execution/closeout sequence after Task 5 succeeds.
+- Update `_repo()` or a shared fixture in the planned tests to configure git `user.email` and `user.name`.
+
+4. Verification gaps / commands
+
+The plan should add targeted tests beyond the current suite:
+
+```sh
+python -m pytest tools/tasktool/tests/test_worktree_authority.py -v
+python -m pytest tools/tasktool/tests/test_lifecycle_start.py -v
+python -m pytest tools/tasktool/tests/test_cli_integration.py -v
+tasktool validate --strict-format
+```
+
+Add explicit test cases for dirty authoritative tasklist refusal, routed `archive-phase`, routed `validate --normalise`, routed `import`, and at least one routed create/update command outside `set`/`close`.
+
+5. Overall verdict: revise
+

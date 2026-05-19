@@ -1,0 +1,100 @@
+{
+  "schema_version": 1,
+  "chain": "p4-tasktool-coordination-lifecycle-design-spec",
+  "kind": "spec",
+  "target": "docs/specs/2026-05-19-p4-tasktool-coordination-lifecycle-design.md",
+  "work_id": null,
+  "legacy_migrated": false,
+  "rounds": [
+    {
+      "round": 1,
+      "reviewers": [
+        {
+          "role": "primary",
+          "sweep_group": null,
+          "parent_round": 1,
+          "request": "r1-2026-05-19T2153-request.md",
+          "response": "r1-2026-05-19T2153-response.md",
+          "verdict": "revise",
+          "verdict_valid": true,
+          "returncode": 0,
+          "status": "ok",
+          "provider": "codex",
+          "caller_provider": "unknown",
+          "sandbox": {
+            "repo_root": "/home/simon/Dev/sigreer/skills/superstar",
+            "scratch_dir": "/tmp/superstar-reviewer-p4-tasktool-coordination-lifecycle-design-spec-r1-primary-qze_zxja",
+            "response_dir": "docs/reviewer/p4-tasktool-coordination-lifecycle-design-spec/.reviewer-output/r1-primary",
+            "mode": "workspace-write-with-read-access"
+          }
+        }
+      ],
+      "status": "ok",
+      "returncode": 0,
+      "merged_verdict": "revise",
+      "merged_findings": null,
+      "request": "r1-2026-05-19T2153-request.md",
+      "response": "r1-2026-05-19T2153-response.md",
+      "resolution": null,
+      "resolution_parse_status": null,
+      "resolution_waiver": false,
+      "head_sha_at_request": "f254e4669f7e69620533ac2599db998abc1ed88d",
+      "head_sha_after_round": "f254e4669f7e69620533ac2599db998abc1ed88d",
+      "worktree_dirty_at_request": true,
+      "verdict": "revise",
+      "verdict_valid": true,
+      "findings_count": 4,
+      "blocking_findings_count": 1,
+      "base_ref": null,
+      "base_ref_source": null,
+      "diff_included": false
+    },
+    {
+      "round": 2,
+      "reviewers": [
+        {
+          "role": "primary",
+          "sweep_group": null,
+          "parent_round": 2,
+          "request": "r2-2026-05-19T2200-request.md",
+          "response": "r2-2026-05-19T2200-response.md",
+          "verdict": "ready with small edits",
+          "verdict_valid": true,
+          "returncode": 0,
+          "status": "ok",
+          "provider": "codex",
+          "caller_provider": "unknown",
+          "sandbox": {
+            "repo_root": "/home/simon/Dev/sigreer/skills/superstar",
+            "scratch_dir": "/tmp/superstar-reviewer-p4-tasktool-coordination-lifecycle-design-spec-r2-primary-v0d9gjvt",
+            "response_dir": "docs/reviewer/p4-tasktool-coordination-lifecycle-design-spec/.reviewer-output/r2-primary",
+            "mode": "workspace-write-with-read-access"
+          }
+        }
+      ],
+      "status": "ok",
+      "returncode": 0,
+      "merged_verdict": "ready with small edits",
+      "merged_findings": null,
+      "request": "r2-2026-05-19T2200-request.md",
+      "response": "r2-2026-05-19T2200-response.md",
+      "resolution": "r1-resolution.md",
+      "resolution_parse_status": "unparseable",
+      "resolution_waiver": false,
+      "head_sha_at_request": "f254e4669f7e69620533ac2599db998abc1ed88d",
+      "head_sha_after_round": "f254e4669f7e69620533ac2599db998abc1ed88d",
+      "worktree_dirty_at_request": true,
+      "verdict": "ready with small edits",
+      "verdict_valid": true,
+      "findings_count": 5,
+      "blocking_findings_count": 1,
+      "base_ref": "f254e4669f7e69620533ac2599db998abc1ed88d",
+      "base_ref_source": "auto",
+      "diff_included": true
+    }
+  ],
+  "sweep_checkpoints": {
+    "first-round": "pending",
+    "final-ready": "pending"
+  }
+}

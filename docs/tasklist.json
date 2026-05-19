@@ -222,6 +222,54 @@
       "spec_path": "docs/specs/2026-05-19-p3-phase-planning-design.md",
       "status": "ready",
       "title": "Phase planning workflow"
+    },
+    {
+      "closed": null,
+      "created": "2026-05-19",
+      "id": "P4",
+      "notes": "",
+      "phase_reviewer_chain": null,
+      "plan_path": null,
+      "planning_path": "docs/specs/2026-05-19-p4-tasktool-coordination-lifecycle-design.md",
+      "slices": [
+        {
+          "blocked_on": null,
+          "closed": null,
+          "created": "2026-05-19",
+          "depends_on": [],
+          "id": "S1",
+          "notes": "",
+          "parallel_group": "coordination",
+          "plan_path": null,
+          "planning_status": "ratified",
+          "refs": [],
+          "reviewer_chain": null,
+          "status": "ready",
+          "tasks": [],
+          "title": "Authoritative tasklist mutations"
+        },
+        {
+          "blocked_on": null,
+          "closed": null,
+          "created": "2026-05-19",
+          "depends_on": [
+            "P4.S1"
+          ],
+          "id": "S2",
+          "notes": "",
+          "parallel_group": "lifecycle",
+          "plan_path": null,
+          "planning_status": "ratified",
+          "refs": [],
+          "reviewer_chain": null,
+          "status": "ready",
+          "tasks": [],
+          "title": "Lifecycle status enforcement"
+        }
+      ],
+      "spec_path": null,
+      "status": "ready",
+      "title": "Tasktool coordination and lifecycle authority"
     }
   ],
   "project": "superstar",
