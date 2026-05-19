@@ -3,12 +3,13 @@ import json
 from dataclasses import asdict
 from pathlib import Path
 from tasktool.model import (
-    Project, Phase, Slice, Task, CrossCutting, ArchivedPhase, BlockedOn, Status, SCHEMA_VERSION,
+    Project, Phase, Slice, Task, CrossCutting, ArchivedPhase, BlockedOn,
+    Status, PlanningStatus, SCHEMA_VERSION,
 )
 
 def to_dict(p: Project) -> dict:
     def _coerce(obj):
-        if isinstance(obj, Status):
+        if isinstance(obj, (Status, PlanningStatus)):
             return obj.value
         return obj
     raw = asdict(p)
@@ -23,6 +24,8 @@ def to_dict(p: Project) -> dict:
 def from_dict(d: dict) -> Project:
     def _status(v):
         return Status(v) if isinstance(v, str) else v
+    def _planning_status(v):
+        return PlanningStatus(v) if isinstance(v, str) else v
     def _task(td):
         return Task(
             id=td["id"], title=td["title"], created=td["created"],
@@ -39,6 +42,9 @@ def from_dict(d: dict) -> Project:
             status=_status(sd.get("status", "ready")),
             closed=sd.get("closed"),
             blocked_on=_blocked(sd.get("blocked_on")),
+            depends_on=list(sd.get("depends_on", [])),
+            planning_status=_planning_status(sd.get("planning_status", "proposed")),
+            parallel_group=sd.get("parallel_group"),
             plan_path=sd.get("plan_path"),
             refs=list(sd.get("refs", [])),
             notes=sd.get("notes", ""),
@@ -52,6 +58,7 @@ def from_dict(d: dict) -> Project:
             closed=pd.get("closed"),
             spec_path=pd.get("spec_path"),
             plan_path=pd.get("plan_path"),
+            planning_path=pd.get("planning_path"),
             phase_reviewer_chain=pd.get("phase_reviewer_chain"),
             notes=pd.get("notes", ""),
             slices=[_slice(s) for s in pd.get("slices", [])],

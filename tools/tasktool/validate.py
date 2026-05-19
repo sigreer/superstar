@@ -2,7 +2,7 @@
 from __future__ import annotations
 import re
 from pathlib import Path
-from tasktool.model import Project, Phase, Slice, Task, CrossCutting, Status
+from tasktool.model import Project, Phase, Slice, Task, CrossCutting, Status, PlanningStatus
 from tasktool.serialize import load_project, save_project, dumps_canonical
 from tasktool.ids import parse_id, IdParseError
 
@@ -57,6 +57,10 @@ def _check_task(t: Task, scope: str) -> None:
 
 def _check_slice(s: Slice, scope: str) -> None:
     _check_id(s.id, _SLICE_RE, scope)
+    _require(
+        s.planning_status in set(PlanningStatus),
+        f"{scope}: invalid planning_status {s.planning_status!r}",
+    )
     if s.status == Status.BLOCKED:
         _require(s.blocked_on is not None, f"{scope}: blocked requires blocked_on")
     if s.blocked_on is not None:
@@ -98,11 +102,47 @@ def validate_project(p: Project) -> None:
         _require(ph.id not in seen_phase, f"P*: duplicate phase id {ph.id}")
         seen_phase.add(ph.id)
         _check_phase(ph, ph.id)
+        _check_slice_dependencies(ph)
     seen_cross: set[str] = set()
     for c in p.cross_cutting:
         _require(c.id not in seen_cross, f"X*: duplicate cross id {c.id}")
         seen_cross.add(c.id)
         _check_cross(c, c.id)
+
+def _check_slice_dependencies(ph: Phase) -> None:
+    slice_ids = {f"{ph.id}.{s.id}" for s in ph.slices}
+    graph = {f"{ph.id}.{s.id}": list(s.depends_on) for s in ph.slices}
+    for qid, deps in graph.items():
+        seen_deps: set[str] = set()
+        for dep in deps:
+            try:
+                kind, parsed = parse_id(dep)
+            except IdParseError as e:
+                raise ValidationError(f"{qid}.depends_on: malformed dependency {dep!r}") from e
+            _require(kind == "slice" and "." in parsed,
+                     f"{qid}.depends_on: dependency must be a fully-qualified slice id, got {dep!r}")
+            _require(parsed != qid, f"{qid}.depends_on: slice cannot depend on itself")
+            _require(parsed in slice_ids, f"{qid}.depends_on: unknown slice dependency {dep!r}")
+            _require(parsed not in seen_deps, f"{qid}.depends_on: duplicate dependency {dep!r}")
+            seen_deps.add(parsed)
+
+    visiting: set[str] = set()
+    visited: set[str] = set()
+
+    def visit(node: str, stack: list[str]) -> None:
+        if node in visited:
+            return
+        if node in visiting:
+            cycle = " -> ".join([*stack, node])
+            raise ValidationError(f"{ph.id}.depends_on: cycle detected: {cycle}")
+        visiting.add(node)
+        for dep in graph[node]:
+            visit(dep, [*stack, node])
+        visiting.remove(node)
+        visited.add(node)
+
+    for qid in graph:
+        visit(qid, [])
 
 def find_path_warnings(p: Project, repo_root: Path) -> list[str]:
     """Walk every spec_path / plan_path / refs[] and return a list of warning strings
@@ -116,6 +156,7 @@ def find_path_warnings(p: Project, repo_root: Path) -> list[str]:
     for ph in p.phases:
         _check(ph.spec_path, f"{ph.id}.spec_path")
         _check(ph.plan_path, f"{ph.id}.plan_path")
+        _check(ph.planning_path, f"{ph.id}.planning_path")
         for s in ph.slices:
             _check(s.plan_path, f"{ph.id}.{s.id}.plan_path")
             for r in s.refs:

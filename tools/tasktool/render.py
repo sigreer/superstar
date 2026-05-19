@@ -45,10 +45,19 @@ def render_project(p: Project) -> str:
             plan = f"[`{ph.plan_path}`]({ph.plan_path})" if ph.plan_path else "_pending_"
             lines.append(f"Spec: {spec}. Plan: {plan}.")
             lines.append("")
+        if ph.planning_path:
+            lines.append(f"Phase planning: [`{ph.planning_path}`]({ph.planning_path}).")
+            lines.append("")
         for s in ph.slices:
             title = s.title
             plan_part = f" Plan: [`{s.plan_path}`]({s.plan_path})." if s.plan_path else ""
-            lines.append(f"- {STATUS_EMOJI[s.status]} **{s.id}**{_slice_tag(s)} — {title}.{plan_part}")
+            dep_part = f" Depends on: {', '.join(s.depends_on)}." if s.depends_on else ""
+            group_part = f" Group: `{s.parallel_group}`." if s.parallel_group else ""
+            planning_part = f" Planning: `{s.planning_status.value}`."
+            lines.append(
+                f"- {STATUS_EMOJI[s.status]} **{s.id}**{_slice_tag(s)} — "
+                f"{title}.{planning_part}{group_part}{dep_part}{plan_part}"
+            )
         lines.append("")
     if p.cross_cutting:
         lines += ["## Cross-cutting (`X*`)", ""]

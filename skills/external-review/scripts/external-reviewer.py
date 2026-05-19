@@ -1761,7 +1761,8 @@ def run_manual_approve(args) -> int:
 
 _OUTER_FENCE_RE = re.compile(r"^\s*```[a-zA-Z0-9_-]*\s*\n(.*?)\n```\s*$", re.DOTALL)
 _VERDICT_HEADING_STYLE = re.compile(
-    r"((?:\d+\.\s+)?Overall verdict)\s*\n+\s*(ready(?: with small edits)?|revise|ready)",
+    r"(?:\*+|_+)?((?:\d+\.\s+)?Overall verdict)(?:\*+|_+)?\s*\n+\s*"
+    r"(?:\*+|_+)?(ready with small edits|ready|revise)(?:\*+|_+)?",
     re.IGNORECASE,
 )
 

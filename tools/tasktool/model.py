@@ -11,6 +11,11 @@ class Status(str, Enum):
     BLOCKED = "blocked"
     DONE = "done"
 
+class PlanningStatus(str, Enum):
+    PROPOSED = "proposed"
+    RATIFIED = "ratified"
+    SUPERSEDED = "superseded"
+
 @dataclass(slots=True)
 class BlockedOn:
     kind: Literal["id", "external"]
@@ -34,6 +39,9 @@ class Slice:
     status: Status = Status.READY
     closed: str | None = None
     blocked_on: BlockedOn | None = None
+    depends_on: list[str] = field(default_factory=list)
+    planning_status: PlanningStatus = PlanningStatus.PROPOSED
+    parallel_group: str | None = None
     plan_path: str | None = None
     refs: list[str] = field(default_factory=list)
     notes: str = ""
@@ -49,6 +57,7 @@ class Phase:
     closed: str | None = None
     spec_path: str | None = None
     plan_path: str | None = None
+    planning_path: str | None = None
     phase_reviewer_chain: str | None = None
     notes: str = ""
     slices: list[Slice] = field(default_factory=list)

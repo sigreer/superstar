@@ -55,6 +55,13 @@ def brief(p: Project, qid: str) -> str:
         lines.append(f"status: {item.status.value}")
         if item.plan_path:
             lines.append(f"plan: {item.plan_path}")
+        if item.depends_on:
+            lines.append("depends_on:")
+            for dep in item.depends_on:
+                lines.append(f"  - {dep}")
+        lines.append(f"planning_status: {item.planning_status.value}")
+        if item.parallel_group:
+            lines.append(f"parallel_group: {item.parallel_group}")
         if item.reviewer_chain:
             lines.append(f"reviewer_chain: {item.reviewer_chain}")
         lines.append("")
@@ -76,10 +83,17 @@ def brief(p: Project, qid: str) -> str:
             lines.append(f"spec: {item.spec_path}")
         if item.plan_path:
             lines.append(f"plan: {item.plan_path}")
+        if item.planning_path:
+            lines.append(f"planning: {item.planning_path}")
         lines.append("")
         lines.append("Slices:")
         for s in item.slices:
-            lines.append(f"  {s.id}  [{s.status.value}]  {s.title}")
+            deps = f" deps={','.join(s.depends_on)}" if s.depends_on else ""
+            group = f" group={s.parallel_group}" if s.parallel_group else ""
+            lines.append(
+                f"  {s.id}  [{s.status.value}] planning={s.planning_status.value}"
+                f"{group}{deps}  {s.title}"
+            )
     elif kind == "task":
         assert isinstance(item, Task)
         lines.append(f"# {qid} — {item.title}")

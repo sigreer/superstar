@@ -54,18 +54,28 @@ class CreateTests(unittest.TestCase):
         self.t.cleanup()
 
     def test_create_phase(self):
-        new_id = commands.cmd_create_phase(repo_root=self.t.root, title="Tasktool")
+        new_id = commands.cmd_create_phase(
+            repo_root=self.t.root, title="Tasktool",
+            planning="docs/specs/phase-plan.md",
+        )
         self.assertEqual(new_id, "P1")
         p = load_project(self.t.root / "docs/tasklist.json")
         self.assertEqual(len(p.phases), 1)
         self.assertEqual(p.phases[0].title, "Tasktool")
+        self.assertEqual(p.phases[0].planning_path, "docs/specs/phase-plan.md")
 
     def test_create_slice(self):
         commands.cmd_create_phase(repo_root=self.t.root, title="P1")
-        new_id = commands.cmd_create_slice(repo_root=self.t.root, phase_id="P1", title="CLI core")
-        self.assertEqual(new_id, "S1")
+        commands.cmd_create_slice(repo_root=self.t.root, phase_id="P1", title="foundation")
+        new_id = commands.cmd_create_slice(
+            repo_root=self.t.root, phase_id="P1", title="CLI core",
+            depends_on=["P1.S1"], parallel_group="bootstrap",
+        )
+        self.assertEqual(new_id, "S2")
         p = load_project(self.t.root / "docs/tasklist.json")
-        self.assertEqual(p.phases[0].slices[0].title, "CLI core")
+        self.assertEqual(p.phases[0].slices[1].title, "CLI core")
+        self.assertEqual(p.phases[0].slices[1].depends_on, ["P1.S1"])
+        self.assertEqual(p.phases[0].slices[1].parallel_group, "bootstrap")
 
     def test_create_followup_slice(self):
         commands.cmd_create_phase(repo_root=self.t.root, title="P1")
@@ -195,6 +205,63 @@ class BlockTests(unittest.TestCase):
         s = p.phases[0].slices[0]
         self.assertEqual(s.status, Status.READY)
         self.assertIsNone(s.blocked_on)
+
+class SchedulingTests(unittest.TestCase):
+    def setUp(self):
+        self.t = _Tmp()
+        commands.cmd_init(repo_root=self.t.root, project="demo")
+        commands.cmd_create_phase(
+            repo_root=self.t.root, title="P1",
+            planning="docs/specs/phase-plan.md",
+        )
+        commands.cmd_create_slice(
+            repo_root=self.t.root, phase_id="P1", title="S1",
+            parallel_group="bootstrap",
+        )
+        commands.cmd_create_slice(
+            repo_root=self.t.root, phase_id="P1", title="S2",
+            depends_on=["P1.S1"], parallel_group="followup",
+        )
+
+    def tearDown(self):
+        self.t.cleanup()
+
+    def test_deps_add_remove(self):
+        commands.cmd_create_slice(repo_root=self.t.root, phase_id="P1", title="S3")
+        commands.cmd_deps(repo_root=self.t.root, slice_id="P1.S3", add="P1.S1")
+        p = load_project(self.t.root / "docs/tasklist.json")
+        self.assertEqual(p.phases[0].slices[2].depends_on, ["P1.S1"])
+        commands.cmd_deps(repo_root=self.t.root, slice_id="P1.S3", remove="P1.S1")
+        p = load_project(self.t.root / "docs/tasklist.json")
+        self.assertEqual(p.phases[0].slices[2].depends_on, [])
+
+    def test_ratify_sets_planning_status_and_group(self):
+        commands.cmd_ratify(
+            repo_root=self.t.root, slice_id="P1.S1",
+            status="ratified", parallel_group="core",
+        )
+        p = load_project(self.t.root / "docs/tasklist.json")
+        self.assertEqual(p.phases[0].slices[0].planning_status.value, "ratified")
+        self.assertEqual(p.phases[0].slices[0].parallel_group, "core")
+
+    def test_ready_slices_respects_dependencies(self):
+        out = commands.cmd_ready_slices(repo_root=self.t.root, phase_id="P1")
+        self.assertIn("P1.S1", out)
+        self.assertNotIn("P1.S2", out)
+        commands.cmd_close(repo_root=self.t.root, id="P1.S1", skip_review_gate=True)
+        out = commands.cmd_ready_slices(repo_root=self.t.root, phase_id="P1")
+        self.assertIn("P1.S2", out)
+
+    def test_schedule_shows_waiting_dependencies(self):
+        out = commands.cmd_schedule(repo_root=self.t.root, phase_id="P1")
+        self.assertIn("P1.S2", out)
+        self.assertIn("waiting_on=P1.S1", out)
+        self.assertIn("planning: docs/specs/phase-plan.md", out)
+
+    def test_phase_status_lists_open_work(self):
+        out = commands.cmd_phase_status(repo_root=self.t.root)
+        self.assertIn("Open phases", out)
+        self.assertIn("P1", out)
 
 class ShortFormResolutionTests(unittest.TestCase):
     def setUp(self):

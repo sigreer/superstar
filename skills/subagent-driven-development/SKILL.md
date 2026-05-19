@@ -30,6 +30,8 @@ Execute plan by dispatching fresh subagent per task, with two-stage in-loop revi
 
 Plans are organised into **slices** (and slices into **tasks**) per `[[tasklist-discipline]]`. The coordinator tracks slice and phase boundaries explicitly.
 
+Before dispatching implementation work for a phase, run `tasktool schedule <phase-id>` and `tasktool ready-slices <phase-id>`. Only dispatch slices returned by `ready-slices`; they have no unfinished `depends_on` entries and are not runtime-blocked. Slices sharing a `parallel_group` are candidates for parallel execution when their file scopes do not overlap. If implementation discovers a real sequencing dependency, stop dispatch for the affected slice and update the row with `tasktool deps`; do not encode planned sequencing as `blocked_on`.
+
 **Two reviews, two scopes — do not conflate them:**
 
 | Review | Scope | Reviewer | When | Gate? |

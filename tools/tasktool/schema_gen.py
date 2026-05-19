@@ -7,6 +7,7 @@ from tasktool.model import SCHEMA_VERSION
 def build_schema() -> dict:
     slice_status_enum = ["ready", "in_progress", "blocked", "done"]
     non_blocked_status_enum = ["ready", "in_progress", "done"]
+    planning_status_enum = ["proposed", "ratified", "superseded"]
     date_str = {"type": "string", "pattern": r"^\d{4}-\d{2}-\d{2}$"}
     nullable_date = {"oneOf": [date_str, {"type": "null"}]}
     blocked_on = {
@@ -47,6 +48,9 @@ def build_schema() -> dict:
             "status": {"enum": slice_status_enum},
             "closed": nullable_date,
             "blocked_on": blocked_on,
+            "depends_on": {"type": "array", "items": {"type": "string"}},
+            "planning_status": {"enum": planning_status_enum},
+            "parallel_group": {"oneOf": [{"type": "string"}, {"type": "null"}]},
             "plan_path": {"oneOf": [{"type": "string"}, {"type": "null"}]},
             "refs": {"type": "array", "items": {"type": "string"}},
             "notes": {"type": "string"},
@@ -66,6 +70,7 @@ def build_schema() -> dict:
             "closed": nullable_date,
             "spec_path": {"oneOf": [{"type": "string"}, {"type": "null"}]},
             "plan_path": {"oneOf": [{"type": "string"}, {"type": "null"}]},
+            "planning_path": {"oneOf": [{"type": "string"}, {"type": "null"}]},
             "phase_reviewer_chain": {"oneOf": [{"type": "string"}, {"type": "null"}]},
             "notes": {"type": "string"},
             "slices": {"type": "array", "items": slice_},

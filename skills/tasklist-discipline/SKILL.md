@@ -34,6 +34,8 @@ IDs are assigned at birth and **never renumbered**. The `tasktool create` family
 
 Status enum: `ready | in_progress | blocked | done`. Only slices may take `blocked` (and only via `tasktool block <slice-id> --on …`). Emoji are a render concern; `tasktool render` and `tasktool brief` handle that. `done` requires `closed`; the CLI stamps it.
 
+Phase planning uses separate scheduling metadata. `planning_path` points at the phase-scoped planning/design document. `depends_on` records planned slice sequencing; it is not the same as runtime `blocked_on`. `planning_status` is `proposed | ratified | superseded`, and `parallel_group` names slices intended to be planned or executed together.
+
 ## Daily commands
 
 ```sh
@@ -45,6 +47,11 @@ tools/tasktool/tasktool set <id> --status in_progress
 tools/tasktool/tasktool note <id> --append "…"
 tools/tasktool/tasktool ref <id> --add path/to/artifact
 tools/tasktool/tasktool block <slice-id> --on P2.S5
+tools/tasktool/tasktool deps <slice-id> --add P2.S1
+tools/tasktool/tasktool ratify <slice-id> --parallel-group bootstrap
+tools/tasktool/tasktool schedule <phase-id>
+tools/tasktool/tasktool ready-slices <phase-id>
+tools/tasktool/tasktool phase-status
 tools/tasktool/tasktool close <slice-id>      # enforces post-slice review gate
 tools/tasktool/tasktool archive-phase <phase-id>  # enforces post-phase review gate
 tools/tasktool/tasktool validate              # full validation
@@ -84,6 +91,7 @@ tools/tasktool/tasktool validate --normalise
 
 - Specs, plans, reviewer chain folders: fully-qualified ID at first mention (`P9.S3a`), short form afterwards.
 - Plan and spec filenames embed the ID: `YYYY-MM-DD-<id>-<slug>(-design).md`. The pre-commit hook rejects filenames whose ID has no `tasklist.json` row.
+- Phase planning docs should be registered through `planning_path` once supported. During bootstrap or migration, either attach the document to `spec_path` for the phase ID or keep unregistered drafts outside orphan-checked paths such as `docs/_drafts/`.
 - Commit messages may use either form; prefer fully-qualified for cross-phase commits.
 
 ## Red flags
@@ -97,6 +105,7 @@ tools/tasktool/tasktool validate --normalise
 | "I'll bring back `docs/TASKLIST.md` for readability." | The hook refuses commits that touch it. Use `tasktool render` if you want markdown. |
 | "I'll just renumber IDs to match execution order." | No. IDs are stable. Execution order lives in the array order; IDs preserve creation order. |
 | "Setup files are just scaffolding; I'll leave them dirty while implementing." | No. Setup/migration artifacts make post-slice review scope ambiguous. Resolve the setup boundary first. |
+| "The slice is currently blocked, so I'll add `blocked_on` to model the phase plan." | No. Use `depends_on` for planned sequencing. Use `blocked_on` only for active runtime blockers. |
 
 ## Integration
 

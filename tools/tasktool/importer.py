@@ -46,7 +46,7 @@ SPEC_RE = re.compile(r"Spec:\s*\[`(?P<path>[^`]+)`\]\([^)]+\)")
 PLAN_RE = re.compile(r"Plan:\s*(?:\[`(?P<path>[^`]+)`\]\([^)]+\)|_pending_)")
 
 SLICE_LINE_RE = re.compile(
-    r"^-\s+(?P<emoji>[✅🚧⏸☐])\s+\*\*(?P<id>S\d+[a-z]?)\*\*"
+    r"^-\s+(?P<emoji>[✅🚧⏸☐])\s+\*\*(?P<id>(?:P\d+\.)?S\d+[a-z]?)\*\*"
     r"(?:\s+`(?P<tag>[^`]+)`)?"
     r"(?:\s+(?:—\s+)?(?P<rest>.+))?$"
 )
@@ -56,15 +56,26 @@ INLINE_PLAN_RE = re.compile(r"Plan:\s*\[`(?P<path>[^`]+)`\]\([^)]+\)")
 CROSS_HEADER_RE = re.compile(r"^##\s+Cross-cutting\b")
 CROSS_LINE_RE = re.compile(
     r"^-\s+(?P<emoji>[✅🚧☐])\s+\*\*(?P<id>X\d+)\*\*"
-    r"(?:\s+—\s+(?P<rest>.+))?$"
+    r"(?:\s+`(?P<tag>[^`]+)`)?"
+    r"(?:\s+(?:—\s+)?(?P<rest>.+))?$"
 )
 CROSS_LINE_BLOCKED_RE = re.compile(
     r"^-\s+⏸\s+\*\*(?P<id>X\d+)\*\*"
-    r"(?:\s+—\s+(?P<rest>.+))?$"
+    r"(?:\s+`(?P<tag>[^`]+)`)?"
+    r"(?:\s+(?:—\s+)?(?P<rest>.+))?$"
+)
+CROSS_LINE_ARCHIVED_RE = re.compile(
+    r"^-\s+🗄\s+\*\*(?P<id>X\d+)\*\*"
+    r"(?:\s+`(?P<tag>[^`]+)`)?"
+    r"(?:\s+(?:—\s+)?(?P<rest>.+))?$"
 )
 
 BLOCKED_NOT_ALLOWED_ON_CROSS = "blocked status not allowed on cross; coerced to ready"
+ARCHIVED_CROSS_TREATED_AS_DONE = "archived cross item treated as done"
 UNPARSED_BULLET = "unparsed bullet: {raw!r}"
+
+
+CROSS_TAG_DATE_RE = re.compile(r"(?P<date>\d{4}-\d{2}-\d{2})")
 
 
 @dataclass(slots=True)
@@ -73,6 +84,14 @@ class _CrossMatch:
     title: str
     status: Status
     warning: str | None
+    closed: str | None = None
+
+
+def _extract_date_from_tag(tag: str | None) -> str | None:
+    if not tag:
+        return None
+    m = CROSS_TAG_DATE_RE.search(tag)
+    return m.group("date") if m else None
 
 
 def _match_cross_line(line: str) -> _CrossMatch | None:
@@ -80,11 +99,14 @@ def _match_cross_line(line: str) -> _CrossMatch | None:
     if m:
         rest = (m.group("rest") or "").strip()
         title = rest or UNTITLED
+        status = EMOJI_TO_STATUS[m.group("emoji")]
+        closed = _extract_date_from_tag(m.group("tag")) if status is Status.DONE else None
         return _CrossMatch(
             id=m.group("id"),
             title=title,
-            status=EMOJI_TO_STATUS[m.group("emoji")],
+            status=status,
             warning=None,
+            closed=closed,
         )
     m = CROSS_LINE_BLOCKED_RE.match(line)
     if m:
@@ -95,6 +117,17 @@ def _match_cross_line(line: str) -> _CrossMatch | None:
             title=title,
             status=Status.READY,
             warning=BLOCKED_NOT_ALLOWED_ON_CROSS,
+        )
+    m = CROSS_LINE_ARCHIVED_RE.match(line)
+    if m:
+        rest = (m.group("rest") or "").strip()
+        title = rest or UNTITLED
+        return _CrossMatch(
+            id=m.group("id"),
+            title=title,
+            status=Status.DONE,
+            warning=ARCHIVED_CROSS_TREATED_AS_DONE,
+            closed=_extract_date_from_tag(m.group("tag")),
         )
     return None
 
@@ -146,6 +179,10 @@ def _match_slice_line(line: str) -> _SliceMatch | None:
         return None
     emoji = m.group("emoji")
     sid = m.group("id")
+    # Fully-qualified IDs like `P11.S1` are normalised to the bare slice ID
+    # (`S1`) so they slot into Phase.slices the same way locally-scoped IDs do.
+    if "." in sid:
+        sid = sid.split(".", 1)[1]
     tag = m.group("tag")
     rest = m.group("rest") or ""
     title = rest.split(". Plan:", 1)[0].strip() or UNTITLED
@@ -255,6 +292,7 @@ def parse_tasklist_md(text: str) -> ParseResult:
                         title=cm.title,
                         created="1970-01-01",
                         status=cm.status,
+                        closed=cm.closed,
                     )
                 )
                 i += 1

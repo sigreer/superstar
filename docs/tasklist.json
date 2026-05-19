@@ -25,6 +25,44 @@
       "refs": [],
       "status": "done",
       "title": "Add repo-local tasktool launcher"
+    },
+    {
+      "closed": "2026-05-19",
+      "created": "2026-05-19",
+      "id": "X3",
+      "notes": "User-requested blocking spot fix completed outside the normal workflow for speed. External-review verdict parsing now accepts markdown-emphasized Overall Verdict headings such as **5. Overall Verdict** followed by ready/revise text.",
+      "refs": [
+        "skills/external-review/scripts/external-reviewer.py",
+        "skills/external-review/tests/test_heading_style_verdict.py"
+      ],
+      "status": "done",
+      "title": "Spot fix: parse bold external-review verdict headings"
+    },
+    {
+      "closed": "2026-05-19",
+      "created": "2026-05-19",
+      "id": "X4",
+      "notes": "User-requested blocking spot fix completed outside the normal workflow for speed. Legacy markdown import now accepts fully-qualified slice IDs and additional cross-cutting forms including tagged done items, blocked cross rows coerced to ready, and archived cross rows treated as done.",
+      "refs": [
+        "tools/tasktool/importer.py"
+      ],
+      "status": "done",
+      "title": "Spot fix: broaden legacy tasklist importer compatibility"
+    },
+    {
+      "closed": "2026-05-19",
+      "created": "2026-05-19",
+      "id": "X5",
+      "notes": "User-requested hook update completed outside the normal workflow for speed. Adds Stop/SubagentStop finished-agent notifications, milestone message derivation from final agent text/transcript payloads, Hypr TTS config reuse with OPENAI_API_KEY fallback, and non-TTS ding fallbacks.",
+      "refs": [
+        "hooks/agent-finished",
+        "hooks/agent_finished_message.py",
+        "hooks/hooks.json",
+        "hooks/hooks-cursor.json",
+        "tests/claude-code/test-agent-finished-hook.sh"
+      ],
+      "status": "done",
+      "title": "Add finished-agent notification hook"
     }
   ],
   "last_reviewed": "2026-05-18",
@@ -37,10 +75,96 @@
       "notes": "",
       "phase_reviewer_chain": null,
       "plan_path": null,
+      "planning_path": null,
       "slices": [],
       "spec_path": null,
       "status": "done",
       "title": "External-reviewer work (historical)"
+    },
+    {
+      "closed": null,
+      "created": "2026-05-19",
+      "id": "P3",
+      "notes": "",
+      "phase_reviewer_chain": null,
+      "plan_path": null,
+      "planning_path": "docs/specs/2026-05-19-p3-phase-planning-design.md",
+      "slices": [
+        {
+          "blocked_on": null,
+          "closed": null,
+          "created": "2026-05-19",
+          "depends_on": [],
+          "id": "S1",
+          "notes": "",
+          "parallel_group": "foundation",
+          "plan_path": null,
+          "planning_status": "ratified",
+          "refs": [],
+          "reviewer_chain": null,
+          "status": "ready",
+          "tasks": [],
+          "title": "Schema and validation foundation"
+        },
+        {
+          "blocked_on": null,
+          "closed": null,
+          "created": "2026-05-19",
+          "depends_on": [
+            "P3.S1"
+          ],
+          "id": "S2",
+          "notes": "",
+          "parallel_group": "cli",
+          "plan_path": null,
+          "planning_status": "ratified",
+          "refs": [],
+          "reviewer_chain": null,
+          "status": "ready",
+          "tasks": [],
+          "title": "Scheduling CLI"
+        },
+        {
+          "blocked_on": null,
+          "closed": null,
+          "created": "2026-05-19",
+          "depends_on": [
+            "P3.S1"
+          ],
+          "id": "S3",
+          "notes": "",
+          "parallel_group": "workflow",
+          "plan_path": null,
+          "planning_status": "ratified",
+          "refs": [],
+          "reviewer_chain": null,
+          "status": "ready",
+          "tasks": [],
+          "title": "Workflow skill and integration docs"
+        },
+        {
+          "blocked_on": null,
+          "closed": null,
+          "created": "2026-05-19",
+          "depends_on": [
+            "P3.S3",
+            "P3.S2"
+          ],
+          "id": "S4",
+          "notes": "",
+          "parallel_group": "closeout",
+          "plan_path": null,
+          "planning_status": "ratified",
+          "refs": [],
+          "reviewer_chain": null,
+          "status": "ready",
+          "tasks": [],
+          "title": "Bootstrap migration and dogfood pass"
+        }
+      ],
+      "spec_path": "docs/specs/2026-05-19-p3-phase-planning-design.md",
+      "status": "ready",
+      "title": "Phase planning workflow"
     }
   ],
   "project": "superstar",

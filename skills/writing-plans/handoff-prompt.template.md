@@ -7,6 +7,7 @@ Your role is **strictly orchestration**. Use the `superstar:subagent-driven-deve
 ## Inputs
 
 - tasktool entry: run `tasktool brief <PHASE-OR-SLICE-ID>` (canonical tracker: `docs/tasklist.json`).
+- schedule: for phase handoffs run `tasktool schedule <PHASE-ID>` and `tasktool ready-slices <PHASE-ID>` before dispatching work.
 - Spec: [`<relative-path-to-spec>`](<relative-path-to-spec>)
 - Plan: [`<relative-path-to-plan>`](<relative-path-to-plan>)
 - Reviewer chain folder (will be created on first review): `docs/reviewer/<chain-folder>/`
@@ -22,4 +23,4 @@ Your role is **strictly orchestration**. Use the `superstar:subagent-driven-deve
 
 ## First action
 
-Read this file (the handoff prompt), then run `tasktool brief <PHASE-OR-SLICE-ID>`, and read the spec and the plan. Then invoke `superstar:subagent-driven-development` and begin the first slice.
+Read this file (the handoff prompt), then run `tasktool brief <PHASE-OR-SLICE-ID>` and, for phase handoffs, `tasktool ready-slices <PHASE-ID>`. Read the spec and the plan. Then invoke `superstar:subagent-driven-development` and begin with the ready slice set.

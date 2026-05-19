@@ -4,7 +4,7 @@ import datetime as _dt
 import subprocess as _subprocess
 from pathlib import Path
 from tasktool.model import (
-    Project, Phase, Slice, Task, CrossCutting, BlockedOn, Status,
+    Project, Phase, Slice, Task, CrossCutting, BlockedOn, Status, PlanningStatus,
 )
 from tasktool.serialize import load_project, save_project
 from tasktool.validate import validate_project
@@ -68,12 +68,16 @@ def cmd_init(*, repo_root: Path, project: str | None = None, north_star: str = "
 
 # ───── create ─────
 
-def cmd_create_phase(*, repo_root: Path, title: str, spec: str | None = None, plan: str | None = None) -> str:
+def cmd_create_phase(
+    *, repo_root: Path, title: str,
+    spec: str | None = None, plan: str | None = None,
+    planning: str | None = None,
+) -> str:
     p = _load(repo_root)
     new_id = next_phase_id(p, repo_root)
     p.phases.append(Phase(
         id=new_id, title=title, created=_today(),
-        spec_path=spec, plan_path=plan,
+        spec_path=spec, plan_path=plan, planning_path=planning,
     ))
     _save(repo_root, p)
     return new_id
@@ -81,6 +85,7 @@ def cmd_create_phase(*, repo_root: Path, title: str, spec: str | None = None, pl
 def cmd_create_slice(
     *, repo_root: Path, phase_id: str, title: str,
     follow_up: str | None = None, plan: str | None = None,
+    depends_on: list[str] | None = None, parallel_group: str | None = None,
 ) -> str:
     p = _load(repo_root)
     phase = next((ph for ph in p.phases if ph.id == phase_id), None)
@@ -90,8 +95,10 @@ def cmd_create_slice(
         new_id = next_slice_id(p, phase_id, repo_root)
     else:
         new_id = next_followup_letter(p, phase_id, follow_up, repo_root)
+    deps = [_resolve_dependency_id(p, dep) for dep in (depends_on or [])]
     phase.slices.append(Slice(
         id=new_id, title=title, created=_today(), plan_path=plan,
+        depends_on=deps, parallel_group=parallel_group,
     ))
     _save(repo_root, p)
     return new_id
@@ -130,6 +137,12 @@ def _resolve_id(p: Project, id: str) -> str:
         ph, s, t = matches[0]
         return f"{ph}.{s}.{t}"
     return id
+
+def _resolve_dependency_id(p: Project, id: str) -> str:
+    qid = _resolve_id(p, id)
+    if parse_id(qid)[0] != "slice" or "." not in qid:
+        raise CommandError(f"dependency must be a slice id, got {id!r}")
+    return qid
 
 def cmd_create_task(*, repo_root: Path, slice_id: str, title: str) -> str:
     """Now accepts unambiguous short slice IDs via _resolve_id. Replaces the
@@ -265,6 +278,44 @@ def cmd_unblock(*, repo_root: Path, slice_id: str, resume: bool = False) -> None
     item.status = Status.IN_PROGRESS if resume else Status.READY
     _save(repo_root, p)
 
+def cmd_deps(
+    *, repo_root: Path, slice_id: str,
+    add: str | None = None, remove: str | None = None,
+) -> None:
+    if (add is None) == (remove is None):
+        raise CommandError("cmd_deps requires exactly one of add/remove")
+    p = _load(repo_root)
+    qid, _container, item = _find_item(p, slice_id)
+    if parse_id(qid)[0] != "slice":
+        raise CommandError(f"deps only works on slices; {qid} is a {parse_id(qid)[0]}")
+    dep = _resolve_dependency_id(p, add or remove or "")
+    if add is not None and dep not in item.depends_on:
+        item.depends_on.append(dep)
+    elif remove is not None and dep in item.depends_on:
+        item.depends_on.remove(dep)
+    _save(repo_root, p)
+
+def cmd_ratify(
+    *, repo_root: Path, slice_id: str,
+    status: str = "ratified", parallel_group: str | None = None,
+) -> None:
+    p = _load(repo_root)
+    qid, _container, item = _find_item(p, slice_id)
+    if parse_id(qid)[0] != "slice":
+        raise CommandError(f"ratify only works on slices; {qid} is a {parse_id(qid)[0]}")
+    item.planning_status = PlanningStatus(status)
+    if parallel_group is not None:
+        item.parallel_group = parallel_group or None
+    _save(repo_root, p)
+
+def cmd_phase_planning_path(*, repo_root: Path, phase_id: str, path: str | None) -> None:
+    p = _load(repo_root)
+    qid, _container, item = _find_item(p, phase_id)
+    if parse_id(qid)[0] != "phase":
+        raise CommandError(f"planning-path only works on phases; {qid} is a {parse_id(qid)[0]}")
+    item.planning_path = path
+    _save(repo_root, p)
+
 # ───── note / ref / title ─────
 
 def cmd_note(
@@ -318,6 +369,16 @@ def cmd_show(*, repo_root: Path, id: str) -> str:
     if getattr(item, "blocked_on", None):
         bo = item.blocked_on
         lines.append(f"blocked_on: {bo.kind}:{bo.value}")
+    if getattr(item, "depends_on", None):
+        lines.append("depends_on:")
+        for dep in item.depends_on:
+            lines.append(f"  - {dep}")
+    if getattr(item, "planning_status", None):
+        lines.append(f"planning_status: {item.planning_status.value}")
+    if getattr(item, "parallel_group", None):
+        lines.append(f"parallel_group: {item.parallel_group}")
+    if getattr(item, "planning_path", None):
+        lines.append(f"planning_path: {item.planning_path}")
     if getattr(item, "refs", None):
         lines.append("refs:")
         for r in item.refs:
@@ -333,6 +394,128 @@ def cmd_show(*, repo_root: Path, id: str) -> str:
         lines.append("\nTasks:")
         for t in item.tasks:
             lines.append(_item_one_line(f"  {t.id}", t))
+    return "\n".join(lines) + "\n"
+
+def _phase_by_id(p: Project, phase_id: str) -> Phase:
+    phase = next((ph for ph in p.phases if ph.id == phase_id), None)
+    if phase is None:
+        raise CommandError(f"phase {phase_id} not found")
+    return phase
+
+def _done_slice_ids(phase: Phase) -> set[str]:
+    return {f"{phase.id}.{s.id}" for s in phase.slices if s.status == Status.DONE}
+
+def _is_slice_ready_for_work(phase: Phase, s: Slice) -> bool:
+    if s.status in (Status.DONE, Status.BLOCKED):
+        return False
+    if s.planning_status == PlanningStatus.SUPERSEDED:
+        return False
+    return all(dep in _done_slice_ids(phase) for dep in s.depends_on)
+
+def cmd_ready_slices(*, repo_root: Path, phase_id: str, format: str = "text") -> str:
+    p = _load(repo_root)
+    phase = _phase_by_id(p, phase_id)
+    rows = [
+        {
+            "id": f"{phase.id}.{s.id}",
+            "status": s.status.value,
+            "planning_status": s.planning_status.value,
+            "parallel_group": s.parallel_group,
+            "title": s.title,
+        }
+        for s in phase.slices
+        if _is_slice_ready_for_work(phase, s)
+    ]
+    if format == "json":
+        import json as _j
+        return _j.dumps(rows, indent=2) + "\n"
+    return "".join(
+        f"{r['id']}  [{r['status']}/{r['planning_status']}]  "
+        f"{r['parallel_group'] or '-'}  {r['title']}\n"
+        for r in rows
+    )
+
+def cmd_schedule(*, repo_root: Path, phase_id: str, format: str = "text") -> str:
+    p = _load(repo_root)
+    phase = _phase_by_id(p, phase_id)
+    done = _done_slice_ids(phase)
+    rows = []
+    for s in phase.slices:
+        waiting_on = [dep for dep in s.depends_on if dep not in done]
+        ready = _is_slice_ready_for_work(phase, s)
+        rows.append({
+            "id": f"{phase.id}.{s.id}",
+            "status": s.status.value,
+            "planning_status": s.planning_status.value,
+            "parallel_group": s.parallel_group,
+            "depends_on": s.depends_on,
+            "waiting_on": waiting_on,
+            "ready": ready,
+            "title": s.title,
+        })
+    if format == "json":
+        import json as _j
+        return _j.dumps(rows, indent=2) + "\n"
+    lines = [f"# {phase.id} — {phase.title}", ""]
+    if phase.planning_path:
+        lines.append(f"planning: {phase.planning_path}")
+    for row in rows:
+        ready = "ready" if row["ready"] else "waiting"
+        deps = ", ".join(row["depends_on"]) if row["depends_on"] else "-"
+        waits = ", ".join(row["waiting_on"]) if row["waiting_on"] else "-"
+        group = row["parallel_group"] or "-"
+        lines.append(
+            f"{row['id']}  [{row['status']}/{row['planning_status']}]  "
+            f"group={group}  {ready}  deps={deps}  waiting_on={waits}  {row['title']}"
+        )
+    return "\n".join(lines).rstrip() + "\n"
+
+def cmd_phase_status(*, repo_root: Path, recent: int = 3, format: str = "text") -> str:
+    p = _load(repo_root)
+    open_cross = [c for c in p.cross_cutting if c.status != Status.DONE]
+    open_phases = [ph for ph in p.phases if ph.status != Status.DONE]
+    archived = p.archived_phases[-recent:] if recent > 0 else []
+    if format == "json":
+        import json as _j
+        return _j.dumps({
+            "project": p.project,
+            "last_reviewed": p.last_reviewed,
+            "open_phases": [
+                {"id": ph.id, "status": ph.status.value, "title": ph.title}
+                for ph in open_phases
+            ],
+            "open_cross_cutting": [
+                {"id": c.id, "status": c.status.value, "title": c.title}
+                for c in open_cross
+            ],
+            "recent_archived_phases": [
+                {"id": a.id, "title": a.title, "archived_date": a.archived_date,
+                 "archived_path": a.archived_path}
+                for a in archived
+            ],
+        }, indent=2) + "\n"
+    lines = [f"# {p.project} status"]
+    if p.last_reviewed:
+        lines.append(f"last_reviewed: {p.last_reviewed}")
+    lines += ["", "Open phases:"]
+    lines.extend(
+        f"  {ph.id}  [{ph.status.value}]  {ph.title}" for ph in open_phases
+    )
+    if not open_phases:
+        lines.append("  none")
+    lines += ["", "Open cross-cutting:"]
+    lines.extend(
+        f"  {c.id}  [{c.status.value}]  {c.title}" for c in open_cross
+    )
+    if not open_cross:
+        lines.append("  none")
+    lines += ["", f"Recent archived phases ({len(archived)}):"]
+    lines.extend(
+        f"  {a.id}  [{a.archived_date}]  {a.title}  {a.archived_path}"
+        for a in archived
+    )
+    if not archived:
+        lines.append("  none")
     return "\n".join(lines) + "\n"
 
 def _iter_items(p: Project):
@@ -532,10 +715,16 @@ def cmd_archive_phase(
         summary_lines.append(f"spec: {phase.spec_path}")
     if phase.plan_path:
         summary_lines.append(f"plan: {phase.plan_path}")
+    if phase.planning_path:
+        summary_lines.append(f"planning: {phase.planning_path}")
     summary_lines += ["", "## Slices", ""]
     for s in phase.slices:
         closed = f" — closed {s.closed}" if s.closed else ""
-        summary_lines.append(f"- **{s.id}** [{s.status.value}]{closed} — {s.title}")
+        deps = f" — depends on {', '.join(s.depends_on)}" if s.depends_on else ""
+        summary_lines.append(
+            f"- **{s.id}** [{s.status.value}/{s.planning_status.value}]"
+            f"{closed}{deps} — {s.title}"
+        )
     summary_lines += [
         "",
         "## Full phase JSON (for tasktool unarchive)",

@@ -99,11 +99,12 @@ These thoughts mean STOP—you're rationalizing:
 When multiple skills could apply, use this order:
 
 1. **Setup skills** (project-setup) — when the user asks to initialise a project or a workflow precondition is missing.
-2. **Process skills** (brainstorming, debugging, tasklist-discipline) — these determine HOW to approach the task.
+2. **Process skills** (brainstorming, debugging, phase-planning, tasklist-discipline) — these determine HOW to approach the task.
 3. **Implementation skills** (writing-plans, subagent-driven-development, executing-plans) — these guide execution.
 4. **Gating skills** (external-review, verification-before-completion) — run at the boundaries (spec/plan written, slice/phase done).
 
 "Let's build X" → brainstorming first, then writing-plans, then subagent-driven-development.
+"What should the next phase be?" → phase-planning first, then brainstorming/writing-plans once a phase shape is chosen.
 "Fix this bug" → debugging first, then domain-specific skills.
 "Init project for superstar" → project-setup.
 

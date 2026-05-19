@@ -1,7 +1,8 @@
 from __future__ import annotations
 import unittest
 from tasktool.model import (
-    Project, Phase, Slice, Task, CrossCutting, BlockedOn, Status, SCHEMA_VERSION,
+    Project, Phase, Slice, Task, CrossCutting, BlockedOn, Status,
+    PlanningStatus, SCHEMA_VERSION,
 )
 
 class StatusTests(unittest.TestCase):
@@ -9,6 +10,12 @@ class StatusTests(unittest.TestCase):
         self.assertEqual(
             {s.value for s in Status},
             {"ready", "in_progress", "blocked", "done"},
+        )
+
+    def test_planning_status_values(self):
+        self.assertEqual(
+            {s.value for s in PlanningStatus},
+            {"proposed", "ratified", "superseded"},
         )
 
 class ConstructionTests(unittest.TestCase):
@@ -25,6 +32,7 @@ class ConstructionTests(unittest.TestCase):
         self.assertIsNone(ph.closed)
         self.assertIsNone(ph.spec_path)
         self.assertIsNone(ph.plan_path)
+        self.assertIsNone(ph.planning_path)
         self.assertIsNone(ph.phase_reviewer_chain)
         self.assertEqual(ph.notes, "")
         self.assertEqual(ph.slices, [])
@@ -33,6 +41,9 @@ class ConstructionTests(unittest.TestCase):
         s = Slice(id="S1", title="CLI core", created="2026-05-17")
         self.assertEqual(s.status, Status.READY)
         self.assertIsNone(s.blocked_on)
+        self.assertEqual(s.depends_on, [])
+        self.assertEqual(s.planning_status, PlanningStatus.PROPOSED)
+        self.assertIsNone(s.parallel_group)
         self.assertIsNone(s.reviewer_chain)
         self.assertEqual(s.refs, [])
         self.assertEqual(s.tasks, [])
@@ -69,6 +80,6 @@ class PublicAPITests(unittest.TestCase):
         for name in [
             "load_project", "save_project", "dumps_canonical", "loads_project",
             "Project", "Phase", "Slice", "Task", "CrossCutting", "BlockedOn",
-            "Status", "ArchivedPhase", "SCHEMA_VERSION",
+            "Status", "PlanningStatus", "ArchivedPhase", "SCHEMA_VERSION",
         ]:
             self.assertTrue(hasattr(tasktool, name), f"tasktool.{name} missing")

@@ -19,6 +19,8 @@ Assume they are a skilled developer, but know almost nothing about our toolset o
 
 **tasktool integration:** If `docs/tasklist.json` exists, this plan must correspond to a row in it. See [[tasklist-discipline]] for the ID scheme. **Before writing the plan file, verify the row for `<id>` exists** — run `tasktool show <id>` and confirm exit 0. If it doesn't (e.g. a spec was committed without a row, though the pre-commit hook should have caught that), stop and create the row via `tasktool create …` per [[tasklist-discipline]]. Never let the plan be the artifact that mints an ID.
 
+**Scheduling ratification:** For slice plans, inspect `tasktool show <slice-id>` and `tasktool schedule <phase-id>` before drafting. The plan must explicitly confirm or update `depends_on`, `parallel_group`, and whether the slice remains independently plannable/executable. If the spec/plan work discovers a dependency change, update it with `tasktool deps`; when the plan settles, run `tasktool ratify <slice-id>` so coordinators can rely on `tasktool ready-slices <phase-id>`.
+
 ## Scope Check
 
 If the spec covers multiple independent subsystems, it should have been broken into sub-project specs during brainstorming. If it wasn't, suggest breaking this into separate plans — one per subsystem. Each plan should produce working, testable software on its own.
@@ -131,6 +133,8 @@ After writing the complete plan, look at the spec with fresh eyes and check the 
 **3. Type consistency:** Do the types, method signatures, and property names you used in later tasks match what you defined in earlier tasks? A function called `clearLayers()` in Task 3 but `clearFullLayers()` in Task 7 is a bug.
 
 **4. Handoff artifact:** After the plan-review gate passes, confirm `docs/handoffs/<plan-stem>-prompt.md` exists on disk (run `ls`), was filled in (no `{{placeholder}}` strings remain), and was echoed to chat in a fenced block. If any of those three are missing, you skipped the Execution Handoff and must complete it before offering the execution choice.
+
+**5. Scheduling check:** For slice plans, confirm the tasktool row is ratified and that the dependencies named in the plan match `tasktool schedule <phase-id>`. If the plan changed the dependency graph, update tasktool before external plan review so the reviewer sees the real scheduling contract.
 
 If you find issues, fix them inline. No need to re-review — just fix and move on. If you find a spec requirement with no task, add the task.
 

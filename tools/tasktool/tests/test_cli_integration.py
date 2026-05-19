@@ -99,6 +99,52 @@ class CliEndToEndTests(unittest.TestCase):
         data = json.loads(r.stdout)
         self.assertIn("properties", data)
 
+    def test_scheduling_commands_round_trip(self):
+        t = _CliTmp()
+        try:
+            self.assertEqual(run_cli("init", "--project", "demo", cwd=t.root).returncode, 0)
+            r = run_cli(
+                "create", "phase", "--title", "P",
+                "--planning", "docs/specs/p1-phase-plan.md",
+                cwd=t.root,
+            )
+            self.assertEqual(r.returncode, 0, r.stderr)
+            run_cli(
+                "create", "slice", "P1", "--title", "S1",
+                "--parallel-group", "bootstrap", cwd=t.root,
+            )
+            run_cli(
+                "create", "slice", "P1", "--title", "S2",
+                "--depends-on", "P1.S1", cwd=t.root,
+            )
+            run_cli("create", "slice", "P1", "--title", "S3", cwd=t.root)
+            r = run_cli(
+                "create", "slice", "P1", "--title", "S4",
+                "--depends-on", "P1.S1", "--depends-on", "P1.S3",
+                cwd=t.root,
+            )
+            self.assertEqual(r.returncode, 0, r.stderr)
+            r = run_cli("ready-slices", "P1", cwd=t.root)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertIn("P1.S1", r.stdout)
+            self.assertNotIn("P1.S2", r.stdout)
+            self.assertNotIn("P1.S4", r.stdout)
+            r = run_cli("ratify", "P1.S1", "--parallel-group", "core", cwd=t.root)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            r = run_cli("schedule", "P1", cwd=t.root)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertIn("P1.S2", r.stdout)
+            self.assertIn("waiting_on=P1.S1", r.stdout)
+            r = run_cli("deps", "P1.S2", "--remove", "P1.S1", cwd=t.root)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            r = run_cli("ready-slices", "P1", cwd=t.root)
+            self.assertIn("P1.S2", r.stdout)
+            r = run_cli("phase-status", cwd=t.root)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertIn("Open phases", r.stdout)
+        finally:
+            t.cleanup()
+
 class ReviewGateE2ETests(unittest.TestCase):
     def test_close_slice_requires_chain(self):
         t = _CliTmp()

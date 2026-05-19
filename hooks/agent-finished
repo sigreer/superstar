@@ -1,0 +1,128 @@
+#!/usr/bin/env bash
+# Stop/SubagentStop hook for Superstar milestone notifications.
+
+set -u
+set -o pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+HOOK_INPUT_FILE="${SUPERSTAR_NOTIFY_INPUT_FILE:-}"
+
+if [[ -n "$HOOK_INPUT_FILE" ]]; then
+  hook_payload="$(cat "$HOOK_INPUT_FILE" 2>/dev/null || true)"
+else
+  hook_payload="$(cat 2>/dev/null || true)"
+fi
+
+message="$(
+  python3 "${SCRIPT_DIR}/agent_finished_message.py" <<<"$hook_payload" 2>/dev/null || true
+)"
+
+if [[ -z "$message" ]]; then
+  exit 0
+fi
+
+if [[ "${SUPERSTAR_NOTIFY_DRY_RUN:-}" == "1" ]]; then
+  printf '%s\n' "$message"
+  exit 0
+fi
+
+ding() {
+  if command -v canberra-gtk-play >/dev/null 2>&1; then
+    canberra-gtk-play -i complete -d "Superstar milestone" >/dev/null 2>&1 && return 0
+    canberra-gtk-play -i bell -d "Superstar milestone" >/dev/null 2>&1 && return 0
+  fi
+  if command -v paplay >/dev/null 2>&1; then
+    for sound in \
+      /usr/share/sounds/freedesktop/stereo/complete.oga \
+      /usr/share/sounds/freedesktop/stereo/bell.oga \
+      /usr/share/sounds/freedesktop/stereo/message.oga
+    do
+      [[ -f "$sound" ]] && paplay "$sound" >/dev/null 2>&1 && return 0
+    done
+  fi
+  printf '\a' >/dev/tty 2>/dev/null || true
+}
+
+tts() {
+  local config_file="${SUPERSTAR_NOTIFY_TTS_CONFIG:-${HOME}/.config/hypr-tts/config.yaml}"
+  local api_key="${OPENAI_API_KEY:-}"
+  local model="gpt-4o-mini-tts"
+  local voice="alloy"
+  local format="opus"
+  local speed="1.0"
+  local instructions=""
+
+  if [[ -f "$config_file" ]]; then
+    config_eval="$(python3 - "$config_file" <<'PY' 2>/dev/null || true
+import shlex
+import sys
+
+path = sys.argv[1]
+try:
+    import yaml
+    with open(path, encoding="utf-8") as f:
+        data = yaml.safe_load(f) or {}
+except Exception:
+    data = {}
+
+defaults = {
+    "api_key": "",
+    "model": "gpt-4o-mini-tts",
+    "voice": "alloy",
+    "format": "opus",
+    "speed": "1.0",
+    "instructions": "",
+}
+for key, default in defaults.items():
+    print(f"CFG_{key.upper()}={shlex.quote(str(data.get(key, default) or default))}")
+PY
+)"
+    if [[ -n "$config_eval" ]]; then
+      eval "$config_eval"
+      api_key="${CFG_API_KEY:-$api_key}"
+      [[ -n "${CFG_MODEL:-}" ]] && model="$CFG_MODEL"
+      [[ -n "${CFG_VOICE:-}" ]] && voice="$CFG_VOICE"
+      [[ -n "${CFG_FORMAT:-}" ]] && format="$CFG_FORMAT"
+      [[ -n "${CFG_SPEED:-}" ]] && speed="$CFG_SPEED"
+      [[ -n "${CFG_INSTRUCTIONS:-}" ]] && instructions="$CFG_INSTRUCTIONS"
+    fi
+  fi
+
+  [[ -n "$api_key" ]] || return 1
+  command -v curl >/dev/null 2>&1 || return 1
+  command -v jq >/dev/null 2>&1 || return 1
+  command -v mpv >/dev/null 2>&1 || return 1
+
+  if [[ "$model" == "gpt-4o-mini-tts" && -n "$instructions" ]]; then
+    body="$(
+      jq -n \
+        --arg model "$model" \
+        --arg voice "$voice" \
+        --arg input "$message" \
+        --arg format "$format" \
+        --arg instructions "$instructions" \
+        --argjson speed "$speed" \
+        '{model: $model, voice: $voice, input: $input, response_format: $format, speed: $speed, instructions: $instructions}'
+    )" || return 1
+  else
+    body="$(
+      jq -n \
+        --arg model "$model" \
+        --arg voice "$voice" \
+        --arg input "$message" \
+        --arg format "$format" \
+        --argjson speed "$speed" \
+        '{model: $model, voice: $voice, input: $input, response_format: $format, speed: $speed}'
+    )" || return 1
+  fi
+
+  curl -sS --fail-with-body \
+    -H "Authorization: Bearer ${api_key}" \
+    -H "Content-Type: application/json" \
+    -d "$body" \
+    https://api.openai.com/v1/audio/speech 2>/dev/null \
+    | mpv --no-video --really-quiet --cache=no - >/dev/null 2>&1
+}
+
+tts || ding
+exit 0

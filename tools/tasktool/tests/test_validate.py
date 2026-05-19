@@ -79,6 +79,46 @@ class StatusTransitionTests(unittest.TestCase):
         )
         validate_project(p)
 
+class DependencyTests(unittest.TestCase):
+    def _project_with_two_slices(self) -> Project:
+        p = _project_with_slice()
+        p.phases[0].slices.append(Slice(id="S2", title="slice 2", created="2026-05-17"))
+        return p
+
+    def test_slice_dependency_on_existing_slice_ok(self):
+        p = self._project_with_two_slices()
+        p.phases[0].slices[1].depends_on = ["P1.S1"]
+        validate_project(p)
+
+    def test_slice_dependency_must_be_fully_qualified(self):
+        p = self._project_with_two_slices()
+        p.phases[0].slices[1].depends_on = ["S1"]
+        with self.assertRaises(ValidationError) as ctx:
+            validate_project(p)
+        self.assertIn("fully-qualified slice", str(ctx.exception))
+
+    def test_slice_dependency_must_exist(self):
+        p = self._project_with_two_slices()
+        p.phases[0].slices[1].depends_on = ["P1.S99"]
+        with self.assertRaises(ValidationError) as ctx:
+            validate_project(p)
+        self.assertIn("unknown", str(ctx.exception).lower())
+
+    def test_slice_dependency_rejects_self_dependency(self):
+        p = self._project_with_two_slices()
+        p.phases[0].slices[0].depends_on = ["P1.S1"]
+        with self.assertRaises(ValidationError) as ctx:
+            validate_project(p)
+        self.assertIn("itself", str(ctx.exception).lower())
+
+    def test_slice_dependency_rejects_cycles(self):
+        p = self._project_with_two_slices()
+        p.phases[0].slices[0].depends_on = ["P1.S2"]
+        p.phases[0].slices[1].depends_on = ["P1.S1"]
+        with self.assertRaises(ValidationError) as ctx:
+            validate_project(p)
+        self.assertIn("cycle", str(ctx.exception).lower())
+
 class DateOrderTests(unittest.TestCase):
     def test_closed_before_created_rejected(self):
         p = _project_with_slice(
@@ -196,6 +236,18 @@ class SchemaEnumTests(unittest.TestCase):
         self.assertIsNotNone(phase_props, "phase schema not found")
         phase_status_enum = phase_props["status"]["enum"]
         self.assertNotIn("blocked", phase_status_enum)
+
+    def test_slice_schema_has_planning_fields(self):
+        schema = self._get_schema()
+        slice_props = self._find_kind(schema, r"^S\d+")
+        self.assertIn("depends_on", slice_props)
+        self.assertIn("planning_status", slice_props)
+        self.assertIn("parallel_group", slice_props)
+
+    def test_phase_schema_has_planning_path(self):
+        schema = self._get_schema()
+        phase_props = self._find_kind(schema, r"^P\d+$")
+        self.assertIn("planning_path", phase_props)
 
     def test_cross_status_has_no_blocked(self):
         """Cross-cutting status enum must not contain 'blocked'."""

@@ -3,7 +3,9 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
-from tasktool.model import Project, Phase, Slice, Task, CrossCutting, BlockedOn, Status
+from tasktool.model import (
+    Project, Phase, Slice, Task, CrossCutting, BlockedOn, Status, PlanningStatus,
+)
 from tasktool.serialize import (
     load_project, save_project, dumps_canonical, loads_project, to_dict, from_dict,
 )
@@ -17,10 +19,17 @@ class RoundTripTests(unittest.TestCase):
 
     def test_full_project_roundtrip(self):
         p = Project(project="demo", north_star="x", last_reviewed="2026-05-17")
-        ph = Phase(id="P1", title="phase", created="2026-05-17", status=Status.IN_PROGRESS)
+        ph = Phase(
+            id="P1", title="phase", created="2026-05-17",
+            status=Status.IN_PROGRESS,
+            planning_path="docs/specs/2026-05-17-p1-phase-plan.md",
+        )
         s = Slice(
             id="S1", title="slice", created="2026-05-17", status=Status.BLOCKED,
             blocked_on=BlockedOn(kind="id", value="P1.S2"),
+            depends_on=["P1.S2"],
+            planning_status=PlanningStatus.RATIFIED,
+            parallel_group="bootstrap",
             refs=["a.md", "b.md"],
         )
         s.tasks.append(Task(id="T1", title="task", created="2026-05-17"))

@@ -36,11 +36,17 @@ def _build_parser() -> argparse.ArgumentParser:
     p_phase.add_argument("--title", required=True)
     p_phase.add_argument("--spec")
     p_phase.add_argument("--plan")
+    p_phase.add_argument("--planning")
     p_slice = create_sub.add_parser("slice")
     p_slice.add_argument("phase_id")
     p_slice.add_argument("--title", required=True)
     p_slice.add_argument("--follow-up")
     p_slice.add_argument("--plan")
+    p_slice.add_argument(
+        "--depends-on", action="append", default=[],
+        help="Comma-separated slice dependencies. May be passed more than once.",
+    )
+    p_slice.add_argument("--parallel-group")
     p_task = create_sub.add_parser("task")
     p_task.add_argument("slice_id")
     p_task.add_argument("--title", required=True)
@@ -70,6 +76,22 @@ def _build_parser() -> argparse.ArgumentParser:
     p_unblock.add_argument("slice_id")
     p_unblock.add_argument("--resume", action="store_true")
 
+    p_deps = sub.add_parser("deps")
+    p_deps.add_argument("slice_id")
+    g = p_deps.add_mutually_exclusive_group(required=True)
+    g.add_argument("--add")
+    g.add_argument("--remove")
+
+    p_ratify = sub.add_parser("ratify")
+    p_ratify.add_argument("slice_id")
+    p_ratify.add_argument("--status", choices=["proposed", "ratified", "superseded"],
+                          default="ratified")
+    p_ratify.add_argument("--parallel-group")
+
+    p_planning_path = sub.add_parser("planning-path")
+    p_planning_path.add_argument("phase_id")
+    p_planning_path.add_argument("--set", dest="path", required=True)
+
     p_note = sub.add_parser("note")
     p_note.add_argument("id")
     g = p_note.add_mutually_exclusive_group(required=True)
@@ -91,6 +113,18 @@ def _build_parser() -> argparse.ArgumentParser:
 
     p_brief = sub.add_parser("brief")
     p_brief.add_argument("id")
+
+    p_phase_status = sub.add_parser("phase-status")
+    p_phase_status.add_argument("--recent", type=int, default=3)
+    p_phase_status.add_argument("--format", choices=["text", "json"], default="text")
+
+    p_schedule = sub.add_parser("schedule")
+    p_schedule.add_argument("phase_id")
+    p_schedule.add_argument("--format", choices=["text", "json"], default="text")
+
+    p_ready = sub.add_parser("ready-slices")
+    p_ready.add_argument("phase_id")
+    p_ready.add_argument("--format", choices=["text", "json"], default="text")
 
     p_list = sub.add_parser("list")
     p_list.add_argument("--phase")
@@ -140,11 +174,21 @@ def main(argv: list[str]) -> int:
             commands.cmd_init(repo_root=root, project=args.project, north_star=args.north_star, force=args.force)
         elif args.cmd == "create":
             if args.create_kind == "phase":
-                print(commands.cmd_create_phase(repo_root=root, title=args.title, spec=args.spec, plan=args.plan))
+                print(commands.cmd_create_phase(
+                    repo_root=root, title=args.title, spec=args.spec,
+                    plan=args.plan, planning=args.planning,
+                ))
             elif args.create_kind == "slice":
+                deps = [
+                    dep
+                    for value in args.depends_on
+                    for dep in value.split(",")
+                    if dep
+                ]
                 print(commands.cmd_create_slice(
                     repo_root=root, phase_id=args.phase_id, title=args.title,
                     follow_up=args.follow_up, plan=args.plan,
+                    depends_on=deps, parallel_group=args.parallel_group,
                 ))
             elif args.create_kind == "task":
                 print(commands.cmd_create_task(repo_root=root, slice_id=args.slice_id, title=args.title))
@@ -166,6 +210,15 @@ def main(argv: list[str]) -> int:
             commands.cmd_block(repo_root=root, slice_id=args.slice_id, on=args.on)
         elif args.cmd == "unblock":
             commands.cmd_unblock(repo_root=root, slice_id=args.slice_id, resume=args.resume)
+        elif args.cmd == "deps":
+            commands.cmd_deps(repo_root=root, slice_id=args.slice_id, add=args.add, remove=args.remove)
+        elif args.cmd == "ratify":
+            commands.cmd_ratify(
+                repo_root=root, slice_id=args.slice_id,
+                status=args.status, parallel_group=args.parallel_group,
+            )
+        elif args.cmd == "planning-path":
+            commands.cmd_phase_planning_path(repo_root=root, phase_id=args.phase_id, path=args.path)
         elif args.cmd == "note":
             commands.cmd_note(repo_root=root, id=args.id, append=args.append, replace=args.replace)
         elif args.cmd == "ref":
@@ -176,6 +229,18 @@ def main(argv: list[str]) -> int:
             sys.stdout.write(commands.cmd_show(repo_root=root, id=args.id))
         elif args.cmd == "brief":
             sys.stdout.write(commands.cmd_brief(repo_root=root, id=args.id))
+        elif args.cmd == "phase-status":
+            sys.stdout.write(commands.cmd_phase_status(
+                repo_root=root, recent=args.recent, format=args.format,
+            ))
+        elif args.cmd == "schedule":
+            sys.stdout.write(commands.cmd_schedule(
+                repo_root=root, phase_id=args.phase_id, format=args.format,
+            ))
+        elif args.cmd == "ready-slices":
+            sys.stdout.write(commands.cmd_ready_slices(
+                repo_root=root, phase_id=args.phase_id, format=args.format,
+            ))
         elif args.cmd == "list":
             status_list = args.status.split(",") if args.status else None
             sys.stdout.write(commands.cmd_list(

@@ -9,6 +9,7 @@ from tasktool.model import (
     CrossCutting,
     BlockedOn,
     Status,
+    PlanningStatus,
     ArchivedPhase,
     SCHEMA_VERSION,
 )
@@ -26,6 +27,7 @@ __all__ = [
     "CrossCutting",
     "BlockedOn",
     "Status",
+    "PlanningStatus",
     "ArchivedPhase",
     "SCHEMA_VERSION",
     "load_project",

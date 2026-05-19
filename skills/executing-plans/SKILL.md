@@ -23,6 +23,8 @@ Load plan, review critically, execute all tasks, report when complete.
 
 ### Step 2: Execute Tasks
 
+If the work belongs to a phase in `docs/tasklist.json`, run `tasktool schedule <phase-id>` and `tasktool ready-slices <phase-id>` before starting. Execute only ready slices unless the human partner explicitly overrides the dependency graph. If the plan proves a dependency wrong, update tasktool with `tasktool deps` and re-check `ready-slices`.
+
 For each task:
 1. Mark as in_progress
 2. Follow each step exactly (plan has bite-sized steps)
