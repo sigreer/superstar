@@ -13,6 +13,8 @@ Ensure work happens in an isolated workspace. Prefer your platform's native work
 
 **Implementation rule:** For slice/task implementation work, isolation is required unless the human partner explicitly says in the current turn to work in the current checkout. A normal repo checkout on `main`/`master` is read-only/planning-only by default: do not edit files, run artifact-producing tests, write reviewer chains, or mutate tasktool state for an implementation slice there without that explicit opt-out.
 
+If tasktool authoritative-checkout routing is configured, tasktool mutations may still be invoked from the implementation worktree. Stay put: do not leave the worktree to hand-edit the authoritative checkout or run lifecycle commands elsewhere; run `tasktool start`, `tasktool ref`, `tasktool note`, and `tasktool close` from the active implementation worktree and let routing write through the configured authority.
+
 **Announce at start:** "I'm using the using-git-worktrees skill to set up an isolated workspace."
 
 ## Step 0: Detect Existing Isolation

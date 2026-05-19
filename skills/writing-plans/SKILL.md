@@ -19,6 +19,8 @@ Assume they are a skilled developer, but know almost nothing about our toolset o
 
 **tasktool integration:** If `docs/tasklist.json` exists, this plan must correspond to a row in it. See [[tasklist-discipline]] for the ID scheme. **Before writing the plan file, verify the row for `<id>` exists** — run `tasktool show <id>` and confirm exit 0. If it doesn't (e.g. a spec was committed without a row, though the pre-commit hook should have caught that), stop and create the row via `tasktool create …` per [[tasklist-discipline]]. Never let the plan be the artifact that mints an ID.
 
+**Lifecycle start step:** When docs/tasklist.json exists and the plan executes a slice, the first execution step must be `tasktool start <slice-id>` before dispatching or editing implementation files. Use the concrete slice ID in generated plans, not the placeholder. This is separate from TodoWrite and from prose status updates.
+
 **Scheduling ratification:** For slice plans, inspect `tasktool show <slice-id>` and `tasktool schedule <phase-id>` before drafting. The plan must explicitly confirm or update `depends_on`, `parallel_group`, and whether the slice remains independently plannable/executable. If the spec/plan work discovers a dependency change, update it with `tasktool deps`; when the plan settles, run `tasktool ratify <slice-id>` so coordinators can rely on `tasktool ready-slices <phase-id>`.
 
 ## Scope Check

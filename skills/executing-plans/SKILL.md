@@ -37,7 +37,7 @@ Parallel or adjacent slices require separate worktrees. Same repo on a different
 If the work belongs to a phase in `docs/tasklist.json`, run `tasktool schedule <phase-id>` and `tasktool ready-slices <phase-id>` before starting. Execute only ready slices unless the human partner explicitly overrides the dependency graph. If the plan proves a dependency wrong, update tasktool with `tasktool deps` and re-check `ready-slices`.
 
 For each task:
-1. Mark as in_progress
+1. If this is the first task for a slice, run `tasktool start <slice-id>` before implementation
 2. Follow each step exactly (plan has bite-sized steps)
 3. Run verifications as specified
 4. Run the in-loop internal review per `[[requesting-internal-review]]` if the plan or task calls for it

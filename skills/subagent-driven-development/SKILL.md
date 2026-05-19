@@ -30,6 +30,8 @@ Execute plan by dispatching fresh subagent per task, with two-stage in-loop revi
 
 Plans are organised into **slices** (and slices into **tasks**) per `[[tasklist-discipline]]`. The coordinator tracks slice and phase boundaries explicitly.
 
+For each active slice, the coordinator must run `tasktool start <slice-id>` before dispatching implementation. This is the lifecycle gate that records the start and moves the row to `in_progress`; do not substitute prose notes, TodoWrite state, or manual JSON edits.
+
 Before dispatching any implementation subagent, run `[[using-git-worktrees]]` as the first executable gate and verify the coordinator is operating from an isolated worktree for the active slice. Implementation requires one isolated worktree per active slice unless the human partner explicitly opts out in the current turn. A normal repo checkout on `main`/`master` is read-only/planning-only by default: do not edit files, run artifact-producing tests, write reviewer chains, or mutate tasktool status for an implementation slice there without that explicit opt-out.
 
 Before dispatching implementation work for a phase, run `tasktool schedule <phase-id>` and `tasktool ready-slices <phase-id>`. Only dispatch slices returned by `ready-slices`; they have no unfinished `depends_on` entries and are not runtime-blocked. Slices sharing a `parallel_group` are candidates for parallel execution when their file scopes do not overlap. If implementation discovers a real sequencing dependency, stop dispatch for the affected slice and update the row with `tasktool deps`; do not encode planned sequencing as `blocked_on`.

@@ -9,11 +9,14 @@ A `docs/tasklist.json` file is the canonical, top-level tracker for the project.
 
 Prefer the repo-local launcher `tools/tasktool/tasktool` when it exists; it works from a fresh clone without installing a global shim. The global `tasktool` command is an optional convenience installed by `bash tools/tasktool/install.sh`. If neither is available, use `PYTHONPATH=tools python3 -m tasktool`.
 
+When `.tasktool/config.json` sets `tasklist.mutation_mode` to `authoritative-checkout`, mutating commands route through the configured authoritative checkout instead of editing the local worktree's `docs/tasklist.json` directly. Treat that routing as the source of truth: run `tasktool` from the implementation worktree, let the tool acquire the shared lock and update the authoritative checkout, then continue from the same implementation worktree.
+
 **Announce at start:** "I'm using the tasklist-discipline skill to update docs/tasklist.json via tasktool."
 
 ## When to use
 
 - About to plan or write a new spec → allocate an ID with `tasktool create phase|slice|task|cross …` **before** the spec file lands. The TASKLIST row is the allocation; the spec/plan/reviewer-chain filenames are downstream.
+- About to start implementation for a slice → `tasktool start <slice-id>`. This records the lifecycle start and moves the row to `in_progress`; do this before dispatching implementation or editing implementation files.
 - About to close a slice → `tasktool close <slice-id>`. The CLI enforces the post-slice external-review gate.
 - About to close a phase → `tasktool archive-phase <phase-id>`. The CLI enforces the post-phase gate and writes the archive note.
 - Entering a slice → `tasktool brief <slice-id>` instead of reading the JSON.
@@ -21,7 +24,7 @@ Prefer the repo-local launcher `tools/tasktool/tasktool` when it exists; it work
 
 Onboarding has a hard setup boundary: after `[[project-setup]]` creates or imports `docs/tasklist.json`, installs hooks, vendors `scripts/external-reviewer.py`, moves legacy `docs/superpowers/` files, or edits `CLAUDE.md` / `AGENTS.md`, that setup/migration must be committed, stashed, or explicitly paused before implementation work begins.
 
-**Implementation isolation boundary:** If tasklist work is tied to starting, continuing, reviewing, or closing an implementation slice, invoke `[[using-git-worktrees]]` before tasktool status/ref/note/close mutations for an active implementation slice. `tasktool set`, `tasktool ref`, `tasktool note`, `tasktool close`, and reviewer-chain registration are not harmless bookkeeping when run from a shared checkout: they dirty the slice evidence set. A normal `main`/`master` checkout is planning/setup/read-only by default unless the user explicitly opts out of isolation in the current turn.
+**Implementation isolation boundary:** If tasklist work is tied to starting, continuing, reviewing, or closing an implementation slice, invoke `[[using-git-worktrees]]` before tasktool status/ref/note/close mutations for an active implementation slice. `tasktool start`, `tasktool set`, `tasktool ref`, `tasktool note`, `tasktool close`, and reviewer-chain registration are not harmless bookkeeping when run from a shared checkout: they dirty the slice evidence set. A normal `main`/`master` checkout is planning/setup/read-only by default unless the user explicitly opts out of isolation in the current turn. If authoritative checkout routing is configured, still invoke `tasktool` from the active implementation worktree; the command itself routes the mutation.
 
 ## Conceptual model
 
@@ -34,7 +37,7 @@ Onboarding has a hard setup boundary: after `[[project-setup]]` creates or impor
 
 IDs are assigned at birth and **never renumbered**. The `tasktool create` family does orphan-aware allocation (`max+1` across `docs/tasklist.json`, `docs/specs/`, `docs/plans/`, `docs/reviewer/`) and prints the new ID.
 
-Status enum: `ready | in_progress | blocked | done`. Only slices may take `blocked` (and only via `tasktool block <slice-id> --on …`). Emoji are a render concern; `tasktool render` and `tasktool brief` handle that. `done` requires `closed`; the CLI stamps it.
+Status enum: `ready | in_progress | blocked | done`. Only slices may take `blocked` (and only via `tasktool block <slice-id> --on …`). Emoji are a render concern; `tasktool render` and `tasktool brief` handle that. `tasktool start <slice-id>` is the normal way to enter `in_progress`; `tasktool set <id> --status in_progress` is a compatibility alias for older plans and ad-hoc rows. `done` requires `closed`; the CLI stamps it.
 
 Phase planning uses separate scheduling metadata. `planning_path` points at the phase-scoped planning/design document. `depends_on` records planned slice sequencing; it is not the same as runtime `blocked_on`. `planning_status` is `proposed | ratified | superseded`, and `parallel_group` names slices intended to be planned or executed together.
 
@@ -45,7 +48,8 @@ tools/tasktool/tasktool brief <id>            # start-of-work primer for slice o
 tools/tasktool/tasktool show <id>             # full detail
 tools/tasktool/tasktool list --open           # everything ready / in_progress / blocked
 tools/tasktool/tasktool create slice <phase-id> --title "…"
-tools/tasktool/tasktool set <id> --status in_progress
+tools/tasktool/tasktool start <slice-id>      # lifecycle start + in_progress
+tools/tasktool/tasktool set <id> --status in_progress  # compatibility alias
 tools/tasktool/tasktool note <id> --append "…"
 tools/tasktool/tasktool ref <id> --add path/to/artifact
 tools/tasktool/tasktool block <slice-id> --on P2.S5
