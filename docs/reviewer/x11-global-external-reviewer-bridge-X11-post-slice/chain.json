@@ -1,0 +1,76 @@
+{
+  "schema_version": 1,
+  "chain": "x11-global-external-reviewer-bridge-X11-post-slice",
+  "kind": "post-slice",
+  "target": "docs/plans/2026-05-20-X11-global-external-reviewer-bridge.md",
+  "work_id": "X11",
+  "legacy_migrated": false,
+  "rounds": [
+    {
+      "round": 1,
+      "reviewers": [
+        {
+          "role": "primary",
+          "sweep_group": null,
+          "parent_round": 1,
+          "request": "r1-2026-05-20T1320-primary-request.md",
+          "response": "r1-2026-05-20T1320-primary-response.md",
+          "verdict": "ready with small edits",
+          "verdict_valid": true,
+          "returncode": 0,
+          "status": "ok",
+          "provider": "claude",
+          "caller_provider": "codex",
+          "sandbox": {
+            "repo_root": "/home/simon/Dev/sigreer/skills/superstar/.worktrees/x11-global-external-reviewer-bridge",
+            "scratch_dir": "/tmp/superstar-reviewer-x11-global-external-reviewer-bridge-X11-post-slice-r1-primary-3o23gtju",
+            "response_dir": "docs/reviewer/x11-global-external-reviewer-bridge-X11-post-slice/.reviewer-output/r1-primary",
+            "mode": "plan-read-only"
+          }
+        },
+        {
+          "role": "sweep",
+          "sweep_group": 1,
+          "parent_round": 1,
+          "request": "r1-2026-05-20T1320-sweep1-request.md",
+          "response": "r1-2026-05-20T1320-sweep1-response.md",
+          "verdict": "ready with small edits",
+          "verdict_valid": true,
+          "returncode": 0,
+          "status": "ok",
+          "provider": "claude",
+          "caller_provider": "codex",
+          "sandbox": {
+            "repo_root": "/home/simon/Dev/sigreer/skills/superstar/.worktrees/x11-global-external-reviewer-bridge",
+            "scratch_dir": "/tmp/superstar-reviewer-x11-global-external-reviewer-bridge-X11-post-slice-r1-sweep1-7z1m6be5",
+            "response_dir": "docs/reviewer/x11-global-external-reviewer-bridge-X11-post-slice/.reviewer-output/r1-sweep1",
+            "mode": "plan-read-only"
+          }
+        }
+      ],
+      "status": "ok",
+      "returncode": 0,
+      "merged_verdict": "ready with small edits",
+      "merged_findings": "r1-merged-findings.md",
+      "request": "r1-2026-05-20T1320-primary-request.md",
+      "response": "r1-2026-05-20T1320-primary-response.md",
+      "resolution": null,
+      "resolution_parse_status": null,
+      "resolution_waiver": false,
+      "head_sha_at_request": "356c56c44a93a7fc1436d35d0314c0e2a12876ad",
+      "head_sha_after_round": "356c56c44a93a7fc1436d35d0314c0e2a12876ad",
+      "worktree_dirty_at_request": true,
+      "verdict": "ready with small edits",
+      "verdict_valid": true,
+      "findings_count": 6,
+      "blocking_findings_count": 0,
+      "base_ref": null,
+      "base_ref_source": null,
+      "diff_included": false
+    }
+  ],
+  "sweep_checkpoints": {
+    "first-round": "completed",
+    "final-ready": "pending"
+  }
+}
