@@ -1184,7 +1184,7 @@ def _fmt_value(v: object) -> str:
 PYTHONPATH=tools pytest tools/tasktool/tests/test_migrate.py -v
 ```
 
-Expected: all tests pass (10 named tests plus the parametrized full-field migration test, which expands to ~30 test cases across the six row dataclasses).
+Expected: all tests pass, including the row-type-parametrized full-field migration acceptance test that loops over every supported dataclass field. Pytest reports six parametrized cases for that test (one per row dataclass); per-field assertions run inside each case.
 
 - [ ] **Step 5: Commit**
 
