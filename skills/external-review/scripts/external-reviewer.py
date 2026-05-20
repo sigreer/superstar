@@ -1761,7 +1761,7 @@ def run_manual_approve(args) -> int:
 
 _OUTER_FENCE_RE = re.compile(r"^\s*```[a-zA-Z0-9_-]*\s*\n(.*?)\n```\s*$", re.DOTALL)
 _VERDICT_HEADING_STYLE = re.compile(
-    r"(?:\*+|_+)?((?:\d+\.\s+)?Overall verdict)(?:\*+|_+)?\s*\n+\s*"
+    r"(?:\*+|_+)?((?:\d+\.\s+)?(?:Overall\s+)?Verdict)(?:\*+|_+)?\s*\n+\s*"
     r"(?:\*+|_+)?(ready with small edits|ready|revise)(?:\*+|_+)?",
     re.IGNORECASE,
 )
@@ -2428,14 +2428,39 @@ VERDICT_LINE_RE = re.compile(
 )
 
 
+# Anchored, value-bounded bare `Verdict:` fallback. Used only when no
+# `Overall verdict:` line matches. See X10 spec §Design.2b for the trailing-
+# prose policy. Do NOT add re.VERBOSE — it strips literal whitespace from
+# the alternation `ready with small edits` and silently breaks the regex.
+VERDICT_LINE_BARE_RE = re.compile(
+    r"^[\s>#*_`]*verdict\s*[`*_\"']*\s*[:\-]\s*[`*_\"'\s]*"
+    r"(ready with small edits|ready|revise)"
+    r"(?=[\s`*_\"'.]*(?:$|\n))",
+    re.IGNORECASE | re.MULTILINE,
+)
+
+
 def parse_verdict(text: str) -> tuple[str | None, bool]:
     matches = list(VERDICT_LINE_RE.finditer(text))
+    if not matches:
+        matches = list(VERDICT_LINE_BARE_RE.finditer(text))
     if not matches:
         return None, False
     raw = matches[-1].group(1).strip().lower()
     if raw not in VERDICT_VALUES:
         return None, False
     return raw, True
+
+
+def parse_reformatted_verdict(raw: str) -> tuple[str | None, bool]:
+    """Compose `_reformat_response` and `parse_verdict`.
+
+    Single chokepoint for response-body verdict extraction. Used by both the
+    automated round path and the manual ingest path. NOT used by legacy
+    manifest synthesis (`synthesize_manifest_from_legacy_files`) — that path
+    parses historical bodies as-stored and must not rewrite them.
+    """
+    return parse_verdict(_reformat_response(raw))
 
 
 HEADING_FINDING_RE = re.compile(r"^##\s+F(\d+)\b(.*)$", re.MULTILINE)
