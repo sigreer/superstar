@@ -25,7 +25,12 @@ mkdir -p "$AGENT_REVIEWER_RESPONSE_DIR" "$AGENT_REVIEWER_SCRATCH_DIR"
 case "$provider" in
   codex)
     output_file="$AGENT_REVIEWER_RESPONSE_DIR/last-message.md"
+    events_file="$AGENT_REVIEWER_RESPONSE_DIR/codex-events.jsonl"
+    cat > "$AGENT_REVIEWER_RESPONSE_DIR/reviewer-metadata.json" <<EOF
+{"provider":"codex","codex_events_file":"codex-events.jsonl"}
+EOF
     codex exec \
+      --json \
       --sandbox workspace-write \
       --ephemeral \
       --skip-git-repo-check \
@@ -33,16 +38,50 @@ case "$provider" in
       --add-dir "$AGENT_REVIEWER_RESPONSE_DIR" \
       -c 'sandbox_permissions=["disk-full-read-access"]' \
       --output-last-message "$output_file" \
-      -
+      - > "$events_file"
     if [[ -s "$output_file" ]]; then
       cat "$output_file"
     fi
     ;;
   claude)
+    output_file="$AGENT_REVIEWER_RESPONSE_DIR/last-message.md"
+    claude_json="$AGENT_REVIEWER_RESPONSE_DIR/claude-output.json"
+    cat > "$AGENT_REVIEWER_RESPONSE_DIR/reviewer-metadata.json" <<EOF
+{"provider":"claude","claude_output_file":"claude-output.json"}
+EOF
     claude --print \
+      --output-format json \
       --permission-mode plan \
       --add-dir "$AGENT_REVIEWER_REPO_ROOT" \
-      --add-dir "$AGENT_REVIEWER_RESPONSE_DIR"
+      --add-dir "$AGENT_REVIEWER_RESPONSE_DIR" > "$claude_json"
+    python3 - "$claude_json" "$output_file" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+raw = Path(sys.argv[1]).read_text()
+text = raw
+try:
+    payload = json.loads(raw)
+    if isinstance(payload, dict):
+        if isinstance(payload.get("result"), str):
+            text = payload["result"]
+        elif isinstance(payload.get("response"), str):
+            text = payload["response"]
+        elif isinstance(payload.get("content"), list):
+            parts = []
+            for item in payload["content"]:
+                if isinstance(item, dict) and isinstance(item.get("text"), str):
+                    parts.append(item["text"])
+                elif isinstance(item, str):
+                    parts.append(item)
+            if parts:
+                text = "\n".join(parts)
+except json.JSONDecodeError:
+    pass
+Path(sys.argv[2]).write_text(text)
+print(text, end="" if text.endswith("\n") else "\n")
+PY
     ;;
   *)
     echo "reviewer-agent: unknown AGENT_REVIEWER_PROVIDER: $provider" >&2

@@ -25,6 +25,7 @@ import argparse
 import datetime as dt
 import fcntl
 import json
+import math
 import os
 import re
 import shlex
@@ -32,6 +33,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -594,6 +596,10 @@ def write_manifest(path: Path, data: dict) -> None:
     path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 
 
+def utc_now_iso() -> str:
+    return dt.datetime.now(dt.timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+
 def migrate_manifest_inplace(manifest: dict) -> None:
     """Add `status` and `returncode` keys to legacy round/reviewer entries.
 
@@ -1112,6 +1118,129 @@ def make_rate_limit_payload(
     }
 
 
+def estimate_usage(prompt_text: str, response_text: str) -> dict:
+    prompt_chars = len(prompt_text or "")
+    response_chars = len(response_text or "")
+    input_tokens = math.ceil(prompt_chars / 4)
+    output_tokens = math.ceil(response_chars / 4)
+    return {
+        "formula": "ceil(chars / 4)",
+        "prompt_chars": prompt_chars,
+        "response_chars": response_chars,
+        "estimated_input_tokens": input_tokens,
+        "estimated_output_tokens": output_tokens,
+        "estimated_total_tokens": input_tokens + output_tokens,
+    }
+
+
+def _normalize_exact_usage(raw: dict | None, *, provider: str, model: str | None = None) -> dict | None:
+    if not isinstance(raw, dict):
+        return None
+    usage = dict(raw)
+    if "total_tokens" not in usage:
+        total = 0
+        for key in ("input_tokens", "output_tokens", "cache_creation_input_tokens", "cache_read_input_tokens"):
+            value = usage.get(key)
+            if isinstance(value, (int, float)):
+                total += int(value)
+        if total:
+            usage["total_tokens"] = total
+    if "total_tokens" not in usage:
+        return None
+    usage.setdefault("provider", provider)
+    if model:
+        usage.setdefault("model", model)
+    return usage
+
+
+def _extract_claude_exact_usage(payload: dict, *, provider: str) -> tuple[dict | None, str | None]:
+    model = payload.get("model") if isinstance(payload.get("model"), str) else None
+    usage = payload.get("usage")
+    if isinstance(usage, dict):
+        return _normalize_exact_usage(usage, provider=provider, model=model), model
+    return None, model
+
+
+def _extract_codex_exact_usage(events_path: Path, *, provider: str) -> dict | None:
+    if not events_path.exists():
+        return None
+    latest: dict | None = None
+    for line in events_path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        event = json.loads(line)
+        payload = event.get("token_count") if isinstance(event, dict) else None
+        if payload is None and isinstance(event, dict) and event.get("type") == "token_count":
+            payload = event
+        if isinstance(payload, dict):
+            latest = payload
+    if latest is None:
+        return None
+    key_map = {
+        "input": "input_tokens",
+        "output": "output_tokens",
+        "total": "total_tokens",
+        "input_tokens": "input_tokens",
+        "output_tokens": "output_tokens",
+        "total_tokens": "total_tokens",
+    }
+    usage = {}
+    for source, dest in key_map.items():
+        if isinstance(latest.get(source), (int, float)):
+            usage[dest] = int(latest[source])
+    return _normalize_exact_usage(usage, provider=provider, model=latest.get("model"))
+
+
+def load_usage_sidecar(response_dir: Path, *, provider: str) -> tuple[dict | None, str | None, str | None]:
+    """Return (exact_usage, model, error) from optional wrapper sidecars."""
+    metadata_path = response_dir / "reviewer-metadata.json"
+    if not metadata_path.exists():
+        return None, None, None
+    try:
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        sidecar_provider = metadata.get("provider") or provider
+        model = metadata.get("model") if isinstance(metadata.get("model"), str) else None
+        exact = _normalize_exact_usage(metadata.get("exact_usage"), provider=sidecar_provider, model=model)
+        if exact:
+            return exact, exact.get("model") or model, None
+        if metadata.get("claude_output_file"):
+            payload = json.loads((response_dir / metadata["claude_output_file"]).read_text(encoding="utf-8"))
+            exact, claude_model = _extract_claude_exact_usage(payload, provider=sidecar_provider)
+            return exact, claude_model or model, None
+        if metadata.get("codex_events_file"):
+            exact = _extract_codex_exact_usage(response_dir / metadata["codex_events_file"], provider=sidecar_provider)
+            return exact, (exact or {}).get("model") or model, None
+        return None, model, None
+    except Exception as exc:
+        return None, None, str(exc)
+
+
+def build_usage_capture(
+    *,
+    prompt_text: str,
+    response_text: str,
+    response_dir: Path,
+    provider: str,
+) -> dict:
+    estimated = estimate_usage(prompt_text, response_text)
+    exact, model, error = load_usage_sidecar(response_dir, provider=provider)
+    if error:
+        status = "failed"
+    elif exact:
+        status = "exact"
+    elif estimated:
+        status = "estimated_only"
+    else:
+        status = "unavailable"
+    return {
+        "usage_capture_status": status,
+        "estimated_usage": estimated,
+        "exact_usage": exact,
+        "model": model,
+        "usage_capture_error": error,
+    }
+
+
 def resolve_mode(mode: str, *, round_num: int) -> str:
     if mode == "incremental" and round_num == 1:
         raise ValueError("--mode incremental is not valid on round 1")
@@ -1140,6 +1269,14 @@ class ReviewerResult:
     provider: str = "custom"
     caller_provider: str = "unknown"
     sandbox: dict | None = None
+    started_at: str | None = None
+    finished_at: str | None = None
+    duration_ms: int | None = None
+    model: str | None = None
+    estimated_usage: dict | None = None
+    exact_usage: dict | None = None
+    usage_capture_status: str = "unavailable"
+    usage_capture_error: str | None = None
 
 
 @dataclass
@@ -1318,6 +1455,8 @@ def run_one_reviewer(
     }
 
     try:
+        started_at = utc_now_iso()
+        started_mono = time.monotonic()
         result = run_reviewer(
             command_template=args.reviewer_cmd,
             prompt_file=request_path, prompt_text=prompt_text,
@@ -1332,6 +1471,8 @@ def run_one_reviewer(
             request_file=request_path,
             extra_env=invocation_context.env(),
         )
+        finished_at = utc_now_iso()
+        duration_ms = max(0, int((time.monotonic() - started_mono) * 1000))
         # Rate-limit detection — runs only on non-zero exit
         if result.returncode != 0:
             matched, reset_at, pattern_name = detect_rate_limit(result.stderr or "")
@@ -1404,6 +1545,12 @@ def run_one_reviewer(
             ),
         )
         body = response_path.read_text(encoding="utf-8")
+        usage_capture = build_usage_capture(
+            prompt_text=prompt_text,
+            response_text=body,
+            response_dir=response_dir,
+            provider=invocation_context.provider,
+        )
         if result.returncode != 0:
             verdict, valid = None, False
         else:
@@ -1417,6 +1564,14 @@ def run_one_reviewer(
             provider=invocation_context.provider,
             caller_provider=invocation_context.caller_provider,
             sandbox=sandbox_info,
+            started_at=started_at,
+            finished_at=finished_at,
+            duration_ms=duration_ms,
+            model=usage_capture["model"],
+            estimated_usage=usage_capture["estimated_usage"],
+            exact_usage=usage_capture["exact_usage"],
+            usage_capture_status=usage_capture["usage_capture_status"],
+            usage_capture_error=usage_capture["usage_capture_error"],
         )
     finally:
         if not getattr(args, "keep_reviewer_scratch", False):
@@ -1692,6 +1847,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     sp_clear = subparsers.add_parser("clear-limit", help="Clear reviewer limit state")
     sp_clear.add_argument("--reviewer-cmd", default=None)
     sp_clear.add_argument("--state-file", default=None)
+    sp_stats = subparsers.add_parser("stats", help="Summarize review-chain usage and timing metrics")
+    sp_stats.add_argument("--output-dir", default="docs/reviewer")
+    sp_stats.add_argument("--json", action="store_true", help="Emit normalized JSON instead of a text table")
 
     return parser.parse_args(argv)
 
@@ -1864,6 +2022,155 @@ def run_clear_limit(args) -> int:
     return 0
 
 
+STATS_KINDS = ("spec", "plan", "post-slice", "post-phase", "implementation", "other")
+
+
+def _empty_stats_group() -> dict:
+    return {
+        "round_count": 0,
+        "first_round_count": 0,
+        "follow_up_count": 0,
+        "pass_count": 0,
+        "revise_count": 0,
+        "total_duration_ms": 0,
+        "average_duration_ms": 0,
+        "first_round_average_duration_ms": 0,
+        "follow_up_average_duration_ms": 0,
+        "_first_duration_ms": 0,
+        "_follow_duration_ms": 0,
+    }
+
+
+def _round_passed(round_entry: dict) -> bool:
+    verdict = round_entry.get("merged_verdict") or round_entry.get("verdict")
+    return verdict in ("ready", "ready with small edits")
+
+
+def _estimated_usage_for_stats(chain_dir: Path, round_entry: dict) -> dict | None:
+    estimated = round_entry.get("estimated_usage")
+    if isinstance(estimated, dict):
+        return estimated
+    request = round_entry.get("request")
+    response = round_entry.get("response")
+    if not request or not response:
+        return None
+    request_path = chain_dir / request
+    response_path = chain_dir / response
+    if not request_path.exists() or not response_path.exists():
+        return None
+    try:
+        return estimate_usage(
+            request_path.read_text(encoding="utf-8"),
+            response_path.read_text(encoding="utf-8"),
+        )
+    except OSError:
+        return None
+
+
+def collect_review_stats(output_dir: Path) -> dict:
+    groups = {kind: _empty_stats_group() for kind in STATS_KINDS}
+    providers: dict[str, dict] = {}
+    chain_count = 0
+
+    for manifest_path in sorted(output_dir.glob("**/chain.json")):
+        try:
+            manifest = read_manifest(manifest_path)
+        except Exception:
+            continue
+        if not manifest:
+            continue
+        chain_count += 1
+        kind = manifest.get("kind") if manifest.get("kind") in STATS_KINDS else "other"
+        group = groups[kind]
+        for round_entry in manifest.get("rounds", []) or []:
+            group["round_count"] += 1
+            duration = round_entry.get("duration_ms")
+            if isinstance(duration, (int, float)):
+                group["total_duration_ms"] += int(duration)
+            if int(round_entry.get("round") or 0) <= 1:
+                group["first_round_count"] += 1
+                if isinstance(duration, (int, float)):
+                    group["_first_duration_ms"] += int(duration)
+            else:
+                group["follow_up_count"] += 1
+                if isinstance(duration, (int, float)):
+                    group["_follow_duration_ms"] += int(duration)
+            if _round_passed(round_entry):
+                group["pass_count"] += 1
+            elif (round_entry.get("merged_verdict") or round_entry.get("verdict")) == "revise":
+                group["revise_count"] += 1
+
+            exact_usage = round_entry.get("exact_usage") if isinstance(round_entry.get("exact_usage"), dict) else {}
+            provider = exact_usage.get("provider") or round_entry.get("provider")
+            estimated = _estimated_usage_for_stats(manifest_path.parent, round_entry)
+            if provider and isinstance(estimated, dict):
+                provider_stats = providers.setdefault(provider, {
+                    "round_count": 0,
+                    "estimated_input_tokens": 0,
+                    "estimated_output_tokens": 0,
+                    "estimated_total_tokens": 0,
+                    "total_duration_ms": 0,
+                    "average_duration_ms": 0,
+                })
+                provider_stats["round_count"] += 1
+                provider_stats["estimated_input_tokens"] += int(estimated.get("estimated_input_tokens") or 0)
+                provider_stats["estimated_output_tokens"] += int(estimated.get("estimated_output_tokens") or 0)
+                provider_stats["estimated_total_tokens"] += int(estimated.get("estimated_total_tokens") or 0)
+                if isinstance(duration, (int, float)):
+                    provider_stats["total_duration_ms"] += int(duration)
+
+    for group in groups.values():
+        if group["round_count"]:
+            group["average_duration_ms"] = round(group["total_duration_ms"] / group["round_count"])
+        if group["first_round_count"]:
+            group["first_round_average_duration_ms"] = round(group["_first_duration_ms"] / group["first_round_count"])
+        if group["follow_up_count"]:
+            group["follow_up_average_duration_ms"] = round(group["_follow_duration_ms"] / group["follow_up_count"])
+        group.pop("_first_duration_ms", None)
+        group.pop("_follow_duration_ms", None)
+    for provider_stats in providers.values():
+        if provider_stats["round_count"]:
+            provider_stats["average_duration_ms"] = round(
+                provider_stats["total_duration_ms"] / provider_stats["round_count"]
+            )
+    return {
+        "chain_count": chain_count,
+        "round_count": sum(g["round_count"] for g in groups.values()),
+        "groups": groups,
+        "provider_comparison": providers,
+    }
+
+
+def print_stats_table(stats: dict) -> None:
+    print("kind           rounds  first  follow  pass  revise  total_ms  avg_ms")
+    for kind in STATS_KINDS:
+        group = stats["groups"][kind]
+        print(
+            f"{kind:<14} {group['round_count']:>6} {group['first_round_count']:>6} "
+            f"{group['follow_up_count']:>7} {group['pass_count']:>5} "
+            f"{group['revise_count']:>7} {group['total_duration_ms']:>9} "
+            f"{group['average_duration_ms']:>7}"
+        )
+    if stats["provider_comparison"]:
+        print()
+        print("provider       rounds  est_input  est_output  est_total  avg_ms")
+        for provider, data in sorted(stats["provider_comparison"].items()):
+            print(
+                f"{provider:<14} {data['round_count']:>6} {data['estimated_input_tokens']:>10} "
+                f"{data['estimated_output_tokens']:>11} {data['estimated_total_tokens']:>10} "
+                f"{data['average_duration_ms']:>7}"
+            )
+
+
+def run_stats(args) -> int:
+    stats = collect_review_stats(Path(args.output_dir))
+    if args.json:
+        print(json.dumps(stats, indent=2))
+    else:
+        print_stats_table(stats)
+    return 0
+
+
 def current_head_sha(root: Path) -> str | None:
     try:
         out = subprocess.run(
@@ -1989,6 +2296,8 @@ def main() -> int:
         return run_show_limit(args)
     if args.command == "clear-limit":
         return run_clear_limit(args)
+    if args.command == "stats":
+        return run_stats(args)
 
     # From here on: args.command == "review"
     if args.kind in ("post-slice", "post-phase") and not args.work_id:
@@ -2266,6 +2575,17 @@ def main() -> int:
                 review_body=response_text, verdict=primary.verdict,
                 verdict_valid=primary.verdict_valid, returncode=primary.returncode,
                 status=primary.status,
+                provider=primary.provider,
+                caller_provider=primary.caller_provider,
+                sandbox=primary.sandbox,
+                started_at=primary.started_at,
+                finished_at=primary.finished_at,
+                duration_ms=primary.duration_ms,
+                model=primary.model,
+                estimated_usage=primary.estimated_usage,
+                exact_usage=primary.exact_usage,
+                usage_capture_status=primary.usage_capture_status,
+                usage_capture_error=primary.usage_capture_error,
             )
             namespaced = True
 
@@ -2349,12 +2669,30 @@ def main() -> int:
                 "status": _rv_status(r),
                 "provider": _rv_attr(r, "provider", "custom"),
                 "caller_provider": _rv_attr(r, "caller_provider", "unknown"),
+                "model": _rv_attr(r, "model", None),
                 "sandbox": _rv_attr(r, "sandbox", None),
+                "started_at": _rv_attr(r, "started_at", None),
+                "finished_at": _rv_attr(r, "finished_at", None),
+                "duration_ms": _rv_attr(r, "duration_ms", None),
+                "estimated_usage": _rv_attr(r, "estimated_usage", None),
+                "exact_usage": _rv_attr(r, "exact_usage", None),
+                "usage_capture_status": _rv_attr(r, "usage_capture_status", "unavailable"),
+                "usage_capture_error": _rv_attr(r, "usage_capture_error", None),
             }
             for r in reviewer_results
         ],
         "status": "ok" if primary.returncode == 0 else "failed",
         "returncode": primary.returncode,
+        "started_at": primary.started_at,
+        "finished_at": primary.finished_at,
+        "duration_ms": primary.duration_ms,
+        "provider": primary.provider,
+        "caller_provider": primary.caller_provider,
+        "model": primary.model,
+        "estimated_usage": primary.estimated_usage,
+        "exact_usage": primary.exact_usage,
+        "usage_capture_status": primary.usage_capture_status,
+        "usage_capture_error": primary.usage_capture_error,
         "merged_verdict": merged_verdict,
         "merged_findings": merged_path.name if merged_path else None,
         "request": primary.request_path.name,
@@ -2396,6 +2734,16 @@ def main() -> int:
             "work_id": manifest.get("work_id"),
             "status": "ok" if primary.returncode == 0 else "failed",
             "returncode": primary.returncode,
+            "started_at": round_entry["started_at"],
+            "finished_at": round_entry["finished_at"],
+            "duration_ms": round_entry["duration_ms"],
+            "provider": round_entry["provider"],
+            "caller_provider": round_entry["caller_provider"],
+            "model": round_entry["model"],
+            "estimated_usage": round_entry["estimated_usage"],
+            "exact_usage": round_entry["exact_usage"],
+            "usage_capture_status": round_entry["usage_capture_status"],
+            "usage_capture_error": round_entry["usage_capture_error"],
             "verdict": merged_verdict if merged_verdict is not None else primary.verdict,
             "verdict_valid": primary.verdict_valid,
             "findings_count": findings_count,
@@ -2415,6 +2763,13 @@ def main() -> int:
                     "review": r.review_body,
                     "returncode": r.returncode,
                     "status": _rv_status(r),
+                    "provider": _rv_attr(r, "provider", "custom"),
+                    "caller_provider": _rv_attr(r, "caller_provider", "unknown"),
+                    "model": _rv_attr(r, "model", None),
+                    "duration_ms": _rv_attr(r, "duration_ms", None),
+                    "estimated_usage": _rv_attr(r, "estimated_usage", None),
+                    "exact_usage": _rv_attr(r, "exact_usage", None),
+                    "usage_capture_status": _rv_attr(r, "usage_capture_status", "unavailable"),
                 }
                 for r in reviewer_results
             ],

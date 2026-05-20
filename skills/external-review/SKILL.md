@@ -48,6 +48,10 @@ The default command remains `reviewer-agent`. The safe wrapper contract is:
 - reviewed repo is readable but not writable;
 - `AGENT_REVIEWER_SCRATCH_DIR` is writable and short-lived;
 - `AGENT_REVIEWER_RESPONSE_DIR` is writable for final-message handoff;
+- wrappers may write machine-readable sidecars such as `reviewer-metadata.json`,
+  `codex-events.jsonl`, or `claude-output.json` under
+  `AGENT_REVIEWER_RESPONSE_DIR`; the review text contract remains stdout plus
+  the persisted response artifact;
 - wrappers must not use Codex `--dangerously-bypass-approvals-and-sandbox` or Claude `--dangerously-skip-permissions` unless the operator has supplied an external OS sandbox and chosen a custom command.
 - Codex currently uses `disk-full-read-access`, which may expose files outside the repo for reading. This fork accepts that read-side risk to keep the write-side mitigation simple.
 
@@ -180,6 +184,7 @@ Manual-approved (`status: "manual-approved"`) and human-bridged (`status: "human
 |---|---|
 | `manual-approve` | Record an operator-approved closure on the chain. |
 | `ingest-response` | Write an externally-obtained reviewer response into the chain. |
+| `stats [--json]` | Summarize review-chain timing and usage estimates from `docs/reviewer/**/chain.json`. |
 | `show-limit` | Print the current `~/.config/superstar/reviewer-state.json` content. |
 | `clear-limit [--reviewer-cmd X]` | Clear the limit entry (for a single reviewer or all). Idempotent. |
 
@@ -254,7 +259,9 @@ Parse failures soft-fail: `resolution_parse_status: partial` or `unparseable` is
 
 ## Chain manifest
 
-Each chain folder contains a `chain.json` manifest that records every round's metadata: round number, request/response paths, head SHAs, verdicts (primary and merged), reviewers, sweep checkpoint state, and resolution attachment. The script reads it on every invocation; existing chains without a manifest are soft-migrated on first touch.
+Each chain folder contains a `chain.json` manifest that records every round's metadata: round number, request/response paths, head SHAs, verdicts (primary and merged), reviewers, sweep checkpoint state, resolution attachment, timing, provider/caller/model, comparable estimated usage from request/response character counts, and provider-native exact usage when available. The script reads it on every invocation; existing chains without a manifest are soft-migrated on first touch.
+
+Comparable estimates use `ceil(chars / 4)` for both prompt and response text. Provider-native exact usage is supplemental and stored separately; do not mix it into provider comparisons.
 
 **Invariant:** a review chain is single-writer. Do not run two rounds concurrently against the same chain — `chain.json` is not locked and may be corrupted.
 

@@ -61,7 +61,11 @@ def test_codex_wrapper_uses_sandbox_and_never_bypass(tmp_path):
     assert Path(env["AGENT_REVIEWER_SCRATCH_DIR"]).is_absolute()
     assert Path(env["AGENT_REVIEWER_RESPONSE_DIR"]).is_absolute()
     assert "--output-last-message" in argv
+    assert "--json" in argv
     assert "disk-full-read-access" in " ".join(argv)
+    metadata = json.loads((Path(env["AGENT_REVIEWER_RESPONSE_DIR"]) / "reviewer-metadata.json").read_text())
+    assert metadata["provider"] == "codex"
+    assert metadata["codex_events_file"] == "codex-events.jsonl"
 
 
 def test_claude_wrapper_uses_print_and_plan_mode(tmp_path):
@@ -72,10 +76,14 @@ def test_claude_wrapper_uses_print_and_plan_mode(tmp_path):
     call = json.loads(calls.read_text())
     argv = call["argv"]
     assert "--print" in argv
+    assert "--output-format" in argv and "json" in argv
     assert "--permission-mode" in argv and "plan" in argv
     assert "--dangerously-skip-permissions" not in argv
     assert "--add-dir" in argv
     assert env["AGENT_REVIEWER_REPO_ROOT"] in argv
+    metadata = json.loads((Path(env["AGENT_REVIEWER_RESPONSE_DIR"]) / "reviewer-metadata.json").read_text())
+    assert metadata["provider"] == "claude"
+    assert metadata["claude_output_file"] == "claude-output.json"
 
 
 def test_wrapper_fails_when_required_env_missing(tmp_path):
