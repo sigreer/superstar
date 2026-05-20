@@ -49,6 +49,8 @@ class _CliTmp:
         self._td = tempfile.TemporaryDirectory()
         self.root = Path(self._td.name)
         (self.root / "docs").mkdir()
+        r = run_cli("config", "init-local", cwd=self.root)
+        assert r.returncode == 0, r.stderr
     def cleanup(self):
         self._td.cleanup()
 

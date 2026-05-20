@@ -35,6 +35,8 @@ def _seed_repo(tmp_path):
     env = os.environ.copy()
     env["PATH"] = f"{bin_dir}:{env['PATH']}"
     env["PYTHONPATH"] = str(PKG_DIR) + os.pathsep + env.get("PYTHONPATH", "")
+    r = _tasktool(repo, "config", "init-local", env=env)
+    assert r.returncode == 0, r.stdout + r.stderr
     _tasktool(repo, "init", "--project", "demo", env=env)
     # Install the hook (install.sh is bash):
     subprocess.run(["bash", str(INSTALL), "--hook"], cwd=repo, check=True, env=env)
