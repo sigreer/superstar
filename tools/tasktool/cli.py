@@ -152,6 +152,10 @@ def _build_parser() -> argparse.ArgumentParser:
     p_validate.add_argument("--normalise", action="store_true")
     p_validate.add_argument("--check-orphans", nargs="*", default=None,
                             help="Spec/plan filepaths to check against tasklist.json IDs.")
+    p_validate.add_argument("--no-path-warnings", action="store_true",
+                            help="Skip warnings for refs/spec_path/plan_path that don't exist on disk. "
+                                 "Used by the pre-commit hook, which validates a sandboxed copy of "
+                                 "tasklist.json where peer files are intentionally absent.")
 
     sub.add_parser("schema")
 
@@ -275,6 +279,7 @@ def main(argv: list[str]) -> int:
                 repo_root=root, format=args.format,
                 strict_format=args.strict_format, normalise=args.normalise,
                 check_orphans=args.check_orphans,
+                no_path_warnings=args.no_path_warnings,
             )
             sys.stdout.write(text)
             return rc

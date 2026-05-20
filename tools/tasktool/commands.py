@@ -762,6 +762,7 @@ def cmd_validate(
     strict_format: bool = False,
     normalise: bool = False,
     check_orphans: list[str] | None = None,
+    no_path_warnings: bool = False,
 ) -> tuple[int, str]:
     if normalise:
         with _write_context(repo_root) as write_root:
@@ -771,6 +772,7 @@ def cmd_validate(
                 strict_format=strict_format,
                 normalise=normalise,
                 check_orphans=check_orphans,
+                no_path_warnings=no_path_warnings,
             )
     return _cmd_validate_at_root(
         repo_root=repo_root,
@@ -778,6 +780,7 @@ def cmd_validate(
         strict_format=strict_format,
         normalise=normalise,
         check_orphans=check_orphans,
+        no_path_warnings=no_path_warnings,
     )
 
 def _cmd_validate_at_root(
@@ -786,6 +789,7 @@ def _cmd_validate_at_root(
     strict_format: bool,
     normalise: bool,
     check_orphans: list[str] | None,
+    no_path_warnings: bool = False,
 ) -> tuple[int, str]:
     from tasktool.validate import (
         validate_project, ValidationError, strict_format_check, normalise_file,
@@ -803,7 +807,8 @@ def _cmd_validate_at_root(
     except (ValidationError, ValueError) as e:
         errors.append(str(e))
     if project is not None and not errors:
-        warnings.extend(find_path_warnings(project, repo_root))
+        if not no_path_warnings:
+            warnings.extend(find_path_warnings(project, repo_root))
         if check_orphans:
             errors.extend(validate_orphan_filenames(project, check_orphans))
     if normalise and not errors:

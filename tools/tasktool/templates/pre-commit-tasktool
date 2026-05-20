@@ -48,9 +48,9 @@ if [ "$HAS_INDEX_TASKLIST" -eq 1 ]; then
   git show :docs/tasklist.json > "$TMP/docs/tasklist.json"
 
   if printf '%s\n' "$STAGED" | grep -qx 'docs/tasklist.json'; then
-    "$TASKTOOL" --project-root "$TMP" validate --strict-format --format text
+    "$TASKTOOL" --project-root "$TMP" validate --strict-format --no-path-warnings --format text
   fi
-  "$TASKTOOL" --project-root "$TMP" validate --format text
+  "$TASKTOOL" --project-root "$TMP" validate --no-path-warnings --format text
 
   ORPHAN_CANDIDATES="$(printf '%s\n' "$STAGED" | grep -E '^docs/(specs|plans)/[0-9]{4}-[0-9]{2}-[0-9]{2}-' || true)"
   if [ -n "$ORPHAN_CANDIDATES" ]; then
