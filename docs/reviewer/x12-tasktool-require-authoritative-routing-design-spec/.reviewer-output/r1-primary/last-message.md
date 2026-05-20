@@ -1,0 +1,36 @@
+1. Findings
+
+F1 — Severity: blocking  
+The migration path cannot work for the stated drift case. The spec says `migrate-from-local` requires authority config in the caller repo at `docs/specs/...:64`, while the example drifted repo has no `.tasktool/` at `docs/specs/...:13`. `config init-authority` writes config only in the checkout where it is run (`tools/tasktool/commands.py:129-143`) and currently rejects running from a non-target branch (`tools/tasktool/tests/test_cli_integration.py:391-399`). So the rollout command at `docs/specs/...:137-139` cannot both run from `main` to create config and then read the drifted worktree as “local”. Add an explicit migration bootstrap mechanism: e.g. `migrate-from-local --authority-root/--branch --local-root`, or require committing/propagating `.tasktool/config.json` into the drifted worktree before migration.
+
+F2 — Severity: important  
+The spec contradicts itself on setup order. `docs/specs/...:43` correctly says new bootstrap is `config init-authority` before `tasktool init`, because `init` goes through `_write_context` (`tools/tasktool/commands.py:147-156`). But the skill edit says project setup should run “after `tasktool init`, run `tasktool config init-authority`” at `docs/specs/...:94`, which would fail under the proposed hard error. Update the skill change to make authority config a precondition before `tasktool init`.
+
+F3 — Severity: important  
+The documented CLI syntax is inconsistent with “no functional change.” The current parser accepts `tasktool config init-authority --branch main` (`tools/tasktool/cli.py:27-30`), and tests assert that form (`tools/tasktool/tests/test_cli_integration.py:378-388`). The spec repeatedly documents `tasktool config init-authority <branch>` (`docs/specs/...:39`, `43`, `111`, `138`) while saying no functional change at `docs/specs/...:49-51`. Either change the spec to use `--branch <branch>` everywhere or explicitly include a parser compatibility change.
+
+F4 — Severity: important  
+The migration diff scope omits persisted rows/fields that can drift. The model includes nested `Task` rows (`tools/tasktool/model.py:24-33`, `36-52`), `blocked_on`, `planning_status`, `reviewer_chain`, `phase_reviewer_chain`, `archived_phases`, `project`, `north_star`, and `last_reviewed` (`tools/tasktool/model.py:53-94`). The spec only walks phases, slices, and cross-cutting at `docs/specs/...:66`, then lists fields that omit several persisted fields at `docs/specs/...:69`. This can silently drop local-only task changes or reviewer-chain/status metadata during migration. Define the full merge surface explicitly, preferably by dataclass/to_dict traversal with row identity rules for `phases`, `slices`, `tasks`, `cross_cutting`, and `archived_phases`.
+
+F5 — Severity: minor  
+`validate` is listed as read-only at `docs/specs/...:45`, but `validate --normalise` is a mutating path that uses `_write_context` (`tools/tasktool/commands.py:759-777`, `814-817`). The mutating command list at `docs/specs/...:41` should include `validate --normalise`, while plain `validate` remains read-only.
+
+2. Open questions / assumptions
+
+- Should `migrate-from-local` be run from the drifted worktree, from the authoritative checkout with a `--local-root`, or either?
+- Is `local` mode intended to remain a manually written escape hatch only, or should `tasktool config init-local` exist to make the opt-out auditable?
+
+3. Suggested document edits
+
+- Rewrite the rollout section to show a valid sequence for a repo with no `.tasktool/config.json` in the drifted worktree.
+- Fix `project-setup` instructions to configure authority before `tasktool init`.
+- Use the current `--branch` syntax unless the spec intentionally adds positional branch support.
+- Replace the migration row/field list with an explicit complete persisted schema traversal.
+
+4. Verification gaps / commands that should be run
+
+- Add a test that starts with a main checkout and a linked worktree that has divergent `docs/tasklist.json` but no `.tasktool/config.json`, then verifies the documented migration sequence succeeds.
+- Add tests for nested task migration and omitted fields such as `blocked_on`, `planning_status`, and reviewer-chain paths.
+- Add a test that `validate --normalise` errors in an unconfigured repo while plain `validate` still works.
+
+Overall verdict: revise
