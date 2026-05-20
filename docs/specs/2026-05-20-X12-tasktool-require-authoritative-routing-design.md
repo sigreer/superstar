@@ -99,11 +99,11 @@ Semantics:
    ```
 
 5. **`--dry-run`**: stop here.
-6. **Conflict policy.**
-   - `--accept-local` (default): the local copy wins per-field. This is the realistic migration direction — worktree drift is what we need to capture.
-   - `--accept-authoritative`: authoritative wins per-field. No write occurs; the command becomes a verification step.
-   - No flag and stdin is a TTY: prompt once at the top with the diff already printed, accepting `local`/`authoritative`/`abort`.
-   - No flag and stdin is not a TTY: error, demand explicit flag.
+6. **Conflict policy.** Exactly one of `--accept-local` / `--accept-authoritative` must be provided unless stdin is a TTY (in which case the operator is prompted interactively). There is no implicit default.
+   - `--accept-local`: the local copy wins per-field for rows present in both trees. Rows present in local only are added to the authoritative tasklist. Rows present in the authoritative tasklist only are **kept** — they are never silently deleted under any policy; the diff prints them as `authoritative-only (kept)` and the migration leaves them in place. This protects work that was committed to `main` while the worktree was diverging.
+   - `--accept-authoritative`: authoritative wins per-field for rows present in both trees. No write occurs; the command becomes a verification step. Rows present in local only are reported as `local-only (not migrated)` and skipped. Rows present in the authoritative tasklist only are likewise reported and kept (same rule as above).
+   - No flag and stdin is a TTY: print the diff, then prompt once accepting `local` / `authoritative` / `abort`. The chosen policy is logged in the exit message.
+   - No flag and stdin is not a TTY: `CommandError`: `migrate-from-local requires one of --accept-local or --accept-authoritative in non-interactive contexts`.
 7. **Apply.** Acquire `tasktool_lock` on the authoritative root. Re-read the authoritative tasklist inside the lock (defensive against concurrent writes). Apply the resolved deltas in memory. `_save(authoritative_root, project)`. Stage the file via existing best-effort stage.
 8. **Notify.** For each row whose `status` changed, call `_notify_status` with the post-migration status so the TTS pipeline and any downstream consumers see the transition. Non-status field changes do not notify.
 9. **Exit message.** Print a one-line summary: `migrated N rows (S status transitions) to <authoritative-root>`. Leave the local tasklist.json untouched; the next mutation routes through authority and the local copy becomes irrelevant.
@@ -130,6 +130,7 @@ No new skill files. No new top-level docs.
 - Unconfigured repo, mutating command: `CommandError` with the migration hint message (verbatim above). Non-zero exit.
 - `init-authority` from wrong branch: existing behaviour preserved.
 - `migrate-from-local` with no `--authority-root`: `CommandError`: `migrate-from-local requires --authority-root <path>`. The command never assumes a config-driven default; the path must be explicit so the migration is unambiguous even when `.tasktool/config.json` is absent from every checkout.
+- `migrate-from-local` with neither `--accept-local` nor `--accept-authoritative` and stdin is not a TTY: `CommandError`: `migrate-from-local requires one of --accept-local or --accept-authoritative in non-interactive contexts`.
 - `migrate-from-local` where `--authority-root` and `--local-root` are not the same git common-dir: `CommandError`: `authority root and local root are not the same repository`.
 - `migrate-from-local` when authoritative tasklist is missing entirely: `CommandError`: tells the user to run `tasktool init` in the authoritative checkout first.
 - `migrate-from-local` with no detectable drift: exit 0, message "no drift detected".
@@ -155,6 +156,7 @@ New tests under `tools/tasktool/tests/`:
 14. `test_migrate_from_local_full_field_surface` — for each row type in the model (`Project`, `Phase`, `Slice`, `Task`, `CrossCutting`, archived phase row), create a divergence on each declared dataclass field — including `blocked_on`, `planning_status`, `reviewer_chain`, `phase_reviewer_chain`, `archived_phases`, `project`, `north_star`, `last_reviewed` — and assert every field migrates through. Implementation uses `dataclasses.fields()` parameterisation so adding a new field to a row dataclass without updating the migrator's walker fails this test.
 15. `test_migrate_from_local_walker_covers_all_dataclass_fields` — meta-test: introspects the migrator's known-field set against `dataclasses.fields()` on every row type; fails loudly if a model field is missing from the walker. Belt-and-braces complement to test 14.
 16. `test_migrate_from_local_handles_nested_tasks` — phase with slice with tasks; task-level divergence (`status`, `notes`, `refs`) migrates correctly.
+17. `test_migrate_from_local_preserves_authority_only_rows` — authoritative tasklist has a row missing from the local tasklist (e.g. a phase committed to main while the worktree was diverging). Under `--accept-local`, the row is kept in the authoritative tasklist after migration, never deleted. Diff output labels it `authoritative-only (kept)`.
 
 Existing tests should be audited for any that rely on the implicit-`local` default; those switch to either configuring `local` explicitly (via the new `init-local` command or a fixture that writes the config) or configuring `authoritative-checkout`, whichever matches the test's intent.
 
