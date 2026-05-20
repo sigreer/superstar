@@ -75,6 +75,7 @@ done
 tests=(
     "test-subagent-driven-development.sh"
     "test-external-reviewer-global-command.sh"
+    "test-publish-to-local-claude.sh"
 )
 
 # Integration tests (slow, full execution)

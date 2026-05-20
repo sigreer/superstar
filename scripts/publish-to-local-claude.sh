@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 #
-# Publish the repo-local Superstar marketplace payload into Codex's local cache.
+# Publish this Superstar checkout into Claude Code's local plugin cache.
 #
-# Codex's local marketplace installer currently does not materialize symlinked
-# payload directories reliably. This wrapper installs the plugin, then copies the
-# local wrapper payload with symlinks followed so the versioned cache contains
-# real skills, hooks, tools, and assets for new Codex sessions.
+# The script keeps a versioned cache directory and a stable materialized
+# `current/` directory in sync. Hook commands and the global external-reviewer
+# shim point at `current/`, so future version bumps do not require project-level
+# script updates.
 
 set -euo pipefail
 
@@ -14,28 +14,30 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 MARKETPLACE="superstar-dev"
 PLUGIN="superstar"
+SCOPE="user"
 DRY_RUN=0
-SKIP_CODEX_ADD=0
-CACHE_ROOT="${CODEX_HOME:-$HOME/.codex}/plugins/cache"
+SKIP_CLAUDE_UPDATE=0
+CACHE_ROOT="${CLAUDE_HOME:-$HOME/.claude}/plugins/cache"
 
 usage() {
   cat <<'EOF'
-Usage: scripts/publish-to-local-codex.sh [options]
+Usage: scripts/publish-to-local-claude.sh [options]
 
 Options:
-  --marketplace NAME   Marketplace name (default: superstar-dev)
-  --plugin NAME        Plugin name (default: superstar)
-  --cache-root PATH    Codex plugin cache root (default: $CODEX_HOME/plugins/cache or ~/.codex/plugins/cache)
-  --skip-codex-add     Skip `codex plugin add`; only materialize and verify cache
-  -n, --dry-run        Print actions without writing
-  -h, --help           Show this help
+  --marketplace NAME     Marketplace name (default: superstar-dev)
+  --plugin NAME          Plugin name (default: superstar)
+  --scope SCOPE          Claude install/update scope (default: user)
+  --cache-root PATH      Claude plugin cache root (default: $CLAUDE_HOME/plugins/cache or ~/.claude/plugins/cache)
+  --skip-claude-update   Skip `claude plugin update/install`; only materialize and verify cache
+  -n, --dry-run          Print actions without writing
+  -h, --help             Show this help
 
-Publishes plugins/superstar into:
+Publishes this checkout into:
   <cache-root>/<marketplace>/<plugin>/<version>/
   <cache-root>/<marketplace>/<plugin>/current/
 
-The script follows symlinks so cache/<version> and cache/current contain real
-directories/files.
+Both directories are real materialized copies, not symlinks. Hook commands and
+the global external-reviewer command are rewritten to use current/.
 EOF
 }
 
@@ -43,18 +45,17 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --marketplace) MARKETPLACE="$2"; shift 2 ;;
     --plugin) PLUGIN="$2"; shift 2 ;;
+    --scope) SCOPE="$2"; shift 2 ;;
     --cache-root) CACHE_ROOT="$2"; shift 2 ;;
-    --skip-codex-add) SKIP_CODEX_ADD=1; shift ;;
+    --skip-claude-update) SKIP_CLAUDE_UPDATE=1; shift ;;
     -n|--dry-run) DRY_RUN=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown arg: $1" >&2; usage >&2; exit 2 ;;
   esac
 done
 
-SOURCE="$REPO_ROOT/plugins/$PLUGIN"
-MANIFEST="$SOURCE/.codex-plugin/plugin.json"
+MANIFEST="$REPO_ROOT/.claude-plugin/plugin.json"
 
-[[ -d "$SOURCE" ]] || { echo "ERROR: source plugin not found: $SOURCE" >&2; exit 1; }
 [[ -f "$MANIFEST" ]] || { echo "ERROR: source manifest not found: $MANIFEST" >&2; exit 1; }
 
 VERSION="$(
@@ -80,20 +81,36 @@ run() {
 }
 
 echo "Publishing $PLUGIN@$MARKETPLACE version $VERSION"
-echo "Source: $SOURCE"
-echo "Cache:  $CACHE_DIR"
+echo "Source:  $REPO_ROOT"
+echo "Cache:   $CACHE_DIR"
 echo "Current: $CURRENT_DIR"
 
-if [[ "$SKIP_CODEX_ADD" -eq 0 ]]; then
-  command -v codex >/dev/null || { echo "ERROR: codex CLI not found" >&2; exit 1; }
-  run codex plugin add "$PLUGIN@$MARKETPLACE"
+if [[ "$SKIP_CLAUDE_UPDATE" -eq 0 ]]; then
+  command -v claude >/dev/null || { echo "ERROR: claude CLI not found" >&2; exit 1; }
+  if ! run claude plugin update --scope "$SCOPE" "$PLUGIN@$MARKETPLACE"; then
+    run claude plugin install --scope "$SCOPE" "$PLUGIN@$MARKETPLACE"
+  fi
 fi
 
 command -v rsync >/dev/null || { echo "ERROR: rsync not found" >&2; exit 1; }
 run mkdir -p "$CACHE_DIR"
-run rsync -aL --delete "$SOURCE/" "$CACHE_DIR/"
+run rsync -aL --delete \
+  --exclude ".git/" \
+  --exclude ".worktrees/" \
+  --exclude ".agents/" \
+  --exclude ".pytest_cache/" \
+  --exclude "__pycache__/" \
+  --exclude "docs/reviewer/" \
+  "$REPO_ROOT/" "$CACHE_DIR/"
 run mkdir -p "$CURRENT_DIR"
-run rsync -aL --delete "$SOURCE/" "$CURRENT_DIR/"
+run rsync -aL --delete \
+  --exclude ".git/" \
+  --exclude ".worktrees/" \
+  --exclude ".agents/" \
+  --exclude ".pytest_cache/" \
+  --exclude "__pycache__/" \
+  --exclude "docs/reviewer/" \
+  "$REPO_ROOT/" "$CURRENT_DIR/"
 
 if [[ "$DRY_RUN" -eq 1 ]]; then
   echo "Dry run complete."
@@ -118,10 +135,15 @@ for root in (cache, current):
             for hook in entry.get("hooks", []):
                 command = hook.get("command")
                 if isinstance(command, str):
-                    hook["command"] = command.replace(
+                    command = command.replace(
                         '"${CLAUDE_PLUGIN_ROOT:-.}/hooks/run-hook.cmd"',
                         hook_runner,
                     )
+                    command = command.replace(
+                        '"${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd"',
+                        hook_runner,
+                    )
+                    hook["command"] = command
 
     hooks_json.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
 PY
@@ -137,7 +159,7 @@ plugin = sys.argv[3]
 expected = sys.argv[4]
 
 for root in (cache, current):
-    manifest = root / ".codex-plugin" / "plugin.json"
+    manifest = root / ".claude-plugin" / "plugin.json"
     data = json.loads(manifest.read_text(encoding="utf-8"))
     if data.get("name") != plugin:
         raise SystemExit(f"{root} manifest name mismatch: {data.get('name')!r} != {plugin!r}")
@@ -147,6 +169,7 @@ for root in (cache, current):
         "skills/using-superstar/SKILL.md",
         "skills/project-setup/SKILL.md",
         "skills/using-git-worktrees/SKILL.md",
+        "skills/external-review/scripts/external-reviewer.py",
         "hooks/run-hook.cmd",
         "hooks/agent-finished",
         "tools/tasktool/notify.py",
@@ -157,6 +180,7 @@ for root in (cache, current):
     for rel in ("skills", "hooks", "tools", "assets"):
         if (root / rel).is_symlink():
             raise SystemExit(f"{root} {rel} payload is still a symlink; expected materialized path")
+
 print(f"PASS: {plugin} cache is materialized at {cache}")
 print(f"PASS: {plugin} current entrypoint is materialized at {current}")
 PY

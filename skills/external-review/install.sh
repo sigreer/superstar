@@ -3,7 +3,20 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SOURCE_SCRIPT="$SCRIPT_DIR/scripts/external-reviewer.py"
+PLUGIN_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+SOURCE_ROOT="${EXTERNAL_REVIEWER_SOURCE_ROOT:-}"
+if [[ -z "$SOURCE_ROOT" ]]; then
+  SOURCE_ROOT="$PLUGIN_ROOT"
+  case "$PLUGIN_ROOT" in
+    */plugins/cache/*/*/*)
+      STABLE_ROOT="$(dirname "$PLUGIN_ROOT")/current"
+      if [[ -f "$STABLE_ROOT/skills/external-review/scripts/external-reviewer.py" ]]; then
+        SOURCE_ROOT="$STABLE_ROOT"
+      fi
+      ;;
+  esac
+fi
+SOURCE_SCRIPT="$SOURCE_ROOT/skills/external-review/scripts/external-reviewer.py"
 TARGET_DIR="${EXTERNAL_REVIEWER_BIN:-${HOME}/.local/bin}"
 TARGET="$TARGET_DIR/external-reviewer"
 FORCE="${1:-}"

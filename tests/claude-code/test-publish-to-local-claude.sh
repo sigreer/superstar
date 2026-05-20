@@ -2,25 +2,25 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-SCRIPT="$ROOT/scripts/publish-to-local-codex.sh"
+SCRIPT="$ROOT/scripts/publish-to-local-claude.sh"
 TMPDIR="$(mktemp -d)"
 trap 'rm -rf "$TMPDIR"' EXIT
 
 BIN="$TMPDIR/bin"
 CACHE="$TMPDIR/cache"
-LOG="$TMPDIR/codex.log"
+LOG="$TMPDIR/claude.log"
 mkdir -p "$BIN"
 
-cat > "$BIN/codex" <<EOF
+cat > "$BIN/claude" <<EOF
 #!/usr/bin/env bash
 printf '%s\n' "\$*" >> "$LOG"
 exit 0
 EOF
-chmod +x "$BIN/codex"
+chmod +x "$BIN/claude"
 
 PATH="$BIN:$PATH" EXTERNAL_REVIEWER_BIN="$BIN" "$SCRIPT" --cache-root "$CACHE"
 
-VERSION="$(python3 - "$ROOT/plugins/superstar/.codex-plugin/plugin.json" <<'PY'
+VERSION="$(python3 - "$ROOT/.claude-plugin/plugin.json" <<'PY'
 import json
 import sys
 with open(sys.argv[1], encoding="utf-8") as f:
@@ -30,10 +30,11 @@ PY
 CACHE_DIR="$CACHE/superstar-dev/superstar/$VERSION"
 CURRENT_DIR="$CACHE/superstar-dev/superstar/current"
 
-grep -qx "plugin add superstar@superstar-dev" "$LOG"
-test -f "$CACHE_DIR/.codex-plugin/plugin.json"
+grep -qx "plugin update --scope user superstar@superstar-dev" "$LOG"
+test -f "$CACHE_DIR/.claude-plugin/plugin.json"
 test -f "$CACHE_DIR/skills/using-superstar/SKILL.md"
 test -f "$CACHE_DIR/skills/project-setup/SKILL.md"
+test -f "$CACHE_DIR/skills/external-review/scripts/external-reviewer.py"
 test -f "$CACHE_DIR/hooks/run-hook.cmd"
 test -f "$CACHE_DIR/hooks/agent-finished"
 test -f "$CACHE_DIR/tools/tasktool/notify.py"
@@ -75,4 +76,4 @@ env -u CLAUDE_PLUGIN_ROOT SUPERSTAR_NOTIFY_DRY_RUN=1 \
 
 grep -q "/current/skills/external-review/scripts/external-reviewer.py" "$BIN/external-reviewer"
 
-echo "PASS: publish-to-local-codex materializes plugin cache"
+echo "PASS: publish-to-local-claude materializes plugin cache"
