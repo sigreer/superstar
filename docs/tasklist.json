@@ -141,6 +141,18 @@
       "started": null,
       "status": "done",
       "title": "Coalesce bursty tasktool audio notifications"
+    },
+    {
+      "closed": null,
+      "created": "2026-05-20",
+      "id": "X10",
+      "notes": "",
+      "refs": [
+        "docs/specs/2026-05-20-X10-verdict-parser-claude-formatting-design.md"
+      ],
+      "started": null,
+      "status": "ready",
+      "title": "Harden external-review verdict parser and prompt against Claude formatting variants"
     }
   ],
   "last_reviewed": "2026-05-18",
