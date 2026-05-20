@@ -28,7 +28,7 @@ Your role is orchestration. Use the `superstar:subagent-driven-development` skil
 - Invoke `superstar:subagent-driven-development` before dispatching implementation work.
 - Follow the plan task order. It already incorporates both spec-review and plan-review findings.
 - Keep `reviewer-agent` unchanged unless a real issue is discovered. The canonical bridge command is `external-reviewer`; `/home/simon/.local/bin/reviewer` is intentionally non-canonical.
-- Do not route new guidance through `python3 scripts/external-reviewer.py`; repo-local `scripts/external-reviewer.py` is compatibility-shim only.
+- Do not route new guidance through the old repo-local bridge command; `scripts/external-reviewer.py` is compatibility-shim only.
 - At implementation closeout, run the X11 post-slice review command from the plan, iterate until the chain verdict is `ready` or `ready with small edits`, then close X11 with `tasktool close X11 --reviewer-chain docs/reviewer/x11-global-external-reviewer-bridge-X11-post-slice`.
 
 ## First action

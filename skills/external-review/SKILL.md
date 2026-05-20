@@ -7,7 +7,7 @@ description: Use after writing a spec, after writing a plan, after completing a 
 
 An independent reviewer (not the coordinating agent) reviews a target document or completed slice/phase. The bridge is the global `external-reviewer` command — provider-neutral, configured via `AGENT_REVIEWER_CMD`. Each round writes a `request.md` and `response.md` pair under a per-document chain folder so the iteration history is durable and committable.
 
-**Bridge command.** `external-reviewer` is the global canonical review-chain bridge command. It is installed by `skills/external-review/install.sh` and delegates to `skills/external-review/scripts/external-reviewer.py` in the active Superstar checkout. Do not run or copy a full repo-local `scripts/external-reviewer.py` bridge. Existing repos may keep a tiny compatibility shim at that path only so old handoffs continue to delegate to the global command.
+**Bridge command.** `external-reviewer` is the global canonical review-chain bridge command. It is installed by `skills/external-review/install.sh` and delegates to `skills/external-review/scripts/external-reviewer.py` in the active Superstar checkout. When the source script is under `$HOME`, the generated shim stores a literal `$HOME/...` path so it does not pin a machine-specific `/home/simon/...` string while still expanding to the checkout at runtime. Do not run or copy a full repo-local `scripts/external-reviewer.py` bridge. Existing repos may keep a tiny compatibility shim at that path only so old handoffs continue to delegate to the global command.
 
 **Announce at start:** "I'm using the external-review skill to run a `<kind>` review on `<target>`."
 
@@ -94,6 +94,8 @@ external-reviewer review \
     --work-id <P2.S3 | P2>   # required for post-slice / post-phase
     [--context <path>]... \
     [--review-depth thorough] \
+    [--reviewer-provider auto|codex|claude|custom] \
+    [--caller-provider auto|claude|codex|unknown] \
     [--incremental-budget-chars 400000] \
     --emit json
 ```

@@ -10,9 +10,9 @@ ROOT = Path(__file__).resolve().parents[3]
 SHIM = ROOT / "skills" / "project-setup" / "scripts" / "external-reviewer-shim.py"
 
 
-def run_shim(path: str, *args: str) -> subprocess.CompletedProcess[str]:
+def run_shim(path: str, *args: str, include_system_path: bool = True) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
-    env["PATH"] = f"{path}:{env.get('PATH', '')}"
+    env["PATH"] = f"{path}:{os.defpath}" if include_system_path else path
     return subprocess.run(
         [sys.executable, str(SHIM), *args],
         cwd=ROOT,
@@ -48,7 +48,7 @@ def test_compat_shim_missing_global_command_exits_127(tmp_path: Path) -> None:
     bin_dir = tmp_path / "empty"
     bin_dir.mkdir()
 
-    result = run_shim(str(bin_dir), "review")
+    result = run_shim(str(bin_dir), "review", include_system_path=False)
 
     assert result.returncode == 127
     assert "`external-reviewer` is not on PATH" in result.stderr

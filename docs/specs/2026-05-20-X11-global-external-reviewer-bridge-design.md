@@ -122,7 +122,7 @@ with executable content equivalent to:
 exec python3 "<absolute path resolved from the installer>/scripts/external-reviewer.py" "$@"
 ```
 
-The installer must self-locate like `tools/tasktool/install.sh:29-30`: compute `SCRIPT_DIR` from `${BASH_SOURCE[0]}`, then resolve the sibling source script as `$SCRIPT_DIR/scripts/external-reviewer.py`. The generated shim embeds the absolute path resolved at install time. It must not contain a hardcoded `/home/simon/...` string.
+The installer must self-locate like `tools/tasktool/install.sh:29-30`: compute `SCRIPT_DIR` from `${BASH_SOURCE[0]}`, then resolve the sibling source script as `$SCRIPT_DIR/scripts/external-reviewer.py`. The generated shim embeds the absolute path resolved at install time, rewriting any `$HOME/` prefix to a literal `$HOME/` token so the shim expands it at runtime instead of pinning Simon's home directory into the file. It must not contain a hardcoded `/home/simon/...` string.
 
 This local fork should point at the source checkout by default, matching the current global `tasktool` semantics on Simon's machine. `tools/tasktool/install.sh:50-54` writes a shim that exports `PYTHONPATH="${PKG_ROOT}..."` where `PKG_ROOT` is resolved from the installer's own location, so fixing `tools/tasktool/...` in the source checkout immediately fixes future global `tasktool` invocations. The `external-reviewer` installer should mirror that source-tree update model for `skills/external-review/scripts/external-reviewer.py`.
 
