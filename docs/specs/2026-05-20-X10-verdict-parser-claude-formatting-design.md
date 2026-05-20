@@ -73,23 +73,26 @@ Proposed shape:
 
 ```python
 # Boundary A: end-of-line, emphasis/punct only.
-# Boundary B: period (possibly emphasis-wrapped) + whitespace (handles trailing prose).
+# Boundary B: period + emphasis-closer + whitespace. Requires at least one
+#             emphasis char (* _ ` " ') between the period and the trailing
+#             space, so trailing prose is only accepted when it follows a
+#             *closed* emphasis span (e.g. `**Verdict: ready.** Full review...`).
 VERDICT_LINE_BARE_RE = re.compile(
     r"^[\s>#*_`]*verdict\s*[`*_\"']*\s*[:\-]\s*[`*_\"'\s]*"
     r"(ready with small edits|ready|revise)"
-    r"(?=[\s`*_\"'.]*(?:$|\n)|[`*_\"']*\.[`*_\"']*\s)",
+    r"(?=[\s`*_\"'.]*(?:$|\n)|[`*_\"']*\.[`*_\"']+\s)",
     re.IGNORECASE | re.MULTILINE,
 )
 ```
 
-(Do **not** use `re.VERBOSE` — it strips literal whitespace from the alternation `ready with small edits`, which silently breaks the regex.)
+(Do **not** use `re.VERBOSE` — it strips literal whitespace from the alternation `ready with small edits`, silently breaking the regex.)
 
 The trailing lookahead enforces value boundary with two accepted shapes:
 
 - **Boundary A** (`[\s`*_\"'.]*(?:$|\n)`): rest of line is only emphasis marks, punctuation, and whitespace, then end-of-line. Covers `**Verdict: ready with small edits.**` and similar.
-- **Boundary B** (`[`*_\"']*\.[`*_\"']*\s`): the value is followed by a sentence-terminating period (possibly wrapped in emphasis) and then whitespace. Covers `**Verdict: ready with small edits.** Full review written to …` — a real Claude variant observed 3× in the corpus.
+- **Boundary B** (`[`*_\"']*\.[`*_\"']+\s`): the value is followed by a sentence-terminating period and one-or-more emphasis-closer characters (`*`, `_`, `` ` ``, `"`, `'`) before whitespace. The mandatory closing emphasis is the key: it pins acceptance to the observed Claude pattern `**Verdict: ready.** Full review written to …` (3× in the corpus) while rejecting contradictory same-line forms that have no closing emphasis between the value and the trailing prose (e.g. `**Verdict: ready. Important findings remain unresolved.**` — the `**` is at end-of-line, not between period and space).
 
-Malformed values that match neither boundary are rejected: `Verdict: ready for review` (no period before ` for`), `Verdict: ready-ish` (hyphen is not `.` and `-` is not in boundary A's character class), `Verdict: ready with small edits pending changes` (after the longest alternation match `ready with small edits`, ` pending` matches neither boundary).
+Malformed values that match neither boundary are rejected: `Verdict: ready for review` (no period before ` for`), `Verdict: ready-ish` (hyphen rejected), `Verdict: ready with small edits pending changes` (` pending` matches neither boundary), `**Verdict: ready. Important findings.**` (no emphasis between `.` and ` Important`).
 
 Update `parse_verdict` to:
 
@@ -128,6 +131,8 @@ All in `skills/external-review/tests/`.
 - `test_bare_verdict_rejects_extra_words_after_value` — `**Verdict: ready for review**` → `(None, False)` (value boundary violated by trailing word).
 - `test_bare_verdict_rejects_hyphenated_value` — `Verdict: ready-ish` → `(None, False)`.
 - `test_bare_verdict_rejects_qualified_value` — `Verdict: ready with small edits pending changes` → `(None, False)` (longest alternation matches `ready with small edits`, but trailing ` pending changes` fails the value-boundary lookahead).
+- `test_bare_verdict_rejects_contradictory_same_line_prose` — `**Verdict: ready. Important findings remain unresolved.**` → `(None, False)`. Boundary B is narrow: it requires a closing emphasis marker between the period and the trailing whitespace; this contradictory form has the `**` only at end-of-line, not after the period.
+- `test_bare_verdict_rejects_unwrapped_same_line_prose` — `Verdict: ready. Some prose.` → `(None, False)` (no emphasis closer at all).
 - `test_parse_reformatted_verdict_helper` — direct call on the new `parse_reformatted_verdict(raw)` helper with a fenced + heading-style fixture round-trips to `("revise", True)`.
 
 ### New unit tests in `test_heading_style_verdict.py`
