@@ -779,14 +779,22 @@ _SAMPLE_VALUES = {
 
 def _value_pair_for_field(row_type, field) -> tuple[object, object]:
     """Return (authority_value, local_value) for a dataclass field. The pair must
-    be different; the local value will be migrated through."""
-    if field.name == "id" or field.name == "title" or field.name == "created":
-        # Identity / immutable fields — skip per-field migration test for these.
+    be different; the local value will be migrated through.
+
+    Exclusions (return (None, None) → skipped):
+    - `id`: row identity key. A change in id is represented as a local-only row
+      and an authoritative-only row in the diff, never as a field-level update.
+      Covered by the row-add / authoritative-only conflict tests.
+    - `schema_version`: not field-level migration material; managed by the
+      serializer."""
+    if field.name == "id" or field.name == "schema_version":
         return (None, None)
     if field.name == "status":
         return _SAMPLE_VALUES["Status"]
-    if field.name == "schema_version":
-        return (None, None)
+    if field.name == "title":
+        return ("authority title", "local title")
+    if field.name == "created":
+        return ("2026-05-19", "2026-05-20")
     if field.name in {"started", "closed", "spec_path", "plan_path", "planning_path",
                       "parallel_group", "reviewer_chain", "phase_reviewer_chain",
                       "last_reviewed", "north_star", "archived_path", "archived_date"}:
@@ -1176,7 +1184,7 @@ def _fmt_value(v: object) -> str:
 PYTHONPATH=tools pytest tools/tasktool/tests/test_migrate.py -v
 ```
 
-Expected: all 9 tests pass.
+Expected: all tests pass (10 named tests plus the parametrized full-field migration test, which expands to ~30 test cases across the six row dataclasses).
 
 - [ ] **Step 5: Commit**
 
