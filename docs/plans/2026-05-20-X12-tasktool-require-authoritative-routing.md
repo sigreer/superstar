@@ -311,26 +311,38 @@ def test_render_works_unconfigured(tmp_path):
 
 
 @pytest.mark.parametrize("readonly_cmd", [
+    ("render",),
+    ("validate",),
     ("brief",),
     ("schema",),
-    ("list",),
+    ("show", "P1"),
+    ("phase-status", "P1"),
     ("ready-slices", "P1"),
+    ("list",),
+    ("next-id",),
 ])
 def test_other_readonly_commands_work_unconfigured(tmp_path, readonly_cmd):
-    """Spec test #5: read-only commands beyond render/validate succeed without config."""
+    """Spec test #5: read-only commands beyond render/validate succeed without config.
+    Every command listed as read-only in the spec must exit 0 against a valid
+    tasklist when no .tasktool/config.json exists."""
     _git_init(tmp_path)
     (tmp_path / "docs").mkdir()
     (tmp_path / "docs" / "tasklist.json").write_text(
         '{"schema_version":1,"project":"demo",'
         '"phases":[{"id":"P1","title":"p","created":"2026-05-20","status":"ready",'
         '"started":null,"closed":null,"spec_path":null,"plan_path":null,'
-        '"planning_path":null,"phase_reviewer_chain":null,"notes":"","slices":[]}],'
+        '"planning_path":null,"phase_reviewer_chain":null,"notes":"","slices":['
+        '{"id":"S1","title":"s","created":"2026-05-20","status":"ready",'
+        '"started":null,"closed":null,"blocked_on":null,"depends_on":[],'
+        '"planning_status":"proposed","parallel_group":null,"plan_path":null,'
+        '"refs":[],"notes":"","reviewer_chain":null,"tasks":[]}]}],'
         '"cross_cutting":[],"archived_phases":[]}'
     )
     r = run_cli(*readonly_cmd, cwd=tmp_path)
-    # Some of these may exit non-zero for unrelated reasons (e.g. ready-slices
-    # with no ready slices); the assertion is just that they do NOT error with
-    # the unconfigured-routing message.
+    assert r.returncode == 0, (
+        f"read-only command {readonly_cmd} should succeed without config; "
+        f"stdout={r.stdout!r} stderr={r.stderr!r}"
+    )
     assert "no authoritative-checkout routing configured" not in r.stderr, r.stderr
 
 
@@ -753,6 +765,121 @@ def test_top_level_project_field_drift_migrates():
     authoritative.north_star = "old mission"
     deltas, _ = compute_deltas(local=local, authoritative=authoritative)
     assert any(d.row_id == "<project>" and d.field == "north_star" for d in deltas)
+
+
+# ── Full persisted surface: per-field migration acceptance (spec test #14) ──
+
+_SAMPLE_VALUES = {
+    "str": ("authority", "LOCAL_VALUE"),
+    "str-or-none": (None, "2026-05-21"),
+    "list-str": ([], ["new-ref"]),
+    "Status": (Status.READY, Status.IN_PROGRESS),
+}
+
+
+def _value_pair_for_field(row_type, field) -> tuple[object, object]:
+    """Return (authority_value, local_value) for a dataclass field. The pair must
+    be different; the local value will be migrated through."""
+    if field.name == "id" or field.name == "title" or field.name == "created":
+        # Identity / immutable fields — skip per-field migration test for these.
+        return (None, None)
+    if field.name == "status":
+        return _SAMPLE_VALUES["Status"]
+    if field.name == "schema_version":
+        return (None, None)
+    if field.name in {"started", "closed", "spec_path", "plan_path", "planning_path",
+                      "parallel_group", "reviewer_chain", "phase_reviewer_chain",
+                      "last_reviewed", "north_star", "archived_path", "archived_date"}:
+        return _SAMPLE_VALUES["str-or-none"]
+    if field.name in {"refs", "depends_on"}:
+        return _SAMPLE_VALUES["list-str"]
+    if field.name == "notes":
+        return ("", "migrated notes")
+    if field.name == "blocked_on":
+        from tasktool.model import BlockedOn
+        return (None, BlockedOn(kind="external", value="blocker"))
+    if field.name == "planning_status":
+        from tasktool.model import PlanningStatus
+        return (PlanningStatus.PROPOSED, PlanningStatus.RATIFIED)
+    if field.name in {"phases", "slices", "tasks", "cross_cutting", "archived_phases"}:
+        # Collection fields — covered by row-level diff tests above, not this one.
+        return (None, None)
+    if field.name == "project":
+        return ("old-project", "new-project")
+    return (None, None)
+
+
+@pytest.mark.parametrize(
+    "row_type",
+    [Project, Phase, Slice, Task, CrossCutting, ArchivedPhase],
+)
+def test_per_field_migration_acceptance(row_type):
+    """Spec test #14: parametrise over every dataclass field on every row type;
+    for each scalar/list field, create a divergence, run accept-local, and
+    assert the authoritative project holds the local value afterwards."""
+    from tasktool.migrate import apply_deltas, compute_deltas
+
+    for f in fields(row_type):
+        auth_val, local_val = _value_pair_for_field(row_type, f)
+        if auth_val is None and local_val is None:
+            continue  # field handled elsewhere
+        if auth_val == local_val:
+            continue
+
+        # Build local and authoritative projects containing one instance of row_type
+        # with the field set to differ between trees.
+        local = _project_with_slice()
+        auth = _project_with_slice()
+
+        def set_on(tree, value, *, type_=row_type):
+            if type_ is Project:
+                setattr(tree, f.name, value)
+            elif type_ is Phase:
+                setattr(tree.phases[0], f.name, value)
+            elif type_ is Slice:
+                setattr(tree.phases[0].slices[0], f.name, value)
+            elif type_ is Task:
+                if not tree.phases[0].slices[0].tasks:
+                    tree.phases[0].slices[0].tasks.append(
+                        Task(id="T1", title="t", created=_today())
+                    )
+                setattr(tree.phases[0].slices[0].tasks[0], f.name, value)
+            elif type_ is CrossCutting:
+                if not tree.cross_cutting:
+                    tree.cross_cutting.append(
+                        CrossCutting(id="X1", title="x", created=_today())
+                    )
+                setattr(tree.cross_cutting[0], f.name, value)
+            elif type_ is ArchivedPhase:
+                if not tree.archived_phases:
+                    tree.archived_phases.append(
+                        ArchivedPhase(id="P0", title="a",
+                                      archived_path="docs/x",
+                                      archived_date=_today())
+                    )
+                setattr(tree.archived_phases[0], f.name, value)
+
+        set_on(local, local_val)
+        set_on(auth, auth_val)
+
+        deltas, conflicts = compute_deltas(local=local, authoritative=auth)
+        merged = apply_deltas(authoritative=auth, local=local,
+                               deltas=deltas, conflicts=conflicts,
+                               policy="accept-local")
+
+        def get_on(tree, type_=row_type):
+            if type_ is Project: return getattr(tree, f.name)
+            if type_ is Phase: return getattr(tree.phases[0], f.name)
+            if type_ is Slice: return getattr(tree.phases[0].slices[0], f.name)
+            if type_ is Task: return getattr(tree.phases[0].slices[0].tasks[0], f.name)
+            if type_ is CrossCutting: return getattr(tree.cross_cutting[0], f.name)
+            if type_ is ArchivedPhase: return getattr(tree.archived_phases[0], f.name)
+            raise AssertionError
+
+        assert get_on(merged) == local_val, (
+            f"{row_type.__name__}.{f.name} migration failed: "
+            f"expected {local_val!r}, got {get_on(merged)!r}"
+        )
 ```
 
 - [ ] **Step 2: Run, expect ImportError**
@@ -1348,6 +1475,40 @@ def test_migrate_emits_notify_events(tmp_path, monkeypatch):
     matches = [e for e in events if "P1.S1" in e.get("message", "")
                and "in progress" in e.get("message", "")]
     assert matches, f"no notify event found for P1.S1 status change. events={events}"
+
+
+def test_migrate_emits_notify_events_for_task_transitions(tmp_path):
+    """F8 follow-up: task-level status transitions also emit notify events."""
+    main, work = _setup_main_with_worktree(tmp_path)
+    # Add a task to both trees, divergent status.
+    for root, status in ((main, "ready"), (work, "in_progress")):
+        tl = json.loads((root / "docs" / "tasklist.json").read_text())
+        tl["phases"][0]["slices"][0]["tasks"] = [{
+            "id": "T1", "title": "task one", "created": "2026-05-20",
+            "status": status, "started": None, "closed": None,
+            "refs": [], "notes": "",
+        }]
+        (root / "docs" / "tasklist.json").write_text(json.dumps(tl, indent=2))
+    _git("add", "docs/tasklist.json", cwd=main)
+    _git("commit", "-m", "add task", cwd=main)
+
+    log_path = tmp_path / "notify-task.log"
+    import os
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(PKG_DIR) + os.pathsep + env.get("PYTHONPATH", "")
+    env["SUPERSTAR_NOTIFY_LOG"] = str(log_path)
+    env.pop("SUPERSTAR_NOTIFY_DISABLE", None)
+    r = subprocess.run(
+        [sys.executable, "-m", "tasktool",
+         "config", "migrate-from-local",
+         "--authority-root", str(main),
+         "--accept-local"],
+        capture_output=True, text=True, cwd=work, env=env,
+    )
+    assert r.returncode == 0, r.stdout + r.stderr
+    events = [json.loads(line) for line in log_path.read_text().splitlines() if line.strip()]
+    task_events = [e for e in events if "P1.S1.T1" in e.get("message", "")]
+    assert task_events, f"no notify event found for task status change. events={events}"
 ```
 
 - [ ] **Step 2: Run, expect failure**
@@ -1378,13 +1539,7 @@ from tasktool.worktree import (
 
 (Confirm the exact list of imports already present and add `same_repository` to the existing alphabetised block; do not duplicate names that are already imported.)
 
-Also verify the helper for loading a `Project` from an absolute path. Inspect `tools/tasktool/serialize.py`:
-
-```bash
-grep -n "^def " tools/tasktool/serialize.py
-```
-
-If `serialize.py` does not already expose a `Project`-returning loader that takes an absolute path, look at how `_load(repo_root)` in `commands.py` deserialises today and reuse the same code path. The plan body below uses the placeholder name `load_project_from_path`; replace both call sites with the function that exists (e.g. `project_from_json` or `_load` invoked with the repo root computed from the tasklist path).
+`tools/tasktool/serialize.py:100` already exposes `load_project(path: Path) -> Project`, and `commands.py` already imports it. The migration command body below delegates to it through a one-line helper. No additional plumbing needed.
 
 In `tools/tasktool/commands.py`, immediately after `cmd_config_init_local`, add:
 
@@ -1509,19 +1664,11 @@ def cmd_config_migrate_from_local(
 
 
 def _load_project_at(tasklist_path: Path) -> "Project":
-    """Load a Project from any tasklist.json path. Thin wrapper over the existing
-    JSON deserialiser in tools/tasktool/serialize.py — replace the body with a
-    direct call to the existing helper after running:
-
-        grep -n '^def ' tools/tasktool/serialize.py
-
-    For example, if serialize.py exposes `project_from_json(path: Path) -> Project`,
-    this function is one line: `return project_from_json(tasklist_path)`. If only
-    a repo-root-based loader exists, derive the repo root from the tasklist path
-    (`tasklist_path.parent.parent`) and call that."""
-    raise NotImplementedError(
-        "replace with the appropriate call to tools/tasktool/serialize.py"
-    )
+    """Load a Project from any tasklist.json path. Thin wrapper over
+    `tools/tasktool/serialize.py:load_project`, which already accepts an absolute
+    path and returns a Project. Kept as a named helper so the migrator's call
+    sites read clearly."""
+    return load_project(tasklist_path)
 
 
 def _prompt_policy_interactive() -> str:
@@ -1537,9 +1684,10 @@ def _prompt_policy_interactive() -> str:
 
 
 def _notify_status_transitions(local: "Project", pre_merge_authoritative: "Project") -> None:
-    """Emit notify events for rows whose status changed between pre-merge
-    authoritative and local. Best-effort; never raises. Passes the Status enum
-    through unchanged — _notify_status expects an enum, not a string."""
+    """Emit notify events for every row (cross-cutting, phase, slice, task)
+    whose status changed between pre-merge authoritative and local. Best-effort;
+    never raises. Passes the Status enum through unchanged — _notify_status
+    expects an enum, not a string."""
     try:
         def walk(p):
             for cc in p.cross_cutting:
@@ -1547,7 +1695,10 @@ def _notify_status_transitions(local: "Project", pre_merge_authoritative: "Proje
             for ph in p.phases:
                 yield ph.id, ph, "phase"
                 for sl in ph.slices:
-                    yield f"{ph.id}.{sl.id}", sl, "slice"
+                    qsl = f"{ph.id}.{sl.id}"
+                    yield qsl, sl, "slice"
+                    for tk in sl.tasks:
+                        yield f"{qsl}.{tk.id}", tk, "task"
         pre = {qid: row for qid, row, _ in walk(pre_merge_authoritative)}
         for qid, row, kind in walk(local):
             old = pre.get(qid)
@@ -1565,15 +1716,7 @@ def _notify_status_transitions(local: "Project", pre_merge_authoritative: "Proje
         pass
 ```
 
-Important: `_load_project_at` above is a placeholder body that raises. The implementing engineer MUST replace it with one or two lines that delegate to the existing loader in `tools/tasktool/serialize.py`. Run the `grep -n "^def " tools/tasktool/serialize.py` command first, then pick the function that takes a `Path` and returns a `Project`. If only a repo-root helper exists, the implementation is:
-
-```python
-def _load_project_at(tasklist_path: Path) -> "Project":
-    repo_root = tasklist_path.parent.parent
-    return _load(repo_root)
-```
-
-— where `_load` is the existing helper already used by `cmd_init` and friends.
+`load_project` is already imported at the top of `commands.py` — no new import needed.
 
 - [ ] **Step 4: Register CLI subparser**
 
