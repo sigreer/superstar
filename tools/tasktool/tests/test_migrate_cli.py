@@ -202,8 +202,36 @@ def test_accept_authoritative_is_noop(tmp_path: Path) -> None:
 
     assert r.returncode == 0, r.stderr
     assert "P1.S1" in r.stdout
+    assert f"accepted authoritative tasklist; migrated 0 rows (0 status transitions) to {authority}" in r.stdout
     assert (authority / "docs" / "tasklist.json").read_text(encoding="utf-8") == before
     assert not (authority / ".tasktool" / "config.json").exists()
+
+
+def test_accept_authoritative_acquires_authority_lock(tmp_path: Path) -> None:
+    authority, worker = _authority_and_worker(tmp_path)
+    local = load_project(worker / "docs" / "tasklist.json")
+    local.phases[0].slices[0].status = Status.IN_PROGRESS
+    _write_tasklist(worker, local)
+    common_dir = Path(_git(authority, "rev-parse", "--git-common-dir").stdout.strip())
+    if not common_dir.is_absolute():
+        common_dir = authority / common_dir
+    lock_path = common_dir / "tasktool.lock"
+    lock_path.write_text("held", encoding="utf-8")
+    try:
+        r = run_cli(
+            "config",
+            "migrate-from-local",
+            "--authority-root",
+            str(authority),
+            "--accept-authoritative",
+            cwd=worker,
+            env={"TASKTOOL_LOCK_TIMEOUT": "0.1"},
+        )
+    finally:
+        lock_path.unlink()
+
+    assert r.returncode == 1
+    assert "timed out waiting for tasktool lock" in r.stderr
 
 
 def test_no_drift_exits_cleanly(tmp_path: Path) -> None:

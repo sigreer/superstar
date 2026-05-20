@@ -287,6 +287,17 @@ def cmd_config_migrate_from_local(
         else:
             raise CommandError("migrate-from-local aborted")
     if accept_authoritative:
+        try:
+            with tasktool_lock(authority):
+                _ensure_authoritative_tasklist_clean(authority)
+                authoritative_project = _load(authority)
+                compute_deltas(local_project, authoritative_project)
+        except AuthorityError as exc:
+            raise CommandError(str(exc)) from exc
+        print(
+            f"accepted authoritative tasklist; migrated 0 rows "
+            f"(0 status transitions) to {authority}"
+        )
         return
 
     status_transition_rows: set[str] = set()

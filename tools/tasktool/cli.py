@@ -12,6 +12,21 @@ def _find_repo_root(start: Path) -> Path:
             return p
     return cur
 
+def _is_project_marker(path: Path) -> bool:
+    return (path / "docs").is_dir() or (path / ".git").exists() or (path / ".tasktool").exists()
+
+def _resolve_project_root(args: argparse.Namespace) -> Path:
+    if args.project_root is not None:
+        return args.project_root
+    cwd = Path.cwd()
+    if (
+        args.cmd == "config"
+        and args.config_cmd in {"init-authority", "init-local"}
+        and not _is_project_marker(cwd)
+    ):
+        return cwd.resolve()
+    return _find_repo_root(cwd)
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="tasktool")
     parser.add_argument("--project-root", type=Path, default=None,
@@ -190,7 +205,7 @@ def _build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str]) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
-    root = args.project_root or _find_repo_root(Path.cwd())
+    root = _resolve_project_root(args)
     # Plumb --no-stage into the commands module's process-global toggle.
     commands.STAGE_AFTER_WRITE = not args.no_stage
 
