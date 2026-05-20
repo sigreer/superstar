@@ -29,6 +29,13 @@ def _build_parser() -> argparse.ArgumentParser:
     p_config_auth = config_sub.add_parser("init-authority")
     p_config_auth.add_argument("--branch", default="main")
     config_sub.add_parser("init-local")
+    p_config_migrate = config_sub.add_parser("migrate-from-local")
+    p_config_migrate.add_argument("--authority-root", type=Path)
+    p_config_migrate.add_argument("--local-root", type=Path)
+    p_config_migrate.add_argument("--dry-run", action="store_true")
+    migrate_policy = p_config_migrate.add_mutually_exclusive_group()
+    migrate_policy.add_argument("--accept-local", action="store_true")
+    migrate_policy.add_argument("--accept-authoritative", action="store_true")
 
     p_init = sub.add_parser("init")
     p_init.add_argument("--project", default=None,
@@ -196,6 +203,16 @@ def main(argv: list[str]) -> int:
                 )
             elif args.config_cmd == "init-local":
                 commands.cmd_config_init_local(repo_root=root)
+            elif args.config_cmd == "migrate-from-local":
+                commands.cmd_config_migrate_from_local(
+                    repo_root=root,
+                    authority_root=args.authority_root,
+                    local_root=args.local_root,
+                    dry_run=args.dry_run,
+                    accept_local=args.accept_local,
+                    accept_authoritative=args.accept_authoritative,
+                    stdin_is_tty=sys.stdin.isatty(),
+                )
         elif args.cmd == "init":
             commands.cmd_init(repo_root=root, project=args.project, north_star=args.north_star, force=args.force)
         elif args.cmd == "create":
