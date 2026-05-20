@@ -61,19 +61,26 @@ Rationale: explicit don'ts override Claude's markdown reflex; abstract "use this
 
 In `external-reviewer.py`:
 
-**2a. Centralise normalisation.** Today, `_reformat_response` is called only from the manual `run_ingest_response` path (line 1781). The automated round path at line 1403 inlines just `_VERDICT_HEADING_STYLE.sub(...)`. Make both paths go through one normaliser. Concretely: change line 1403–1405 to `verdict, valid = parse_verdict(_reformat_response(body))`. `_reformat_response` already strips outer code fences and rewrites heading-style verdicts; sharing it gives a single place for future normalisations.
+**2a. Centralise normalisation via a public helper.** Introduce `parse_reformatted_verdict(raw: str) -> tuple[str | None, bool]` which composes `_reformat_response` and `parse_verdict`. Both the automated round path (`external-reviewer.py:1403`) and the manual ingest path (`external-reviewer.py:1814`) MUST call this helper instead of composing the two functions by hand. `_reformat_response` already strips outer code fences and rewrites heading-style verdicts; co-locating the composition behind one named function gives a single chokepoint for future normalisations and removes the current divergence between the two call sites.
 
-**2b. Add anchored bare-`Verdict:` matching.** Introduce a second regex `VERDICT_LINE_BARE_RE` that matches bare `Verdict:` **only when line-anchored** (after optional leading whitespace and markdown emphasis/heading marks). Anchoring eliminates the prose false-positive risk (e.g. "the previous round's verdict was revise"). Empirical confirmation: zero mid-prose matches were found across the `multistore/docs/reviewer/` corpus.
+**Legacy manifest synthesis is explicitly out of scope.** `synthesize_manifest_from_legacy_files` (around `external-reviewer.py:2598`) parses raw response bodies from historical pre-manifest chains. Updating it would re-write historical verdicts on first touch, which is undesirable. It continues to call `parse_verdict` directly on the raw body, by design.
+
+**2b. Add anchored, value-bounded bare-`Verdict:` matching.** Introduce a second regex `VERDICT_LINE_BARE_RE` that matches bare `Verdict:` **only when line-anchored** (after optional leading whitespace and markdown emphasis/heading marks) **and value-bounded** (nothing meaningful between the captured value and end-of-line beyond emphasis/punctuation/whitespace). Anchoring eliminates prose false-positives ("the previous round's verdict was revise"); value-bounding rejects malformed values like `Verdict: ready for review` or `Verdict: ready-ish` so they record as `(None, False)` rather than silently coercing to `ready`. Empirical confirmation: zero mid-prose matches found across the `multistore/docs/reviewer/` corpus.
+
+**Out of scope for line-anchoring:** list-bullet-prefixed verdict lines (`- Verdict: ready`, `1. Verdict: ready`). None appear in the observed Claude corpus. If they appear later, extend the leading character class then; do not pre-anchor for hypotheticals.
 
 Proposed shape:
 
 ```python
 VERDICT_LINE_BARE_RE = re.compile(
     r"^[\s>#*_`]*verdict\s*[`*_\"']*\s*[:\-]\s*[`*_\"'\s]*"
-    r"(ready with small edits|ready|revise)[`*_\"'.\s]*",
+    r"(ready with small edits|ready|revise)"
+    r"(?=[\s`*_\"'.]*(?:$|\n))",
     re.IGNORECASE | re.MULTILINE,
 )
 ```
+
+The trailing lookahead `(?=[\s`*_\"'.]*(?:$|\n))` enforces value boundary: only emphasis marks, punctuation, and whitespace may follow the captured value on the rest of the line. Trailing prose after a sentence-terminating period on the same line (e.g. `**Verdict: ready with small edits.** Full review written to …`) is **not** accepted by this regex — the period is consumed by the lookahead's character class but the following ` Full…` is not, so the match fails. That real-world variant is instead handled because the preceding sentence boundary closes the verdict line at the `.**` and the trailing prose is on a new visual sentence; the parser must therefore also accept the form where `**` follows the period. **Concretely:** the lookahead character class includes `*`, `_`, `` ` ``, `"`, `'`, `.`, and whitespace; anything outside that class on the same line invalidates the match.
 
 Update `parse_verdict` to:
 
@@ -109,6 +116,10 @@ All in `skills/external-review/tests/`.
 - `test_bare_verdict_with_trailing_prose` — `**Verdict: ready with small edits.** Full review written to /tmp/foo.md.` → `ready with small edits`, valid (mirrors a real fixture).
 - `test_bare_verdict_not_matched_in_prose` — body containing `the previous round's verdict was revise` (no line-anchored `Verdict:` and no `Overall verdict:` line) → `(None, False)`.
 - `test_overall_preferred_over_bare` — body containing both `**Verdict: revise**` near the top and `Overall verdict: ready` near the bottom → `ready` (Overall path wins, takes last match).
+- `test_bare_verdict_rejects_extra_words_after_value` — `**Verdict: ready for review**` → `(None, False)` (value boundary violated by trailing word).
+- `test_bare_verdict_rejects_hyphenated_value` — `Verdict: ready-ish` → `(None, False)`.
+- `test_bare_verdict_rejects_qualified_value` — `Verdict: ready with small edits pending changes` → `(None, False)` (longest alternation matches `ready with small edits`, but trailing ` pending changes` fails the value-boundary lookahead).
+- `test_parse_reformatted_verdict_helper` — direct call on the new `parse_reformatted_verdict(raw)` helper with a fenced + heading-style fixture round-trips to `("revise", True)`.
 
 ### New unit tests in `test_heading_style_verdict.py`
 
@@ -116,7 +127,12 @@ All in `skills/external-review/tests/`.
 
 ### Fixture-based regression
 
-Add `tests/fixtures/claude-bare-verdict-revise.md` and `claude-heading-revise.md` captured (verbatim or trimmed) from the failed `multistore` rounds. Reference them in the new tests via `pathlib.Path` so future regressions are pinned to real-world content.
+Add the following fixture files under `skills/external-review/tests/fixtures/` (create the directory):
+
+- `claude-bare-verdict-ready-with-small-edits.md` — copied verbatim from `/home/simon/Dev/sigreer/multistore/docs/reviewer/p11-s5-final-guardrails-and-documentation-plan/r2-2026-05-19T0054-response.md`.
+- `claude-heading-revise.md` — copied verbatim from `/home/simon/Dev/sigreer/multistore/docs/reviewer/p11-s5-final-guardrails-and-documentation-plan/r1-2026-05-19T0050-response.md`.
+
+The implementer **must copy these into the repo**; do not reference them from the external `multistore` path at test time. Reference them in the new tests via `pathlib.Path` so future regressions are pinned to committed, version-controlled content.
 
 ### Existing tests
 
@@ -125,13 +141,13 @@ All 222 tests in `skills/external-review/tests/` must continue to pass without m
 ## Acceptance criteria
 
 1. `python3 -m pytest skills/external-review/tests/` — all existing + new tests pass.
-2. Manual replay: running `parse_verdict(_reformat_response(open(p).read()))` against the captured `r2-2026-05-19T0054-response.md` returns `("ready with small edits", True)`. Replay against `r1-2026-05-19T0050-response.md` still returns `("revise", True)`.
-3. Single chokepoint: there is only one call site that combines normalisation + `parse_verdict` for response bodies (the manual ingest and automated round paths share it).
+2. Manual replay: running `parse_reformatted_verdict(open(p).read())` against the copied fixture `claude-bare-verdict-ready-with-small-edits.md` returns `("ready with small edits", True)`. Replay against `claude-heading-revise.md` returns `("revise", True)`.
+3. Single chokepoint: `parse_reformatted_verdict` exists and is called from both the automated round path (`external-reviewer.py:1403`) and the manual ingest path (`external-reviewer.py:1814`). Legacy manifest synthesis (`synthesize_manifest_from_legacy_files`) is documented as the one excluded call site.
 4. No new dependencies, no new public CLI surface, no schema changes to `chain.json`.
 
 ## Risks & rollback
 
-- **Risk:** `VERDICT_LINE_BARE_RE` over-anchored such that some legitimate variant is missed. Mitigation: anchoring uses `^[\s>#*_`]*` which matches list bullets, heading markers, and bold emphasis. The fixture suite locks in the observed real variants.
+- **Risk:** `VERDICT_LINE_BARE_RE` over-anchored such that some legitimate variant is missed. Mitigation: leading class `^[\s>#*_`]*` covers whitespace, blockquote, heading markers, and bold/italic/code emphasis — the forms observed in the corpus. List-bullet variants (`- Verdict: ready`) are intentionally not matched; if they appear later, the leading class is the single place to extend. The fixture suite locks in the observed real variants.
 - **Risk:** Two-pass parsing changes the verdict picked for a body containing both forms. Mitigation: `Overall verdict` is preferred; bare only used when Overall absent. Test `test_overall_preferred_over_bare` pins this.
 - **Rollback:** Revert the touched commit; behaviour returns to pre-X10 strict matching. No data migration.
 
