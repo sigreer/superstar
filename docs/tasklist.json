@@ -148,7 +148,9 @@
       "id": "X10",
       "notes": "",
       "refs": [
-        "docs/specs/2026-05-20-X10-verdict-parser-claude-formatting-design.md"
+        "docs/specs/2026-05-20-X10-verdict-parser-claude-formatting-design.md",
+        "docs/reviewer/x10-verdict-parser-claude-formatting-design-spec",
+        "docs/plans/2026-05-20-X10-verdict-parser-claude-formatting.md"
       ],
       "started": null,
       "status": "ready",
