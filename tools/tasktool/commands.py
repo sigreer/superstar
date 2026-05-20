@@ -69,6 +69,13 @@ def _today() -> str:
 def _tasklist_path(repo_root: Path) -> Path:
     return repo_root / DEFAULT_JSON_REL
 
+def _ensure_authoritative_tasklist_clean(repo_root: Path) -> None:
+    if tasklist_has_unsafe_dirty_state(repo_root):
+        raise CommandError(
+            "authoritative docs/tasklist.json has unstaged changes; "
+            "commit, stash, or normalise them before running tasktool"
+        )
+
 def _load(repo_root: Path) -> Project:
     path = _tasklist_path(repo_root)
     if not path.exists():
@@ -125,11 +132,7 @@ def _write_context(repo_root: Path):
                     expected_branch=authoritative_branch,
                     caller_root=repo_root,
                 )
-                if tasklist_has_unsafe_dirty_state(write_root):
-                    raise CommandError(
-                        "authoritative docs/tasklist.json has unstaged changes; "
-                        "commit, stash, or normalise them before running tasktool"
-                    )
+                _ensure_authoritative_tasklist_clean(write_root)
                 if routed:
                     print(
                         f"tasktool: routed mutation to authoritative checkout: {write_root}",
@@ -245,6 +248,8 @@ def cmd_config_migrate_from_local(
     expected_branch = cfg.tasklist.authoritative_branch
     if needs_config:
         expected_branch = git_current_branch(authority)
+        if not expected_branch:
+            raise CommandError("authority checkout must be on a branch")
 
     try:
         validate_authoritative_checkout(
@@ -254,6 +259,8 @@ def cmd_config_migrate_from_local(
         )
     except AuthorityError as exc:
         raise CommandError(str(exc)) from exc
+
+    _ensure_authoritative_tasklist_clean(authority)
 
     local_project = _load(local)
     authoritative_project = _load(authority)
@@ -286,6 +293,7 @@ def cmd_config_migrate_from_local(
     migrated_rows: set[str] = set()
     try:
         with tasktool_lock(authority):
+            _ensure_authoritative_tasklist_clean(authority)
             authoritative_project = _load(authority)
             deltas, conflicts = compute_deltas(local_project, authoritative_project)
             status_transition_rows = {

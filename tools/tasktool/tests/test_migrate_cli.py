@@ -113,6 +113,38 @@ def test_drifted_linked_worktree_no_config_accept_local_writes_authority_and_con
     assert ".tasktool/config.json" in staged
 
 
+def test_accept_local_refuses_unstaged_authority_tasklist_and_preserves_bytes(tmp_path: Path) -> None:
+    authority, worker = _authority_and_worker(tmp_path)
+    authoritative = load_project(authority / "docs" / "tasklist.json")
+    authoritative.phases[0].slices[0].notes = "manual authority edit"
+    _write_tasklist(authority, authoritative)
+    dirty_bytes = (authority / "docs" / "tasklist.json").read_bytes()
+    local = load_project(worker / "docs" / "tasklist.json")
+    local.phases[0].slices[0].status = Status.IN_PROGRESS
+    _write_tasklist(worker, local)
+
+    r = run_cli("config", "migrate-from-local", "--authority-root", str(authority), "--accept-local", cwd=worker)
+
+    assert r.returncode == 1
+    assert "authoritative docs/tasklist.json has unstaged changes" in r.stderr
+    assert (authority / "docs" / "tasklist.json").read_bytes() == dirty_bytes
+    assert not (authority / ".tasktool" / "config.json").exists()
+
+
+def test_missing_config_detached_authority_fails_without_empty_branch_config(tmp_path: Path) -> None:
+    authority, worker = _authority_and_worker(tmp_path)
+    _git(authority, "checkout", "--detach", "HEAD")
+    local = load_project(worker / "docs" / "tasklist.json")
+    local.phases[0].slices[0].status = Status.IN_PROGRESS
+    _write_tasklist(worker, local)
+
+    r = run_cli("config", "migrate-from-local", "--authority-root", str(authority), "--accept-local", cwd=worker)
+
+    assert r.returncode == 1
+    assert "authority checkout must be on a branch" in r.stderr
+    assert not (authority / ".tasktool" / "config.json").exists()
+
+
 def test_dry_run_prints_diff_and_writes_nothing(tmp_path: Path) -> None:
     authority, worker = _authority_and_worker(tmp_path)
     before = (authority / "docs" / "tasklist.json").read_text(encoding="utf-8")
