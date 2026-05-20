@@ -134,6 +134,49 @@
       "base_ref": "13f03af579c3d684448ff4ec98c6c8f58662a84d",
       "base_ref_source": "auto",
       "diff_included": true
+    },
+    {
+      "round": 4,
+      "reviewers": [
+        {
+          "role": "primary",
+          "sweep_group": null,
+          "parent_round": 4,
+          "request": "r4-2026-05-20T1013-request.md",
+          "response": "r4-2026-05-20T1013-response.md",
+          "verdict": "revise",
+          "verdict_valid": true,
+          "returncode": 0,
+          "status": "ok",
+          "provider": "codex",
+          "caller_provider": "claude",
+          "sandbox": {
+            "repo_root": "/home/simon/Dev/sigreer/skills/superstar/.worktrees/x10-verdict-parser",
+            "scratch_dir": "/tmp/superstar-reviewer-x10-verdict-parser-claude-formatting-design-spec-r4-primary-sg1269dh",
+            "response_dir": "docs/reviewer/x10-verdict-parser-claude-formatting-design-spec/.reviewer-output/r4-primary",
+            "mode": "workspace-write-with-read-access"
+          }
+        }
+      ],
+      "status": "ok",
+      "returncode": 0,
+      "merged_verdict": "revise",
+      "merged_findings": null,
+      "request": "r4-2026-05-20T1013-request.md",
+      "response": "r4-2026-05-20T1013-response.md",
+      "resolution": "r3-resolution.md",
+      "resolution_parse_status": "ok",
+      "resolution_waiver": false,
+      "head_sha_at_request": "64ccab6b70708c263dc1b410203bdcd7a6317885",
+      "head_sha_after_round": "64ccab6b70708c263dc1b410203bdcd7a6317885",
+      "worktree_dirty_at_request": false,
+      "verdict": "revise",
+      "verdict_valid": true,
+      "findings_count": null,
+      "blocking_findings_count": null,
+      "base_ref": "1ccbea148266b440ede392cd70db62d7ebaf0e80",
+      "base_ref_source": "auto",
+      "diff_included": true
     }
   ],
   "sweep_checkpoints": {

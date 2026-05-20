@@ -72,27 +72,29 @@ In `external-reviewer.py`:
 Proposed shape:
 
 ```python
-# Boundary A: end-of-line, emphasis/punct only.
-# Boundary B: period + emphasis-closer + whitespace. Requires at least one
-#             emphasis char (* _ ` " ') between the period and the trailing
-#             space, so trailing prose is only accepted when it follows a
-#             *closed* emphasis span (e.g. `**Verdict: ready.** Full review...`).
+# Value boundary: rest of line is only emphasis marks, punctuation, and
+# whitespace, then end-of-line. Same-line trailing prose is rejected — see
+# "Trailing-prose policy" below.
 VERDICT_LINE_BARE_RE = re.compile(
     r"^[\s>#*_`]*verdict\s*[`*_\"']*\s*[:\-]\s*[`*_\"'\s]*"
     r"(ready with small edits|ready|revise)"
-    r"(?=[\s`*_\"'.]*(?:$|\n)|[`*_\"']*\.[`*_\"']+\s)",
+    r"(?=[\s`*_\"'.]*(?:$|\n))",
     re.IGNORECASE | re.MULTILINE,
 )
 ```
 
 (Do **not** use `re.VERBOSE` — it strips literal whitespace from the alternation `ready with small edits`, silently breaking the regex.)
 
-The trailing lookahead enforces value boundary with two accepted shapes:
+The trailing lookahead enforces a single accepted shape: rest of line is only emphasis marks (`*`, `_`, `` ` ``, `"`, `'`), punctuation (`.`), and whitespace, then end-of-line. Covers the critical failure mode `**Verdict: ready with small edits.**` and rejects all malformed/contradictory variants.
 
-- **Boundary A** (`[\s`*_\"'.]*(?:$|\n)`): rest of line is only emphasis marks, punctuation, and whitespace, then end-of-line. Covers `**Verdict: ready with small edits.**` and similar.
-- **Boundary B** (`[`*_\"']*\.[`*_\"']+\s`): the value is followed by a sentence-terminating period and one-or-more emphasis-closer characters (`*`, `_`, `` ` ``, `"`, `'`) before whitespace. The mandatory closing emphasis is the key: it pins acceptance to the observed Claude pattern `**Verdict: ready.** Full review written to …` (3× in the corpus) while rejecting contradictory same-line forms that have no closing emphasis between the value and the trailing prose (e.g. `**Verdict: ready. Important findings remain unresolved.**` — the `**` is at end-of-line, not between period and space).
+**Trailing-prose policy.** Lines like `**Verdict: ready with small edits.** Full review written to …` (3× in the `multistore` corpus, all from human-bridged rounds — not core parse-failure cases) are deliberately **not** accepted. The justification:
 
-Malformed values that match neither boundary are rejected: `Verdict: ready for review` (no period before ` for`), `Verdict: ready-ish` (hyphen rejected), `Verdict: ready with small edits pending changes` (` pending` matches neither boundary), `**Verdict: ready. Important findings.**` (no emphasis between `.` and ` Important`).
+1. The dominant failure mode is the *trailerless* `**Verdict: ready with small edits.**` — that single line is what caused the rerun loop in `p11-s5`. Boundary A handles it cleanly.
+2. A whitelist of "benign" trailer phrases is unbounded; a permissive trailer-accepting boundary risks accepting contradictory same-line prose like `**Verdict: ready.** Important findings remain unresolved.` and silently coercing it to `ready`.
+3. The user's stated preference for this ticket is strict-only. Loose-match recovery was explicitly deferred (§Non-goals).
+4. If a round ever lands with a real trailer, it will record `verdict_valid: false`, the coordinator will rerun, and the prompt change (§Change 1) tells Claude to emit a clean trailerless line — the second attempt should parse.
+
+Malformed values that match neither anchoring nor the boundary are rejected: `Verdict: ready for review`, `Verdict: ready-ish`, `Verdict: ready with small edits pending changes`, `**Verdict: ready.** Important findings remain unresolved.`, `**Verdict: ready with small edits.** Full review written to /tmp/foo.md.` (all return `(None, False)`).
 
 Update `parse_verdict` to:
 
@@ -125,14 +127,13 @@ All in `skills/external-review/tests/`.
 
 - `test_bare_verdict_ready_with_small_edits` — `**Verdict: ready with small edits.**` → `ready with small edits`, valid.
 - `test_bare_verdict_revise` — `**Verdict: revise.**` → `revise`, valid.
-- `test_bare_verdict_with_trailing_prose` — `**Verdict: ready with small edits.** Full review written to /tmp/foo.md.` → `ready with small edits`, valid (mirrors a real fixture).
 - `test_bare_verdict_not_matched_in_prose` — body containing `the previous round's verdict was revise` (no line-anchored `Verdict:` and no `Overall verdict:` line) → `(None, False)`.
 - `test_overall_preferred_over_bare` — body containing both `**Verdict: revise**` near the top and `Overall verdict: ready` near the bottom → `ready` (Overall path wins, takes last match).
-- `test_bare_verdict_rejects_extra_words_after_value` — `**Verdict: ready for review**` → `(None, False)` (value boundary violated by trailing word).
+- `test_bare_verdict_rejects_extra_words_after_value` — `**Verdict: ready for review**` → `(None, False)`.
 - `test_bare_verdict_rejects_hyphenated_value` — `Verdict: ready-ish` → `(None, False)`.
-- `test_bare_verdict_rejects_qualified_value` — `Verdict: ready with small edits pending changes` → `(None, False)` (longest alternation matches `ready with small edits`, but trailing ` pending changes` fails the value-boundary lookahead).
-- `test_bare_verdict_rejects_contradictory_same_line_prose` — `**Verdict: ready. Important findings remain unresolved.**` → `(None, False)`. Boundary B is narrow: it requires a closing emphasis marker between the period and the trailing whitespace; this contradictory form has the `**` only at end-of-line, not after the period.
-- `test_bare_verdict_rejects_unwrapped_same_line_prose` — `Verdict: ready. Some prose.` → `(None, False)` (no emphasis closer at all).
+- `test_bare_verdict_rejects_qualified_value` — `Verdict: ready with small edits pending changes` → `(None, False)`.
+- `test_bare_verdict_rejects_contradictory_same_line_prose` — `**Verdict: ready. Important findings remain unresolved.**` → `(None, False)` (trailing prose policy: any same-line content after the value beyond emphasis/punct/whitespace is rejected).
+- `test_bare_verdict_rejects_benign_same_line_prose` — `**Verdict: ready with small edits.** Full review written to /tmp/foo.md.` → `(None, False)`. Documents the deliberate strict-only choice: benign trailers are rejected because a permissive boundary would also admit contradictory ones.
 - `test_parse_reformatted_verdict_helper` — direct call on the new `parse_reformatted_verdict(raw)` helper with a fenced + heading-style fixture round-trips to `("revise", True)`.
 
 ### New unit tests in `test_heading_style_verdict.py`
