@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "tasklist": {
+    "authoritative_branch": "main",
+    "mutation_mode": "authoritative-checkout"
+  }
+}
