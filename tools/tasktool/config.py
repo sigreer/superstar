@@ -5,12 +5,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 DEFAULT_CONFIG_REL = Path(".tasktool/config.json")
+UNCONFIGURED = "unconfigured"
 VALID_MUTATION_MODES = {"local", "authoritative-checkout"}
 
 
 @dataclass(frozen=True)
 class TasklistConfig:
-    mutation_mode: str = "local"
+    mutation_mode: str = UNCONFIGURED
     authoritative_branch: str = "main"
 
 
@@ -21,7 +22,12 @@ class TasktoolConfig:
 
 
 def _parse_tasklist(raw: dict) -> TasklistConfig:
-    mode = raw.get("mutation_mode", "local")
+    if "mutation_mode" not in raw:
+        return TasklistConfig(
+            mutation_mode=UNCONFIGURED,
+            authoritative_branch=raw.get("authoritative_branch", "main"),
+        )
+    mode = raw["mutation_mode"]
     if mode not in VALID_MUTATION_MODES:
         raise ValueError(f"unknown mutation_mode: {mode}")
     return TasklistConfig(
@@ -54,3 +60,7 @@ def save_config(repo_root: Path, cfg: TasktoolConfig) -> None:
         },
     }
     path.write_text(json.dumps(body, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def is_authoritative_required(cfg: TasktoolConfig) -> bool:
+    return cfg.tasklist.mutation_mode == UNCONFIGURED
