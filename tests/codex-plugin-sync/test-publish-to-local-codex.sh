@@ -41,4 +41,19 @@ test ! -L "$CACHE_DIR/skills"
 test ! -L "$CACHE_DIR/hooks"
 test ! -L "$CACHE_DIR/tools"
 
+stop_command="$(
+  python3 - "$CACHE_DIR/hooks/hooks.json" <<'PY'
+import json
+import sys
+with open(sys.argv[1], encoding="utf-8") as f:
+    config = json.load(f)
+print(config["hooks"]["Stop"][0]["hooks"][0]["command"])
+PY
+)"
+
+PROJECT_DIR="$TMPDIR/project"
+mkdir -p "$PROJECT_DIR"
+env -u CLAUDE_PLUGIN_ROOT SUPERSTAR_NOTIFY_DRY_RUN=1 \
+  bash -lc 'cd "$1" && eval "$2" >/dev/null' _ "$PROJECT_DIR" "$stop_command"
+
 echo "PASS: publish-to-local-codex materializes plugin cache"

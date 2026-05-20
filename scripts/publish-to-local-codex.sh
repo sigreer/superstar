@@ -94,6 +94,30 @@ if [[ "$DRY_RUN" -eq 1 ]]; then
   exit 0
 fi
 
+python3 - "$CACHE_DIR" <<'PY'
+import json
+import shlex
+import sys
+from pathlib import Path
+
+cache = Path(sys.argv[1]).resolve()
+hooks_json = cache / "hooks" / "hooks.json"
+config = json.loads(hooks_json.read_text(encoding="utf-8"))
+hook_runner = shlex.quote(str(cache / "hooks" / "run-hook.cmd"))
+
+for event_entries in config.get("hooks", {}).values():
+    for entry in event_entries:
+        for hook in entry.get("hooks", []):
+            command = hook.get("command")
+            if isinstance(command, str):
+                hook["command"] = command.replace(
+                    '"${CLAUDE_PLUGIN_ROOT:-.}/hooks/run-hook.cmd"',
+                    hook_runner,
+                )
+
+hooks_json.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+PY
+
 python3 - "$CACHE_DIR" "$PLUGIN" "$VERSION" <<'PY'
 import json
 import sys
