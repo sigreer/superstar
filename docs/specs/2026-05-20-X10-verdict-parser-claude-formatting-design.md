@@ -72,15 +72,24 @@ In `external-reviewer.py`:
 Proposed shape:
 
 ```python
+# Boundary A: end-of-line, emphasis/punct only.
+# Boundary B: period (possibly emphasis-wrapped) + whitespace (handles trailing prose).
 VERDICT_LINE_BARE_RE = re.compile(
     r"^[\s>#*_`]*verdict\s*[`*_\"']*\s*[:\-]\s*[`*_\"'\s]*"
     r"(ready with small edits|ready|revise)"
-    r"(?=[\s`*_\"'.]*(?:$|\n))",
+    r"(?=[\s`*_\"'.]*(?:$|\n)|[`*_\"']*\.[`*_\"']*\s)",
     re.IGNORECASE | re.MULTILINE,
 )
 ```
 
-The trailing lookahead `(?=[\s`*_\"'.]*(?:$|\n))` enforces value boundary: only emphasis marks, punctuation, and whitespace may follow the captured value on the rest of the line. Trailing prose after a sentence-terminating period on the same line (e.g. `**Verdict: ready with small edits.** Full review written to …`) is **not** accepted by this regex — the period is consumed by the lookahead's character class but the following ` Full…` is not, so the match fails. That real-world variant is instead handled because the preceding sentence boundary closes the verdict line at the `.**` and the trailing prose is on a new visual sentence; the parser must therefore also accept the form where `**` follows the period. **Concretely:** the lookahead character class includes `*`, `_`, `` ` ``, `"`, `'`, `.`, and whitespace; anything outside that class on the same line invalidates the match.
+(Do **not** use `re.VERBOSE` — it strips literal whitespace from the alternation `ready with small edits`, which silently breaks the regex.)
+
+The trailing lookahead enforces value boundary with two accepted shapes:
+
+- **Boundary A** (`[\s`*_\"'.]*(?:$|\n)`): rest of line is only emphasis marks, punctuation, and whitespace, then end-of-line. Covers `**Verdict: ready with small edits.**` and similar.
+- **Boundary B** (`[`*_\"']*\.[`*_\"']*\s`): the value is followed by a sentence-terminating period (possibly wrapped in emphasis) and then whitespace. Covers `**Verdict: ready with small edits.** Full review written to …` — a real Claude variant observed 3× in the corpus.
+
+Malformed values that match neither boundary are rejected: `Verdict: ready for review` (no period before ` for`), `Verdict: ready-ish` (hyphen is not `.` and `-` is not in boundary A's character class), `Verdict: ready with small edits pending changes` (after the longest alternation match `ready with small edits`, ` pending` matches neither boundary).
 
 Update `parse_verdict` to:
 

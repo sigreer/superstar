@@ -1,0 +1,37 @@
+**Findings**
+
+F5 Severity: important  
+The updated spec is internally inconsistent about same-line trailing prose after a bare verdict. The proposed `VERDICT_LINE_BARE_RE` at [docs/specs/2026-05-20-X10-verdict-parser-claude-formatting-design.md](/home/simon/Dev/sigreer/skills/superstar/.worktrees/x10-verdict-parser/docs/specs/2026-05-20-X10-verdict-parser-claude-formatting-design.md:75) correctly rejects `**Verdict: ready with small edits.** Full review written...`, and the prose explicitly says that same-line trailer is not accepted at [line 83](/home/simon/Dev/sigreer/skills/superstar/.worktrees/x10-verdict-parser/docs/specs/2026-05-20-X10-verdict-parser-claude-formatting-design.md:83). But the test list still requires `test_bare_verdict_with_trailing_prose` to return valid for exactly that same-line form at [line 116](/home/simon/Dev/sigreer/skills/superstar/.worktrees/x10-verdict-parser/docs/specs/2026-05-20-X10-verdict-parser-claude-formatting-design.md:116). A direct probe of the proposed regex returns no match for that input. This gives the implementer mutually incompatible acceptance criteria. Decide one behavior: either remove/change the same-line trailing-prose positive test, or specify a different value-boundary rule that deliberately accepts known trailers such as `Full review written to ...` without accepting malformed values like `ready for review`.
+
+F1 Severity: important — RESOLVED  
+The spec now requires value-bounded bare verdict matching and adds negative tests for `ready for review`, `ready-ish`, and qualified values at [lines 68-79](/home/simon/Dev/sigreer/skills/superstar/.worktrees/x10-verdict-parser/docs/specs/2026-05-20-X10-verdict-parser-claude-formatting-design.md:68) and [lines 119-121](/home/simon/Dev/sigreer/skills/superstar/.worktrees/x10-verdict-parser/docs/specs/2026-05-20-X10-verdict-parser-claude-formatting-design.md:119). The proposed regex rejects those malformed cases in a direct check.
+
+F2 Severity: important — RESOLVED  
+The spec now defines `parse_reformatted_verdict(raw)` and requires both the automated round path and manual ingest path to use it, while explicitly excluding legacy manifest synthesis with rationale at [lines 64-66](/home/simon/Dev/sigreer/skills/superstar/.worktrees/x10-verdict-parser/docs/specs/2026-05-20-X10-verdict-parser-claude-formatting-design.md:64) and [line 145](/home/simon/Dev/sigreer/skills/superstar/.worktrees/x10-verdict-parser/docs/specs/2026-05-20-X10-verdict-parser-claude-formatting-design.md:145). That resolves the prior ambiguity.
+
+F3 Severity: minor — RESOLVED  
+The spec now states bullet-prefixed verdict lines are out of scope at [line 70](/home/simon/Dev/sigreer/skills/superstar/.worktrees/x10-verdict-parser/docs/specs/2026-05-20-X10-verdict-parser-claude-formatting-design.md:70), and the risk text no longer claims list-bullet support at [line 150](/home/simon/Dev/sigreer/skills/superstar/.worktrees/x10-verdict-parser/docs/specs/2026-05-20-X10-verdict-parser-claude-formatting-design.md:150).
+
+F4 Severity: minor — RESOLVED  
+The fixture regression section now gives full external source paths and explicit copied fixture names under `skills/external-review/tests/fixtures/` at [lines 130-135](/home/simon/Dev/sigreer/skills/superstar/.worktrees/x10-verdict-parser/docs/specs/2026-05-20-X10-verdict-parser-claude-formatting-design.md:130). Acceptance criterion 2 references the copied fixtures at [line 144](/home/simon/Dev/sigreer/skills/superstar/.worktrees/x10-verdict-parser/docs/specs/2026-05-20-X10-verdict-parser-claude-formatting-design.md:144).
+
+**Open Questions / Assumptions**
+
+I assume strict value-boundary parsing is still preferred over accepting arbitrary prose after the verdict. If same-line `Full review written to ...` trailers must be supported, the spec needs a narrow rule for that exact class of trailer.
+
+**Suggested Document Edits**
+
+Resolve F5 by making the prose, regex, and tests agree. The simplest strict option is to replace `test_bare_verdict_with_trailing_prose` with a newline-separated fixture case matching the copied p11-s5 response, where the verdict line is line 14 and the following prose starts on line 16. If preserving the p13 same-line Claude variant is required, add that real fixture explicitly and define the allowed trailer grammar.
+
+**Verification Gaps / Commands**
+
+Run:
+
+```sh
+python3 -m pytest skills/external-review/tests/
+```
+
+Also add a direct helper replay for both committed fixtures using `parse_reformatted_verdict(open(p).read())`, plus one direct test for whichever trailing-prose behavior the spec chooses.
+
+Overall verdict: revise
+
