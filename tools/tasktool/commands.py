@@ -5,7 +5,13 @@ import sys
 import subprocess as _subprocess
 from contextlib import contextmanager
 from pathlib import Path
-from tasktool.config import TasklistConfig, TasktoolConfig, load_config, save_config
+from tasktool.config import (
+    TasklistConfig,
+    TasktoolConfig,
+    is_authoritative_required,
+    load_config,
+    save_config,
+)
 from tasktool.model import (
     Project, Phase, Slice, Task, CrossCutting, BlockedOn, Status, PlanningStatus,
 )
@@ -30,6 +36,13 @@ class CommandError(RuntimeError):
     pass
 
 DEFAULT_JSON_REL = "docs/tasklist.json"
+UNCONFIGURED_HINT = (
+    "tasktool: this repository has no authoritative-checkout routing configured. "
+    "Run `tasktool config init-authority --branch <branch>` from the authoritative "
+    "checkout to enable safe routing. Existing local-mode tasklists can be reconciled "
+    "with `tasktool config migrate-from-local`. To opt out explicitly, run "
+    "`tasktool config init-local`."
+)
 
 # Process-global toggle for `--no-stage`. Set by cli.main() before dispatch.
 STAGE_AFTER_WRITE: bool = True
@@ -79,6 +92,8 @@ def _notify_status(*, qid: str, kind: str, status: Status, title: str) -> None:
 
 def _resolve_write_root(repo_root: Path) -> tuple[Path, bool, str, str]:
     cfg = load_config(repo_root)
+    if is_authoritative_required(cfg):
+        raise CommandError(UNCONFIGURED_HINT)
     if cfg.tasklist.mutation_mode == "local":
         return repo_root, False, cfg.tasklist.mutation_mode, cfg.tasklist.authoritative_branch
     try:
