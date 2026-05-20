@@ -164,7 +164,8 @@
       "refs": [
         "docs/specs/2026-05-20-X11-global-external-reviewer-bridge-design.md",
         "docs/reviewer/x11-global-external-reviewer-bridge-design-spec",
-        "docs/plans/2026-05-20-X11-global-external-reviewer-bridge.md"
+        "docs/plans/2026-05-20-X11-global-external-reviewer-bridge.md",
+        "docs/reviewer/x11-global-external-reviewer-bridge-plan"
       ],
       "started": null,
       "status": "ready",

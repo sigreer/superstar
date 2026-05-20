@@ -15,12 +15,43 @@
 - Spec: `docs/specs/2026-05-20-X11-global-external-reviewer-bridge-design.md`
 - Spec review chain: `docs/reviewer/x11-global-external-reviewer-bridge-design-spec`
 - Task ID: `X11`
-- First execution step:
+- First execution step after creating or entering the implementation worktree:
   ```bash
   tools/tasktool/tasktool set X11 --status in_progress
   ```
   Expected: `X11` moves to `in_progress`.
 - Worktree isolation: before editing, use `superstar:using-git-worktrees` and work from an implementation worktree unless Simon explicitly opts out in that session.
+
+## Task 0: Enter an Isolated Implementation Worktree
+
+**Files:**
+- No file edits.
+
+- [ ] **Step 1: Invoke the worktree skill**
+
+Use `superstar:using-git-worktrees` before editing. Create or enter an X11 implementation worktree rooted outside the normal checkout, then run the rest of this plan from that worktree.
+
+Expected: implementation edits and reviewer artifacts do not dirty the normal `main` checkout.
+
+- [ ] **Step 2: Mark X11 in progress from the worktree**
+
+Run:
+
+```bash
+tools/tasktool/tasktool set X11 --status in_progress
+```
+
+Expected: X11 status becomes `in_progress`.
+
+- [ ] **Step 3: Verify bridge help before installer tests depend on it**
+
+Run:
+
+```bash
+python3 skills/external-review/scripts/external-reviewer.py --help | head -20
+```
+
+Expected: exit 0 and the output includes the `review` subcommand.
 
 ## File Map
 
@@ -191,6 +222,7 @@ mkdir -p "$TARGET_DIR"
 if [[ -f "$TARGET" && "$FORCE" != "--force" ]]; then
   if grep -q "external-reviewer shim" "$TARGET" 2>/dev/null; then
     echo "external-reviewer shim already installed. Updating source path..."
+    # Intentionally fall through and rewrite the shim with the current source path.
   else
     echo "ERROR: $TARGET exists and is not an external-reviewer shim. Re-run with --force to overwrite." >&2
     exit 1
@@ -256,7 +288,7 @@ SHIM = ROOT / "skills" / "project-setup" / "scripts" / "external-reviewer-shim.p
 
 def run_shim(path: str, *args: str) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
-    env["PATH"] = path
+    env["PATH"] = f"{path}:{env.get('PATH', '')}"
     return subprocess.run(
         [sys.executable, str(SHIM), *args],
         cwd=ROOT,
@@ -467,6 +499,8 @@ An independent reviewer (not the coordinating agent) reviews a target document o
 **Bridge command.** `external-reviewer` is the global canonical review-chain bridge command. It is installed by `skills/external-review/install.sh` and delegates to `skills/external-review/scripts/external-reviewer.py` in the active Superstar checkout. Do not run or copy a full repo-local `scripts/external-reviewer.py` bridge. Existing repos may keep a tiny compatibility shim at that path only so old handoffs continue to delegate to the global command.
 ```
 
+Replace the existing `**Script location.**` paragraph entirely. The resulting file must not say that `[[project-setup]]` copies the bridge to `scripts/external-reviewer.py`, and it must not present `$CLAUDE_PLUGIN_DIR/.../external-reviewer.py` as the normal consuming-project fallback.
+
 Replace the main command block with:
 
 ```bash
@@ -504,6 +538,8 @@ Update the setup boundary classification list so it says:
 global `external-reviewer` shim installation, repo-local `scripts/external-reviewer.py` compatibility shim replacement
 ```
 
+This edit applies to the existing setup/migration artifact classification list near the "Setup Boundary Before Implementation" section; preserve the surrounding sentence structure while qualifying `scripts/external-reviewer.py` as compatibility-shim replacement only.
+
 Update the integration sentence so it says:
 
 ```markdown
@@ -523,6 +559,8 @@ with:
 ```markdown
 installs the global `external-reviewer` shim or replaces a legacy repo-local reviewer bridge with the compatibility shim
 ```
+
+Preserve the surrounding sentence structure in `skills/tasklist-discipline/SKILL.md`; only replace the stale "vendors `scripts/external-reviewer.py`" clause.
 
 - [ ] **Step 5: Wire static guard into existing test runner if needed**
 
@@ -550,11 +588,11 @@ Expected: both PASS.
 Run:
 
 ```bash
-git add skills/external-review/SKILL.md skills/project-setup/SKILL.md skills/tasklist-discipline/SKILL.md tests/claude-code/test-external-reviewer-global-command.sh tests/claude-code/test-autonomous-review-gates.sh
+git add skills/external-review/SKILL.md skills/project-setup/SKILL.md skills/tasklist-discipline/SKILL.md tests/claude-code/test-external-reviewer-global-command.sh
 git commit -m "skills: prefer global external-reviewer bridge"
 ```
 
-Expected: commit succeeds. If `tests/claude-code/test-autonomous-review-gates.sh` was unchanged, omit it from `git add`.
+Expected: commit succeeds. `tests/claude-code/test-autonomous-review-gates.sh` is expected to be unchanged. If Step 5 proves the runner needs an explicit new entry, stage that runner change by exact path before committing. If `test-autonomous-review-gates.sh` fails, capture the failing assertion and investigate the skill wording; do not relax that test just to pass.
 
 ## Task 5: Full Verification and X11 Closeout Prep
 
@@ -615,7 +653,13 @@ Run:
 rg -n 'python3 scripts/external-reviewer\.py|scripts/external-reviewer\.py|external-reviewer\.py review' skills tests tools/tasktool/tests docs/handoffs
 ```
 
-Expected: no live skill/test/handoff guidance recommends `python3 scripts/external-reviewer.py`. Fixture or historical-review occurrences are acceptable only when they are clearly committed as past reviewer content.
+Expected: no live skill/test/handoff guidance recommends repo-local bridge invocation. If this broad sweep reports legitimate implementation-detail references such as `skills/external-review/scripts/external-reviewer.py`, rerun the narrower guidance check:
+
+```bash
+rg -n 'python3 scripts/external-reviewer\.py|python3 [^ ]*external-reviewer\.py review' skills tests tools/tasktool/tests docs/handoffs
+```
+
+Expected for the narrower check: no live guidance hits. Fixture or historical-review occurrences are acceptable only when they are clearly committed as past reviewer content.
 
 - [ ] **Step 5: Commit any final docs/test cleanup**
 
@@ -638,6 +682,22 @@ Expected: commit succeeds. If Step 4 found no cleanup work, skip this step.
 After implementation is complete and all tests pass, run:
 
 ```bash
+python3 - <<'PY'
+import importlib.util
+from pathlib import Path
+
+script = Path("skills/external-review/scripts/external-reviewer.py")
+spec = importlib.util.spec_from_file_location("external_reviewer", script)
+module = importlib.util.module_from_spec(spec)
+assert spec.loader is not None
+spec.loader.exec_module(module)
+print(module.chain_folder_name(Path("docs/plans/2026-05-20-X11-global-external-reviewer-bridge.md"), "post-slice", "X11"))
+PY
+```
+
+Expected: `x11-global-external-reviewer-bridge-X11-post-slice`.
+
+```bash
 external-reviewer review \
   --kind post-slice \
   --file docs/plans/2026-05-20-X11-global-external-reviewer-bridge.md \
@@ -651,6 +711,8 @@ external-reviewer review \
 ```
 
 Expected: `merged_verdict` is `ready` or `ready with small edits`.
+
+This plan deliberately treats the post-slice review itself as the live chain-writing smoke for the new global shim. Earlier tests cover installer/help/static behavior without spawning a real reviewer.
 
 - [ ] **Step 7: Close X11**
 
