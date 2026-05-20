@@ -171,6 +171,18 @@
       "started": null,
       "status": "ready",
       "title": "Make external-review bridge global"
+    },
+    {
+      "closed": null,
+      "created": "2026-05-20",
+      "id": "X12",
+      "notes": "",
+      "refs": [
+        "docs/specs/2026-05-20-X12-tasktool-require-authoritative-routing-design.md"
+      ],
+      "started": null,
+      "status": "ready",
+      "title": "tasktool: require authoritative-checkout routing for mutations"
     }
   ],
   "last_reviewed": "2026-05-18",
