@@ -1400,9 +1400,7 @@ def run_one_reviewer(
         if result.returncode != 0:
             verdict, valid = None, False
         else:
-            verdict, valid = parse_verdict(_VERDICT_HEADING_STYLE.sub(
-                lambda m: f"{m.group(1)}: {m.group(2)}", body
-            ))
+            verdict, valid = parse_reformatted_verdict(body)
         return ReviewerResult(
             role=role, sweep_index=sweep_index,
             request_path=request_path, response_path=response_path,
@@ -1811,7 +1809,7 @@ def run_ingest_response(args) -> int:
     response_path = chain_dir / f"r{next_round}-{timestamp}-response.md"
     response_path.write_text(reformatted, encoding="utf-8")
 
-    verdict, valid = parse_verdict(reformatted)
+    verdict, valid = parse_reformatted_verdict(raw)
     bridger = _git_identity()
     now_iso = _now_local().isoformat(timespec="seconds")
     new_round = {
