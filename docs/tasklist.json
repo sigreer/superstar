@@ -184,6 +184,20 @@
       "started": "2026-05-20",
       "status": "done",
       "title": "tasktool: require authoritative-checkout routing for mutations"
+    },
+    {
+      "closed": "2026-05-20",
+      "created": "2026-05-20",
+      "id": "X13",
+      "notes": "Fixed tasktool close --refs parsing so repeated flags and comma-separated refs both record every path. Verified with focused red/green regressions and full tasktool test suite.",
+      "refs": [
+        "tools/tasktool/cli.py",
+        "tools/tasktool/tests/test_cli_integration.py",
+        "tools/tasktool/tests/test_worktree_authority.py"
+      ],
+      "started": "2026-05-20",
+      "status": "done",
+      "title": "Fix tasktool close repeated refs parsing"
     }
   ],
   "last_reviewed": "2026-05-18",

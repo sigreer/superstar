@@ -190,6 +190,26 @@ class ReviewGateE2ETests(unittest.TestCase):
         finally:
             t.cleanup()
 
+    def test_close_repeated_refs_records_all_values(self):
+        t = _CliTmp()
+        try:
+            run_cli("init", "--project", "demo", cwd=t.root)
+            run_cli("create", "phase", "--title", "P", cwd=t.root)
+            run_cli("create", "slice", "P1", "--title", "S", cwd=t.root)
+            run_cli("start", "P1.S1", cwd=t.root)
+            r = run_cli(
+                "close", "P1.S1", "--skip-review-gate",
+                "--refs", "docs/a.md", "--refs", "docs/b.md",
+                cwd=t.root,
+            )
+            self.assertEqual(r.returncode, 0, r.stderr)
+            r = run_cli("show", "P1.S1", cwd=t.root)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertIn("  - docs/a.md", r.stdout)
+            self.assertIn("  - docs/b.md", r.stdout)
+        finally:
+            t.cleanup()
+
     def test_archive_phase_cli(self):
         t = _CliTmp()
         try:

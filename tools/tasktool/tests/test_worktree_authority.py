@@ -231,6 +231,23 @@ def test_worker_close_records_reviewer_chain_in_authority(tmp_path):
     assert authority["phases"][0]["slices"][0]["reviewer_chain"] == "docs/reviewer/p1-s1-post-slice"
 
 
+def test_worker_close_repeated_refs_records_all_values_in_authority(tmp_path):
+    root, worker = _authority_with_worker(tmp_path)
+    assert_worker_tasklist_unchanged(root, worker, "start", "P1.S1")
+    data = assert_worker_tasklist_unchanged(
+        root,
+        worker,
+        "close",
+        "P1.S1",
+        "--skip-review-gate",
+        "--refs",
+        "docs/a.md",
+        "--refs",
+        "docs/b.md",
+    )
+    assert data["phases"][0]["slices"][0]["refs"] == ["docs/a.md", "docs/b.md"]
+
+
 def test_worker_set_done_records_reviewer_chain_in_authority(tmp_path):
     root, worker = _authority_with_worker(tmp_path)
     chain = worker / "docs" / "reviewer" / "p1-s1-post-slice"

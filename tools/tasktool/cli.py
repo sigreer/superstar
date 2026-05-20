@@ -27,6 +27,9 @@ def _resolve_project_root(args: argparse.Namespace) -> Path:
         return cwd.resolve()
     return _find_repo_root(cwd)
 
+def _comma_split(values: list[str]) -> list[str]:
+    return [item for value in values for item in value.split(",") if item]
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="tasktool")
     parser.add_argument("--project-root", type=Path, default=None,
@@ -96,7 +99,10 @@ def _build_parser() -> argparse.ArgumentParser:
 
     p_close = sub.add_parser("close")
     p_close.add_argument("id")
-    p_close.add_argument("--refs", default="")
+    p_close.add_argument(
+        "--refs", action="append", default=[],
+        help="Comma-separated refs. May be passed more than once.",
+    )
     p_close.add_argument("--closed-date")
     p_close.add_argument("--note")
     p_close.add_argument("--reviewer-chain", type=Path)
@@ -261,7 +267,7 @@ def main(argv: list[str]) -> int:
         elif args.cmd == "start":
             commands.cmd_start(repo_root=root, id=args.id, resume=args.resume)
         elif args.cmd == "close":
-            refs = [r for r in args.refs.split(",") if r] if args.refs else None
+            refs = _comma_split(args.refs) or None
             commands.cmd_close(
                 repo_root=root, id=args.id, refs=refs,
                 closed_date=args.closed_date, note=args.note,
