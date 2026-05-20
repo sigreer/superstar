@@ -48,6 +48,49 @@
       "base_ref": null,
       "base_ref_source": null,
       "diff_included": false
+    },
+    {
+      "round": 2,
+      "reviewers": [
+        {
+          "role": "primary",
+          "sweep_group": null,
+          "parent_round": 2,
+          "request": "r2-2026-05-20T1028-request.md",
+          "response": "r2-2026-05-20T1028-response.md",
+          "verdict": "ready",
+          "verdict_valid": true,
+          "returncode": 0,
+          "status": "ok",
+          "provider": "codex",
+          "caller_provider": "claude",
+          "sandbox": {
+            "repo_root": "/home/simon/Dev/sigreer/skills/superstar/.worktrees/x10-verdict-parser",
+            "scratch_dir": "/tmp/superstar-reviewer-x10-verdict-parser-claude-formatting-plan-r2-primary-ls0tnfgr",
+            "response_dir": "docs/reviewer/x10-verdict-parser-claude-formatting-plan/.reviewer-output/r2-primary",
+            "mode": "workspace-write-with-read-access"
+          }
+        }
+      ],
+      "status": "ok",
+      "returncode": 0,
+      "merged_verdict": "ready",
+      "merged_findings": null,
+      "request": "r2-2026-05-20T1028-request.md",
+      "response": "r2-2026-05-20T1028-response.md",
+      "resolution": "r1-resolution.md",
+      "resolution_parse_status": "ok",
+      "resolution_waiver": false,
+      "head_sha_at_request": "5963e51c4aea9879feb21acb29a369b2b7264fd8",
+      "head_sha_after_round": "5963e51c4aea9879feb21acb29a369b2b7264fd8",
+      "worktree_dirty_at_request": false,
+      "verdict": "ready",
+      "verdict_valid": true,
+      "findings_count": null,
+      "blocking_findings_count": null,
+      "base_ref": "4fed1795067a8c2e65666bceff8b03c17c5ca6a8",
+      "base_ref_source": "auto",
+      "diff_included": true
     }
   ],
   "sweep_checkpoints": {
