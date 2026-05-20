@@ -1,0 +1,76 @@
+{
+  "schema_version": 1,
+  "chain": "x12-tasktool-require-authoritative-routing-X12-post-slice",
+  "kind": "post-slice",
+  "target": "docs/plans/2026-05-20-X12-tasktool-require-authoritative-routing.md",
+  "work_id": "X12",
+  "legacy_migrated": false,
+  "rounds": [
+    {
+      "round": 1,
+      "reviewers": [
+        {
+          "role": "primary",
+          "sweep_group": null,
+          "parent_round": 1,
+          "request": "r1-2026-05-20T1509-primary-request.md",
+          "response": "r1-2026-05-20T1509-primary-response.md",
+          "verdict": "revise",
+          "verdict_valid": true,
+          "returncode": 0,
+          "status": "ok",
+          "provider": "codex",
+          "caller_provider": "codex",
+          "sandbox": {
+            "repo_root": "/home/simon/Dev/sigreer/skills/superstar/.worktrees/x12-tasktool-authority",
+            "scratch_dir": "/tmp/superstar-reviewer-x12-tasktool-require-authoritative-routing-X12-post-slice-r1-primary-lekbney3",
+            "response_dir": "docs/reviewer/x12-tasktool-require-authoritative-routing-X12-post-slice/.reviewer-output/r1-primary",
+            "mode": "workspace-write-with-read-access"
+          }
+        },
+        {
+          "role": "sweep",
+          "sweep_group": 1,
+          "parent_round": 1,
+          "request": "r1-2026-05-20T1509-sweep1-request.md",
+          "response": "r1-2026-05-20T1509-sweep1-response.md",
+          "verdict": "revise",
+          "verdict_valid": true,
+          "returncode": 0,
+          "status": "ok",
+          "provider": "codex",
+          "caller_provider": "codex",
+          "sandbox": {
+            "repo_root": "/home/simon/Dev/sigreer/skills/superstar/.worktrees/x12-tasktool-authority",
+            "scratch_dir": "/tmp/superstar-reviewer-x12-tasktool-require-authoritative-routing-X12-post-slice-r1-sweep1-840qft3g",
+            "response_dir": "docs/reviewer/x12-tasktool-require-authoritative-routing-X12-post-slice/.reviewer-output/r1-sweep1",
+            "mode": "workspace-write-with-read-access"
+          }
+        }
+      ],
+      "status": "ok",
+      "returncode": 0,
+      "merged_verdict": "revise",
+      "merged_findings": "r1-merged-findings.md",
+      "request": "r1-2026-05-20T1509-primary-request.md",
+      "response": "r1-2026-05-20T1509-primary-response.md",
+      "resolution": null,
+      "resolution_parse_status": null,
+      "resolution_waiver": false,
+      "head_sha_at_request": "f966d23316b7254dca58b8c9610960449f143c03",
+      "head_sha_after_round": "f966d23316b7254dca58b8c9610960449f143c03",
+      "worktree_dirty_at_request": true,
+      "verdict": "revise",
+      "verdict_valid": true,
+      "findings_count": 3,
+      "blocking_findings_count": 2,
+      "base_ref": null,
+      "base_ref_source": null,
+      "diff_included": false
+    }
+  ],
+  "sweep_checkpoints": {
+    "first-round": "completed",
+    "final-ready": "pending"
+  }
+}
