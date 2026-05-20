@@ -80,6 +80,81 @@
       "base_ref": null,
       "base_ref_source": null,
       "diff_included": false
+    },
+    {
+      "round": 2,
+      "reviewers": [
+        {
+          "role": "primary",
+          "sweep_group": null,
+          "parent_round": 2,
+          "request": "r2-2026-05-20T1559-request.md",
+          "response": "r2-2026-05-20T1559-response.md",
+          "verdict": "ready",
+          "verdict_valid": true,
+          "returncode": 0,
+          "status": "ok",
+          "provider": "codex",
+          "caller_provider": "codex",
+          "model": null,
+          "sandbox": {
+            "repo_root": "/home/simon/Dev/sigreer/skills/superstar/.worktrees/bridge-first-usage-metrics",
+            "scratch_dir": "/tmp/superstar-reviewer-external-reviewer-implementation-r2-primary-idu8kefi",
+            "response_dir": "docs/reviewer/external-reviewer-implementation/.reviewer-output/r2-primary",
+            "mode": "workspace-write-with-read-access"
+          },
+          "started_at": "2026-05-20T14:59:53.729Z",
+          "finished_at": "2026-05-20T15:00:49.335Z",
+          "duration_ms": 55606,
+          "estimated_usage": {
+            "formula": "ceil(chars / 4)",
+            "prompt_chars": 28421,
+            "response_chars": 5399,
+            "estimated_input_tokens": 7106,
+            "estimated_output_tokens": 1350,
+            "estimated_total_tokens": 8456
+          },
+          "exact_usage": null,
+          "usage_capture_status": "estimated_only",
+          "usage_capture_error": null
+        }
+      ],
+      "status": "ok",
+      "returncode": 0,
+      "started_at": "2026-05-20T14:59:53.729Z",
+      "finished_at": "2026-05-20T15:00:49.335Z",
+      "duration_ms": 55606,
+      "provider": "codex",
+      "caller_provider": "codex",
+      "model": null,
+      "estimated_usage": {
+        "formula": "ceil(chars / 4)",
+        "prompt_chars": 28421,
+        "response_chars": 5399,
+        "estimated_input_tokens": 7106,
+        "estimated_output_tokens": 1350,
+        "estimated_total_tokens": 8456
+      },
+      "exact_usage": null,
+      "usage_capture_status": "estimated_only",
+      "usage_capture_error": null,
+      "merged_verdict": "ready",
+      "merged_findings": null,
+      "request": "r2-2026-05-20T1559-request.md",
+      "response": "r2-2026-05-20T1559-response.md",
+      "resolution": "r1-resolution.md",
+      "resolution_parse_status": "ok",
+      "resolution_waiver": false,
+      "head_sha_at_request": "e4e28a49b9412543e93b386be20d1faf865ba071",
+      "head_sha_after_round": "e4e28a49b9412543e93b386be20d1faf865ba071",
+      "worktree_dirty_at_request": false,
+      "verdict": "ready",
+      "verdict_valid": true,
+      "findings_count": null,
+      "blocking_findings_count": null,
+      "base_ref": "003cdfb915aa53e440e41de2e14f48dc4d3b5a9c",
+      "base_ref_source": "auto",
+      "diff_included": true
     }
   ],
   "sweep_checkpoints": {
