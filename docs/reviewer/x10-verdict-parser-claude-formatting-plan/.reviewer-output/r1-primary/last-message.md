@@ -1,0 +1,36 @@
+1. Findings
+
+F1 Severity: blocking — The prompt-hardening change has no real executable gate. The plan says to run `test_prompt_contract.py` and expects it to validate the new prompt wording ([docs/plans/2026-05-20-X10-verdict-parser-claude-formatting.md](/home/simon/Dev/sigreer/skills/superstar/.worktrees/x10-verdict-parser/docs/plans/2026-05-20-X10-verdict-parser-claude-formatting.md:445)), but the live test only checks finding IDs, severity labels, and renderability ([test_prompt_contract.py](/home/simon/Dev/sigreer/skills/superstar/.worktrees/x10-verdict-parser/skills/external-review/tests/test_prompt_contract.py:31)). It does not assert the exact trailer line, removal of `5. Overall verdict`, or the “do not bold / heading / split” instructions from the spec. An implementation could leave the old prompt intact and still pass this gate.
+
+F2 Severity: blocking — The closeout gate described for X10 is not enforced by `tasktool close`. The plan says `tasktool close X10 --reviewer-chain ...` enforces the post-slice external-review gate ([plan](/home/simon/Dev/sigreer/skills/superstar/.worktrees/x10-verdict-parser/docs/plans/2026-05-20-X10-verdict-parser-claude-formatting.md:514)), but X10 is a `cross_cutting` item ([docs/tasklist.json](/home/simon/Dev/sigreer/skills/superstar/.worktrees/x10-verdict-parser/docs/tasklist.json:145)), and the live close command explicitly skips review-gate handling for `cross` IDs ([commands.py](/home/simon/Dev/sigreer/skills/superstar/.worktrees/x10-verdict-parser/tools/tasktool/commands.py:397)). It also does not store `reviewer_chain` for cross items before saving ([commands.py](/home/simon/Dev/sigreer/skills/superstar/.worktrees/x10-verdict-parser/tools/tasktool/commands.py:408)). The post-slice review can still be run manually, but the plan currently overstates the automated acceptance gate.
+
+F3 Severity: important — The expected failing-test count is wrong. After Task 2, the current `test_verdict.py` baseline will not have “12 new tests fail” ([plan](/home/simon/Dev/sigreer/skills/superstar/.worktrees/x10-verdict-parser/docs/plans/2026-05-20-X10-verdict-parser-claude-formatting.md:174)); the negative bare-verdict tests and `test_overall_preferred_over_bare` should already pass because today `parse_verdict` returns `(None, False)` for non-Overall forms and still parses the later Overall line. The likely failures are the two positive bare-verdict cases plus the three `parse_reformatted_verdict` helper cases. The heading-style end-to-end test should fail separately. This matters because the TDD checkpoint gives the implementer a false red/green expectation.
+
+F4 Severity: minor — The plan’s file map says `test_verdict.py` gets “10 new tests” ([plan](/home/simon/Dev/sigreer/skills/superstar/.worktrees/x10-verdict-parser/docs/plans/2026-05-20-X10-verdict-parser-claude-formatting.md:33)), but the provided block adds 12 test functions and later expects 18 total tests ([plan](/home/simon/Dev/sigreer/skills/superstar/.worktrees/x10-verdict-parser/docs/plans/2026-05-20-X10-verdict-parser-claude-formatting.md:299)). This is easy to fix but should be made consistent.
+
+2. Open questions / assumptions
+
+- Is the desired X10 closeout policy “manual review required by convention” or “tasktool must enforce cross-cutting review gates”? The current repo behavior is the former for cross items.
+- Should prompt hardening be covered by explicit tests, or is line-by-line plan instruction considered enough? Given this ticket exists because parser-valid output is a gate, I would test it.
+
+3. Suggested document edits
+
+- Add prompt-contract tests in Task 5 before/with the prompt edit:
+  - assert `"5. Overall verdict"` is absent from `REVIEW_PROMPT`
+  - assert the exact line `Overall verdict: <ready|ready with small edits|revise>` is present
+  - assert the “Do not bold…” sentence or key forbidden forms are present.
+- Rewrite Task 6 to say cross-cutting closeout is not automatically gated by `tasktool close`; add the post-slice chain to X10 refs with `tasktool ref X10 --add docs/reviewer/<chain>`, then close X10 only after explicitly verifying `chain.json` has `merged_verdict` of `ready` or `ready with small edits`.
+- Correct the Task 2 expected failures to a mixed expectation instead of “12 new tests fail.”
+- Align “10 new tests” with the actual 12 added `test_verdict.py` tests.
+
+4. Verification gaps / commands that should be run
+
+- Add and run `python3 -m pytest skills/external-review/tests/test_prompt_contract.py -v` with assertions for the new literal verdict contract.
+- Keep the planned parser gates:
+  - `python3 -m pytest skills/external-review/tests/test_verdict.py -v`
+  - `python3 -m pytest skills/external-review/tests/test_heading_style_verdict.py -v`
+  - `python3 -m pytest skills/external-review/tests/ -q`
+- Add a closeout verification command that inspects the post-slice chain JSON directly before `tasktool close X10`.
+
+5. Overall verdict: revise
+

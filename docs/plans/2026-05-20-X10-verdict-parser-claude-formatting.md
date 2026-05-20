@@ -30,8 +30,9 @@ X10 is a cross-cutting item, not a phase/slice. No `tasktool schedule` / `taskto
   - Modify call site at line 1814 (manual ingest) to call `parse_reformatted_verdict(raw)`.
 - Add: `skills/external-review/tests/fixtures/claude-bare-verdict-ready-with-small-edits.md` (copied verbatim).
 - Add: `skills/external-review/tests/fixtures/claude-heading-revise.md` (copied verbatim).
-- Modify: `skills/external-review/tests/test_verdict.py` — 10 new tests.
+- Modify: `skills/external-review/tests/test_verdict.py` — 12 new test functions (5 expected to fail before Task 3, 7 expected to pass already given current strict `parse_verdict` behaviour — they become live assertions after Task 3's regex changes).
 - Modify: `skills/external-review/tests/test_heading_style_verdict.py` — 1 new test.
+- Modify: `skills/external-review/tests/test_prompt_contract.py` — 1 new test asserting the new verdict-trailer wording is present and the old numbered-list form is absent.
 
 ---
 
@@ -171,13 +172,30 @@ def test_parse_reformatted_verdict_fixture_heading():
     assert valid is True
 ```
 
-- [ ] **Step 2: Run the new tests and verify they fail**
+- [ ] **Step 2: Run the new tests and observe the expected mixed pass/fail pattern**
 
 ```bash
 python3 -m pytest skills/external-review/tests/test_verdict.py -v
 ```
 
-Expected: the six existing tests pass; the 12 new tests fail (most with `AttributeError: module 'external_reviewer' has no attribute 'parse_reformatted_verdict'` or with `assert None == "ready with small edits"` / similar).
+Expected outcome (be specific — this is the TDD checkpoint):
+
+| Test | Result before Task 3 | Why |
+|---|---|---|
+| `test_bare_verdict_ready_with_small_edits` | **FAIL** | `parse_verdict` requires `Overall verdict`; bare returns `(None, False)`. |
+| `test_bare_verdict_revise` | **FAIL** | Same. |
+| `test_bare_verdict_not_matched_in_prose` | pass | Current parser already returns `(None, False)` for prose. |
+| `test_overall_preferred_over_bare` | pass | Current parser already picks the last `Overall verdict:` match. |
+| `test_bare_verdict_rejects_extra_words_after_value` | pass | Current parser returns `(None, False)` — no `Overall` prefix. |
+| `test_bare_verdict_rejects_hyphenated_value` | pass | Same. |
+| `test_bare_verdict_rejects_qualified_value` | pass | Same. |
+| `test_bare_verdict_rejects_contradictory_same_line_prose` | pass | Same. |
+| `test_bare_verdict_rejects_benign_same_line_prose` | pass | Same. |
+| `test_parse_reformatted_verdict_helper` | **FAIL** | `AttributeError: module 'external_reviewer' has no attribute 'parse_reformatted_verdict'`. |
+| `test_parse_reformatted_verdict_fixture_bare` | **FAIL** | Same. |
+| `test_parse_reformatted_verdict_fixture_heading` | **FAIL** | Same. |
+
+So expect **5 failures, 7 passes** among the 12 new tests, plus the 6 pre-existing tests passing. The 7 "passes" are *not* false positives — they assert no-op behaviour now and become live assertions after Task 3 introduces `VERDICT_LINE_BARE_RE`.
 
 - [ ] **Step 3: Add a failing test in `test_heading_style_verdict.py`**
 
@@ -442,15 +460,36 @@ new line after a heading.
 
 (The verdict moves out of the numbered list; the explicit don'ts are new.)
 
-- [ ] **Step 2: Run the prompt-contract test**
+- [ ] **Step 2: Add a prompt-contract assertion for the new wording**
+
+Append to `skills/external-review/tests/test_prompt_contract.py` (after `test_prompt_renders_with_all_kinds`):
+
+```python
+def test_prompt_has_literal_verdict_trailer(er):
+    """X10: the prompt must instruct the reviewer to emit a trailerless,
+    plain-text `Overall verdict:` line, with explicit don'ts against the
+    Claude-style heading / bare-Verdict variants.
+    """
+    prompt = er.REVIEW_PROMPT
+    # New trailer paragraph
+    assert "End your review with this exact line" in prompt
+    assert "Overall verdict: <ready|ready with small edits|revise>" in prompt
+    # Explicit don'ts
+    assert "Do not bold" in prompt
+    assert "**Verdict: ready**" in prompt
+    # Old numbered-list form is removed
+    assert "5. Overall verdict" not in prompt
+```
+
+- [ ] **Step 3: Run the prompt-contract test**
 
 ```bash
 python3 -m pytest skills/external-review/tests/test_prompt_contract.py -v
 ```
 
-Expected: pass. If the test asserts the literal "5. Overall verdict" string is present in the prompt, it will fail — update the test to match the new wording (it should already test for `Overall verdict` presence, not the leading `5.`). Inspect the test if it fails before changing the prompt back; the new prompt is the intended behaviour.
+Expected: all five tests pass (the four existing + the new `test_prompt_has_literal_verdict_trailer`).
 
-- [ ] **Step 3: Run the full test suite as a final regression check**
+- [ ] **Step 4: Run the full test suite as a final regression check**
 
 ```bash
 python3 -m pytest skills/external-review/tests/ -q
@@ -458,7 +497,7 @@ python3 -m pytest skills/external-review/tests/ -q
 
 Expected: zero failures.
 
-- [ ] **Step 4: Manual acceptance replay (spec acceptance criterion 2)**
+- [ ] **Step 5: Manual acceptance replay (spec acceptance criterion 2)**
 
 ```bash
 python3 -c "
@@ -478,24 +517,26 @@ skills/external-review/tests/fixtures/claude-bare-verdict-ready-with-small-edits
 skills/external-review/tests/fixtures/claude-heading-revise.md -> ('revise', True)
 ```
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add skills/external-review/scripts/external-reviewer.py
-git commit -m "X10: tighten REVIEW_PROMPT to discourage heading-style verdicts"
+git add skills/external-review/scripts/external-reviewer.py skills/external-review/tests/test_prompt_contract.py
+git commit -m "X10: tighten REVIEW_PROMPT and lock new wording with a test"
 ```
 
 ---
 
 ## Task 6: Close out X10
 
-- [ ] **Step 1: Add the plan and reviewer chain to X10's refs**
+X10 is a `cross_cutting` tasktool item. **`tasktool close` does NOT enforce the post-slice external-review gate for `cross` IDs** (see `tools/tasktool/commands.py:397` — the review-gate branch is skipped for `cross`). The coordinator therefore enforces the gate manually before invoking `tasktool close`.
+
+- [ ] **Step 1: Add the plan to X10's refs**
 
 ```bash
 tasktool ref X10 --add docs/plans/2026-05-20-X10-verdict-parser-claude-formatting.md
 ```
 
-- [ ] **Step 2: Run post-slice external review against the plan**
+- [ ] **Step 2: Run post-slice external review against the plan (manual gate)**
 
 The coordinator invokes this; do **not** apply findings directly during execution — delegate to a fix subagent per `superstar:subagent-driven-development`.
 
@@ -509,21 +550,21 @@ python3 skills/external-review/scripts/external-reviewer.py review \
   --emit json
 ```
 
-Iterate to `ready` or `ready with small edits`.
+Iterate until `merged_verdict` ∈ {`ready`, `ready with small edits`}. The coordinator MUST NOT proceed to Step 3 until this verdict is reached — the gate is manual for `cross` items, but it is still required.
 
 - [ ] **Step 3: Close X10 in tasktool**
 
 ```bash
-tasktool close X10 --reviewer-chain docs/reviewer/<post-slice-chain-folder>
+tasktool close X10
 ```
 
-(`tasktool close` enforces the post-slice external-review gate; if the chain is missing or unresolved it will refuse.)
+(`tasktool close` for a `cross` item simply marks it `done` without inspecting reviewer chains; the gate enforcement in Step 2 above is what makes the close legitimate. Do not pass `--reviewer-chain` — that flag is for phase/slice closeouts.)
 
 - [ ] **Step 4: Final commit (if anything was staged by tasktool)**
 
 ```bash
 git status
-git commit -m "X10: close" 2>/dev/null || echo "nothing to commit"
+git diff --staged --quiet || git commit -m "X10: close"
 ```
 
 ---
