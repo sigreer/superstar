@@ -155,6 +155,18 @@
       "started": null,
       "status": "done",
       "title": "Harden external-review verdict parser and prompt against Claude formatting variants"
+    },
+    {
+      "closed": null,
+      "created": "2026-05-20",
+      "id": "X11",
+      "notes": "",
+      "refs": [
+        "docs/specs/2026-05-20-X11-global-external-reviewer-bridge-design.md"
+      ],
+      "started": null,
+      "status": "ready",
+      "title": "Make external-review bridge global"
     }
   ],
   "last_reviewed": "2026-05-18",
