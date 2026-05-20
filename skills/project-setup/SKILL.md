@@ -33,7 +33,8 @@ For each check the skill must report **status** (`present` / `missing` / `partia
 | 4 | `docs/handoffs/` directory                               | Directory exists.                                                      | `mkdir -p docs/handoffs` and add a `.gitkeep`.                               |
 | 5 | `docs/reviewer/` directory                               | Directory exists (chain folders land here).                            | `mkdir -p docs/reviewer` and add a `.gitkeep`.                               |
 | 6 | `docs/archived-tasks/` directory                         | Directory exists (phase-close target).                                 | `mkdir -p docs/archived-tasks` and add a `.gitkeep`.                         |
-| 7 | `scripts/external-reviewer.py`                           | Either present at the repo root, or `AGENT_REVIEWER_CMD` is set.       | Copy from `skills/external-review/scripts/external-reviewer.py`, `chmod +x`. |
+| 7 | Global `external-reviewer` bridge available | `command -v external-reviewer` succeeds and `external-reviewer --help` exits 0. | Run or print `bash <active-superstar-checkout>/skills/external-review/install.sh` after confirmation. |
+| 7b | Repo-local `scripts/external-reviewer.py` legacy drift | Pass if absent. Compatibility-pass if present and it contains `Compatibility shim for old Superstar handoffs` plus an `external-reviewer` delegation. Partial for any other local file. | Offer to replace it with `skills/project-setup/scripts/external-reviewer-shim.py`; do not copy the full bridge. |
 | 8 | Reviewer command available                               | `AGENT_REVIEWER_CMD` (env) is set, or the default `reviewer-agent` is on `PATH`. | Print the exact command to install `skills/project-setup/scripts/reviewer-agent` to a user-chosen bin dir, or the exact `AGENT_REVIEWER_CMD` override. Do **not** install third-party tools or edit shell config without confirmation. The wrapper must not use provider bypass/no-sandbox flags. |
 | 9 | CLAUDE.md mentions superstar planning discipline | The repo's CLAUDE.md (or AGENTS.md / GEMINI.md) references the skill set. | Append a small "Planning & implementation discipline" block referencing `brainstorming`, `writing-plans`, `subagent-driven-development`, `external-review`, `tasklist-discipline`. |
 
@@ -57,7 +58,7 @@ Setup is its own change. Do not continue into `[[brainstorming]]`, `[[writing-pl
 After any accepted scaffold or legacy migration:
 
 1. Run `git status --short` and classify every dirty path as one of:
-   - setup/migration (`docs/tasklist.json`, `.gitignore` worktree-ignore entries, `docs/specs/`, `docs/plans/`, `docs/handoffs/`, `docs/reviewer/`, `docs/archived-tasks/`, `scripts/external-reviewer.py`, `.git/hooks/pre-commit`, `CLAUDE.md` / `AGENTS.md` / `GEMINI.md`, legacy `docs/superpowers/` moves);
+   - setup/migration (`docs/tasklist.json`, `.gitignore` worktree-ignore entries, `docs/specs/`, `docs/plans/`, `docs/handoffs/`, `docs/reviewer/`, `docs/archived-tasks/`, global `external-reviewer` shim installation, repo-local `scripts/external-reviewer.py` compatibility shim replacement, `.git/hooks/pre-commit`, `CLAUDE.md` / `AGENTS.md` / `GEMINI.md`, legacy `docs/superpowers/` moves);
    - feature implementation;
    - local noise or user-owned changes.
 2. Run `tools/tasktool/tasktool validate` when the repo-local launcher exists, otherwise `tasktool validate`.
@@ -193,6 +194,6 @@ Order rows by dependency: a row that scaffolds a directory must precede a row th
 ## Integration
 
 - `[[tasklist-discipline]]` — describes tasktool conventions; the CLI itself ships the canonical scaffold via `tools/tasktool/tasktool init`.
-- `[[external-review]]` — provides the reviewer script and the `AGENT_REVIEWER_CMD` expectation.
+- `[[external-review]]` — provides the global bridge command contract and the `AGENT_REVIEWER_CMD` expectation.
 - `[[writing-plans]]` — relies on the `docs/specs/`, `docs/plans/`, `docs/handoffs/` tree.
 - `[[subagent-driven-development]]` — relies on `docs/reviewer/` for chain folders.
