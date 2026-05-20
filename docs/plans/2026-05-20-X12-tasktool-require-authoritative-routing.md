@@ -81,6 +81,18 @@ def test_authoritative_mode_does_not_require_init(tmp_path):
     )
     cfg = load_config(tmp_path)
     assert is_authoritative_required(cfg) is False
+
+
+def test_config_with_omitted_mutation_mode_is_unconfigured(tmp_path):
+    """A config file present but lacking mutation_mode must NOT silently
+    default to local. It is treated identically to a missing file."""
+    (tmp_path / ".tasktool").mkdir()
+    (tmp_path / ".tasktool" / "config.json").write_text(
+        '{"schema_version":1,"tasklist":{}}'
+    )
+    cfg = load_config(tmp_path)
+    assert cfg.tasklist.mutation_mode == "unconfigured"
+    assert is_authoritative_required(cfg) is True
 ```
 
 Add `is_authoritative_required` to the import line:
@@ -137,7 +149,14 @@ class TasktoolConfig:
 
 
 def _parse_tasklist(raw: dict) -> TasklistConfig:
-    mode = raw.get("mutation_mode", "local")
+    if "mutation_mode" not in raw:
+        # Config file exists but omits mutation_mode — treat as unconfigured,
+        # the same way a missing config file is treated. Operators must opt in.
+        return TasklistConfig(
+            mutation_mode=UNCONFIGURED,
+            authoritative_branch=raw.get("authoritative_branch", "main"),
+        )
+    mode = raw["mutation_mode"]
     if mode not in VALID_MUTATION_MODES:
         raise ValueError(f"unknown mutation_mode: {mode}")
     return TasklistConfig(
@@ -291,6 +310,30 @@ def test_render_works_unconfigured(tmp_path):
     assert r.returncode == 0, r.stdout + r.stderr
 
 
+@pytest.mark.parametrize("readonly_cmd", [
+    ("brief",),
+    ("schema",),
+    ("list",),
+    ("ready-slices", "P1"),
+])
+def test_other_readonly_commands_work_unconfigured(tmp_path, readonly_cmd):
+    """Spec test #5: read-only commands beyond render/validate succeed without config."""
+    _git_init(tmp_path)
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs" / "tasklist.json").write_text(
+        '{"schema_version":1,"project":"demo",'
+        '"phases":[{"id":"P1","title":"p","created":"2026-05-20","status":"ready",'
+        '"started":null,"closed":null,"spec_path":null,"plan_path":null,'
+        '"planning_path":null,"phase_reviewer_chain":null,"notes":"","slices":[]}],'
+        '"cross_cutting":[],"archived_phases":[]}'
+    )
+    r = run_cli(*readonly_cmd, cwd=tmp_path)
+    # Some of these may exit non-zero for unrelated reasons (e.g. ready-slices
+    # with no ready slices); the assertion is just that they do NOT error with
+    # the unconfigured-routing message.
+    assert "no authoritative-checkout routing configured" not in r.stderr, r.stderr
+
+
 def test_explicit_local_mode_still_mutates(tmp_path):
     _git_init(tmp_path)
     r = run_cli("config", "init-local", cwd=tmp_path)
@@ -298,6 +341,25 @@ def test_explicit_local_mode_still_mutates(tmp_path):
     r = run_cli("init", "--project", "demo", cwd=tmp_path)
     assert r.returncode == 0, r.stdout + r.stderr
     assert (tmp_path / "docs" / "tasklist.json").exists()
+
+
+def test_bootstrap_init_authority_then_init_succeeds(tmp_path):
+    """Spec test #6: greenfield positive — init-authority first, then init succeeds."""
+    _git_init(tmp_path)
+    r = run_cli("config", "init-authority", "--branch", "main", cwd=tmp_path)
+    assert r.returncode == 0, r.stdout + r.stderr
+    r = run_cli("init", "--project", "demo", cwd=tmp_path)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert (tmp_path / "docs" / "tasklist.json").exists()
+
+
+def test_bootstrap_init_before_init_authority_fails(tmp_path):
+    """Spec test #7: explicit negative — bare `init` without prior authority config errors."""
+    _git_init(tmp_path)
+    r = run_cli("init", "--project", "demo", cwd=tmp_path)
+    assert r.returncode != 0
+    assert "no authoritative-checkout routing configured" in r.stderr
+    assert not (tmp_path / "docs" / "tasklist.json").exists()
 ```
 
 (The `init-local` part of `test_explicit_local_mode_still_mutates` is forward-referenced; it will pass after Task 3.)
@@ -463,6 +525,8 @@ Expected: argparse-level failures (`invalid choice: 'init-local'`).
 
 In `tools/tasktool/commands.py`, immediately after `cmd_config_init_authority`, add:
 
+Design note (intentional): `cmd_config_init_local` refuses ONLY when the existing config is `authoritative-checkout` — switching away from authoritative routing is a non-trivial workflow change and should require deliberate operator action (delete the config file first). It is idempotent against an existing `local` config (re-runs are no-ops, exit 0) and overwrites a config file whose `mutation_mode` is missing (treating that case as bootstrap completion).
+
 ```python
 def cmd_config_init_local(*, repo_root: Path) -> None:
     existing_path = repo_root / ".tasktool" / "config.json"
@@ -475,6 +539,13 @@ def cmd_config_init_local(*, repo_root: Path) -> None:
                 "routing; refusing to overwrite. Delete `.tasktool/config.json` first if you "
                 "really intend to switch to local mode."
             )
+        if mode == "local":
+            # Idempotent: already configured for local mode.
+            print(
+                "tasktool: already configured for local mutation mode (no change).",
+                file=sys.stderr,
+            )
+            return
     cfg = TasktoolConfig(
         tasklist=TasklistConfig(mutation_mode="local")
     )
@@ -1150,6 +1221,84 @@ def test_migrate_requires_policy_in_non_tty(tmp_path):
     assert "accept-local" in r.stderr or "accept-authoritative" in r.stderr
 
 
+def test_migrate_dry_run_works_without_policy(tmp_path):
+    """Spec §3 / F1: --dry-run must be usable without --accept-* in non-TTY contexts."""
+    main, work = _setup_main_with_worktree(tmp_path)
+    r = run_cli(
+        "config", "migrate-from-local",
+        "--authority-root", str(main),
+        "--dry-run",
+        cwd=work,
+    )
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "P1.S1" in r.stdout
+
+
+def test_migrate_with_explicit_local_root(tmp_path):
+    """Spec §3: --local-root can be passed explicitly when caller is invoked
+    from somewhere other than the drifted worktree."""
+    main, work = _setup_main_with_worktree(tmp_path)
+    # Invoke from main but target the worktree as local-root.
+    r = run_cli(
+        "config", "migrate-from-local",
+        "--authority-root", str(main),
+        "--local-root", str(work),
+        "--accept-local",
+        cwd=main,
+    )
+    assert r.returncode == 0, r.stdout + r.stderr
+    auth = json.loads((main / "docs" / "tasklist.json").read_text())
+    assert auth["phases"][0]["slices"][0]["status"] == "in_progress"
+
+
+def test_migrate_different_repositories_errors(tmp_path):
+    """Spec §error-handling: authority-root and local-root must share a common git dir."""
+    main, _work = _setup_main_with_worktree(tmp_path)
+    # Build a totally separate repo.
+    other = tmp_path / "other"
+    other.mkdir()
+    _git("init", "-b", "main", cwd=other)
+    _git("config", "user.email", "t@t", cwd=other)
+    _git("config", "user.name", "t", cwd=other)
+    (other / "docs").mkdir()
+    (other / "docs" / "tasklist.json").write_text('{"schema_version":1,"project":"x","phases":[],"cross_cutting":[],"archived_phases":[]}')
+    _git("add", ".", cwd=other)
+    _git("commit", "-m", "init", cwd=other)
+
+    r = run_cli(
+        "config", "migrate-from-local",
+        "--authority-root", str(main),
+        "--local-root", str(other),
+        "--accept-local",
+        cwd=main,
+    )
+    assert r.returncode != 0
+    assert "not the same repository" in r.stderr
+
+
+def test_migrate_honours_existing_authority_config(tmp_path):
+    """F2: when authority_root has a configured authoritative_branch, migrate
+    validates against that branch — not against authority_root's current branch."""
+    main, work = _setup_main_with_worktree(tmp_path)
+    # Pre-configure the authority root.
+    assert run_cli("config", "init-authority", "--branch", "main", cwd=main).returncode == 0
+    _git("add", ".tasktool/config.json", cwd=main)
+    _git("commit", "-m", "configure authority", cwd=main)
+    r = run_cli(
+        "config", "migrate-from-local",
+        "--authority-root", str(main),
+        "--accept-local",
+        cwd=work,
+    )
+    assert r.returncode == 0, r.stdout + r.stderr
+    auth = json.loads((main / "docs" / "tasklist.json").read_text())
+    assert auth["phases"][0]["slices"][0]["status"] == "in_progress"
+    # The pre-existing config is preserved, not overwritten.
+    cfg = json.loads((main / ".tasktool" / "config.json").read_text())
+    assert cfg["tasklist"]["mutation_mode"] == "authoritative-checkout"
+    assert cfg["tasklist"]["authoritative_branch"] == "main"
+
+
 def test_migrate_preserves_authority_only_rows(tmp_path):
     main, work = _setup_main_with_worktree(tmp_path)
     # Add a cross-cutting row to the authoritative tasklist that isn't in the worktree.
@@ -1211,6 +1360,32 @@ Expected: `argparse` errors (`invalid choice: 'migrate-from-local'`).
 
 - [ ] **Step 3: Add the command body**
 
+Before writing the body, make `same_repository` available — `commands.py` currently imports selected names from `tasktool.worktree` but not this one. Update the existing import block at the top of `tools/tasktool/commands.py` to add `same_repository`:
+
+```python
+from tasktool.worktree import (
+    AuthorityError,
+    find_authoritative_root,
+    git_current_branch,
+    git_common_dir,
+    has_unmerged_paths,
+    same_repository,                      # ← add
+    tasklist_has_unsafe_dirty_state,
+    tasktool_lock,
+    validate_authoritative_checkout,
+)
+```
+
+(Confirm the exact list of imports already present and add `same_repository` to the existing alphabetised block; do not duplicate names that are already imported.)
+
+Also verify the helper for loading a `Project` from an absolute path. Inspect `tools/tasktool/serialize.py`:
+
+```bash
+grep -n "^def " tools/tasktool/serialize.py
+```
+
+If `serialize.py` does not already expose a `Project`-returning loader that takes an absolute path, look at how `_load(repo_root)` in `commands.py` deserialises today and reuse the same code path. The plan body below uses the placeholder name `load_project_from_path`; replace both call sites with the function that exists (e.g. `project_from_json` or `_load` invoked with the repo root computed from the tasklist path).
+
 In `tools/tasktool/commands.py`, immediately after `cmd_config_init_local`, add:
 
 ```python
@@ -1254,12 +1429,19 @@ def cmd_config_migrate_from_local(
             f"local tasklist not found: {local_tasklist}. Nothing to migrate."
         )
 
-    # Resolve target branch: use authority root's current branch.
-    branch = git_current_branch(authority_root)
-    if not branch:
-        raise CommandError(
-            f"authority root is in detached HEAD state; cannot determine branch: {authority_root}"
-        )
+    # Resolve target branch: honour an existing authority config if present;
+    # otherwise fall back to the authority root's current branch and persist it
+    # later (after a successful migration).
+    auth_cfg = load_config(authority_root)
+    if auth_cfg.tasklist.mutation_mode == "authoritative-checkout":
+        branch = auth_cfg.tasklist.authoritative_branch
+    else:
+        branch = git_current_branch(authority_root)
+        if not branch:
+            raise CommandError(
+                f"authority root is in detached HEAD state and has no configured "
+                f"authoritative branch; cannot determine branch: {authority_root}"
+            )
     try:
         validate_authoritative_checkout(
             authority_root,
@@ -1269,23 +1451,11 @@ def cmd_config_migrate_from_local(
     except AuthorityError as exc:
         raise CommandError(str(exc)) from exc
 
-    # Resolve policy.
-    if policy is None:
-        if sys.stdin.isatty():
-            policy = _prompt_policy_interactive()
-        else:
-            raise CommandError(
-                "migrate-from-local requires one of --accept-local or --accept-authoritative "
-                "in non-interactive contexts"
-            )
-
-    # Load both tasklists.
-    from tasktool.serialize import load_project_from_path
-    local_project = load_project_from_path(local_tasklist)
-    auth_project = load_project_from_path(auth_tasklist)
-
+    # Load both tasklists and compute the diff up-front so --dry-run can stop
+    # without needing a policy.
+    local_project = _load_project_at(local_tasklist)
+    auth_project = _load_project_at(auth_tasklist)
     deltas, conflicts = compute_deltas(local=local_project, authoritative=auth_project)
-
     diff_text = render_diff(deltas, conflicts)
     print(diff_text, end="")
 
@@ -1295,19 +1465,29 @@ def cmd_config_migrate_from_local(
     if dry_run:
         return
 
+    # Now resolve policy — only required when we will actually write.
+    if policy is None:
+        if sys.stdin.isatty():
+            policy = _prompt_policy_interactive()
+        else:
+            raise CommandError(
+                "migrate-from-local requires one of --accept-local or --accept-authoritative "
+                "in non-interactive contexts"
+            )
+
     # Acquire lock and apply.
     with tasktool_lock(authority_root):
         # Re-read inside the lock for defence against concurrent writes.
-        auth_project = load_project_from_path(auth_tasklist)
+        auth_project_inside_lock = _load_project_at(auth_tasklist)
         merged = apply_deltas(
-            authoritative=auth_project, local=local_project,
+            authoritative=auth_project_inside_lock, local=local_project,
             deltas=deltas, conflicts=conflicts, policy=policy,
         )
         _save(authority_root, merged)
 
         # Bootstrap config in authority root if missing, so subsequent mutations route.
         cfg_path = authority_root / ".tasktool" / "config.json"
-        if not cfg_path.exists():
+        if auth_cfg.tasklist.mutation_mode != "authoritative-checkout":
             save_config(authority_root, TasktoolConfig(
                 tasklist=TasklistConfig(
                     mutation_mode="authoritative-checkout",
@@ -1316,7 +1496,8 @@ def cmd_config_migrate_from_local(
             ))
             _git_stage(authority_root, cfg_path)
 
-    # Notify on status transitions.
+    # Notify on status transitions: pass the Status enum through unchanged so
+    # _notify_status (which calls .value) stays happy.
     _notify_status_transitions(local_project, auth_project)
 
     status_changes = sum(1 for d in deltas if d.field == "status")
@@ -1324,6 +1505,22 @@ def cmd_config_migrate_from_local(
         f"migrated {len(deltas)} deltas ({status_changes} status transitions) "
         f"to {authority_root}",
         file=sys.stderr,
+    )
+
+
+def _load_project_at(tasklist_path: Path) -> "Project":
+    """Load a Project from any tasklist.json path. Thin wrapper over the existing
+    JSON deserialiser in tools/tasktool/serialize.py — replace the body with a
+    direct call to the existing helper after running:
+
+        grep -n '^def ' tools/tasktool/serialize.py
+
+    For example, if serialize.py exposes `project_from_json(path: Path) -> Project`,
+    this function is one line: `return project_from_json(tasklist_path)`. If only
+    a repo-root-based loader exists, derive the repo root from the tasklist path
+    (`tasklist_path.parent.parent`) and call that."""
+    raise NotImplementedError(
+        "replace with the appropriate call to tools/tasktool/serialize.py"
     )
 
 
@@ -1341,7 +1538,8 @@ def _prompt_policy_interactive() -> str:
 
 def _notify_status_transitions(local: "Project", pre_merge_authoritative: "Project") -> None:
     """Emit notify events for rows whose status changed between pre-merge
-    authoritative and local. Best-effort; never raises."""
+    authoritative and local. Best-effort; never raises. Passes the Status enum
+    through unchanged — _notify_status expects an enum, not a string."""
     try:
         def walk(p):
             for cc in p.cross_cutting:
@@ -1355,25 +1553,27 @@ def _notify_status_transitions(local: "Project", pre_merge_authoritative: "Proje
             old = pre.get(qid)
             if old is None:
                 continue
-            if getattr(row, "status", None) != getattr(old, "status", None):
+            row_status = getattr(row, "status", None)
+            old_status = getattr(old, "status", None)
+            if row_status != old_status:
                 _notify_status(
                     qid=qid, kind=kind,
-                    status=row.status.value if hasattr(row.status, "value") else str(row.status),
-                    title=row.title,
+                    status=row_status,           # Status enum, not str
+                    title=getattr(row, "title", ""),
                 )
     except Exception:
         pass
 ```
 
-If `load_project_from_path` does not yet exist in `tools/tasktool/serialize.py`, add it as a thin wrapper around the existing JSON loader (check the file — if `_load` in `commands.py` reads via `serialize`, reuse that). If `serialize.py` already exposes a `Project`-returning loader under a different name, import and alias it instead of writing a new function.
+Important: `_load_project_at` above is a placeholder body that raises. The implementing engineer MUST replace it with one or two lines that delegate to the existing loader in `tools/tasktool/serialize.py`. Run the `grep -n "^def " tools/tasktool/serialize.py` command first, then pick the function that takes a `Path` and returns a `Project`. If only a repo-root helper exists, the implementation is:
 
-Verify the helper name before relying on it:
-
-```bash
-grep -n "^def " tools/tasktool/serialize.py
+```python
+def _load_project_at(tasklist_path: Path) -> "Project":
+    repo_root = tasklist_path.parent.parent
+    return _load(repo_root)
 ```
 
-If the existing function is e.g. `project_from_json(path)`, change the two `load_project_from_path` calls to use that name.
+— where `_load` is the existing helper already used by `cmd_init` and friends.
 
 - [ ] **Step 4: Register CLI subparser**
 
