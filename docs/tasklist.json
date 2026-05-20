@@ -162,7 +162,8 @@
       "id": "X11",
       "notes": "",
       "refs": [
-        "docs/specs/2026-05-20-X11-global-external-reviewer-bridge-design.md"
+        "docs/specs/2026-05-20-X11-global-external-reviewer-bridge-design.md",
+        "docs/reviewer/x11-global-external-reviewer-bridge-design-spec"
       ],
       "started": null,
       "status": "ready",
