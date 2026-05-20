@@ -62,3 +62,19 @@ def test_prompt_renders_with_all_kinds(er, tmp_path):
         )
         assert "F1" in rendered
         assert "Severity:" in rendered
+
+
+def test_prompt_has_literal_verdict_trailer(er):
+    """X10: the prompt must instruct the reviewer to emit a trailerless,
+    plain-text `Overall verdict:` line, with explicit don'ts against the
+    Claude-style heading / bare-Verdict variants.
+    """
+    prompt = er.REVIEW_PROMPT
+    # New trailer paragraph
+    assert "End your review with this exact line" in prompt
+    assert "Overall verdict: <ready|ready with small edits|revise>" in prompt
+    # Explicit don'ts
+    assert "Do not bold" in prompt
+    assert "**Verdict: ready**" in prompt
+    # Old numbered-list form is removed
+    assert "5. Overall verdict" not in prompt

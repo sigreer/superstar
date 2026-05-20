@@ -80,7 +80,14 @@ Review output contract:
 2. Open questions / assumptions
 3. Suggested document edits
 4. Verification gaps / commands that should be run, if any
-5. Overall verdict: one of "ready", "ready with small edits", or "revise"
+
+End your review with this exact line, as plain text on its own line:
+
+    Overall verdict: <ready|ready with small edits|revise>
+
+Do not bold, italicise, prefix with `##`, split across lines, or drop the
+word "Overall". Do not write `**Verdict: ready**` or place the value on a
+new line after a heading.
 
 Read the files from disk. Do not rely only on the snippets in this prompt.
 """
