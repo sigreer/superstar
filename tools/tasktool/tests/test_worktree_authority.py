@@ -129,6 +129,8 @@ def _tasktool(cwd, *args, env=None):
 def _seed_tasktool_repo(tmp_path):
     root = _repo(tmp_path)
     (root / "docs").mkdir()
+    r = _tasktool(root, "config", "init-authority", "--branch", "main")
+    assert r.returncode == 0, r.stdout + r.stderr
     r = _tasktool(root, "init", "--project", "demo")
     assert r.returncode == 0, r.stdout + r.stderr
     r = _tasktool(root, "create", "phase", "--title", "P")
@@ -142,10 +144,6 @@ def _seed_tasktool_repo(tmp_path):
 
 def _authority_with_worker(tmp_path):
     root = _seed_tasktool_repo(tmp_path)
-    r = _tasktool(root, "config", "init-authority", "--branch", "main")
-    assert r.returncode == 0, r.stdout + r.stderr
-    _git(root, "add", ".")
-    _git(root, "commit", "-m", "authority")
     worker = tmp_path / "worker"
     _git(root, "worktree", "add", "-b", "worker", str(worker))
     return root, worker
@@ -209,10 +207,6 @@ def test_authoritative_checkout_write_uses_same_lock(tmp_path):
 
 def test_authoritative_unstaged_tasklist_refuses_before_mutation(tmp_path):
     root = _seed_tasktool_repo(tmp_path)
-    r = _tasktool(root, "config", "init-authority", "--branch", "main")
-    assert r.returncode == 0, r.stdout + r.stderr
-    _git(root, "add", ".")
-    _git(root, "commit", "-m", "authority")
     (root / "docs/tasklist.json").write_text('{"manual":"edit"}\n')
     r = _tasktool(root, "set", "P1.S1", "--status", "in_progress")
     assert r.returncode == 1

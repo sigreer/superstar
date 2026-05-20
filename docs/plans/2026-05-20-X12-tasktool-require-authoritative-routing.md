@@ -10,19 +10,21 @@
 
 **Spec:** `docs/specs/2026-05-20-X12-tasktool-require-authoritative-routing-design.md`
 
-**Tasktool row:** X12 (cross-cutting). Confirmed via `tasktool show X12` (status=ready, refs spec).
+**Tasktool row:** X12 (cross-cutting). Current lifecycle state is routed through the authoritative checkout at `/home/simon/Dev/sigreer/skills/superstar`; `./tools/tasktool/tasktool show X12` there reports `status: in_progress`, `started: 2026-05-20`, with refs to this spec and plan. The implementation worktree's checked-out `docs/tasklist.json` can be stale by design and is not the lifecycle source of truth for this routed slice.
 
 ---
 
 ## Lifecycle start
 
-- [ ] **Step 0: Mark X12 in progress**
+- [x] **Step 0: Mark X12 in progress**
 
 ```bash
 ./tools/tasktool/tasktool start X12
 ```
 
 Expected: exit 0; `tasktool show X12` reports `status: in_progress` with a `started:` date.
+
+Evidence: verified from the authoritative checkout with `./tools/tasktool/tasktool show X12`: status `in_progress`, started `2026-05-20`.
 
 ---
 
@@ -53,7 +55,7 @@ Files modified in this slice:
 - Modify: `tools/tasktool/config.py`
 - Modify: `tools/tasktool/tests/test_authority_config.py`
 
-- [ ] **Step 1: Add the failing test for the sentinel**
+- [x] **Step 1: Add the failing test for the sentinel**
 
 Edit `tools/tasktool/tests/test_authority_config.py`. Replace the existing `test_missing_config_defaults_to_local` function with:
 
@@ -108,7 +110,7 @@ from tasktool.config import (
 )
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 ```bash
 PYTHONPATH=tools pytest tools/tasktool/tests/test_authority_config.py -v
@@ -116,7 +118,7 @@ PYTHONPATH=tools pytest tools/tasktool/tests/test_authority_config.py -v
 
 Expected: ImportError or `mutation_mode == "local"` assertion failure (the sentinel and predicate don't exist yet).
 
-- [ ] **Step 3: Add the sentinel + predicate to config.py**
+- [x] **Step 3: Add the sentinel + predicate to config.py**
 
 Edit `tools/tasktool/config.py`. Replace the existing module body with:
 
@@ -196,7 +198,7 @@ def is_authoritative_required(cfg: TasktoolConfig) -> bool:
     return cfg.tasklist.mutation_mode == UNCONFIGURED
 ```
 
-- [ ] **Step 4: Run tests, expect pass**
+- [x] **Step 4: Run tests, expect pass**
 
 ```bash
 PYTHONPATH=tools pytest tools/tasktool/tests/test_authority_config.py -v
@@ -204,7 +206,7 @@ PYTHONPATH=tools pytest tools/tasktool/tests/test_authority_config.py -v
 
 Expected: 4 passed (the three new tests plus the existing `test_round_trip_authoritative_config` and `test_invalid_mode_raises`, minus the deleted `test_missing_config_defaults_to_local`).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tools/tasktool/config.py tools/tasktool/tests/test_authority_config.py
@@ -219,7 +221,7 @@ git commit -m "X12: distinguish unconfigured tasktool config from explicit local
 - Modify: `tools/tasktool/commands.py`
 - Create: `tools/tasktool/tests/test_unconfigured_mutation.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tools/tasktool/tests/test_unconfigured_mutation.py`:
 
@@ -376,7 +378,7 @@ def test_bootstrap_init_before_init_authority_fails(tmp_path):
 
 (The `init-local` part of `test_explicit_local_mode_still_mutates` is forward-referenced; it will pass after Task 3.)
 
-- [ ] **Step 2: Run the test, expect mutation tests to fail with the hard-error message NOT present**
+- [x] **Step 2: Run the test, expect mutation tests to fail with the hard-error message NOT present**
 
 ```bash
 PYTHONPATH=tools pytest tools/tasktool/tests/test_unconfigured_mutation.py -v
@@ -384,7 +386,7 @@ PYTHONPATH=tools pytest tools/tasktool/tests/test_unconfigured_mutation.py -v
 
 Expected: `test_init_errors_without_authority_config`, `test_start_errors_without_authority_config`, `test_validate_normalise_errors_unconfigured` fail (mutations currently succeed). Read-only tests pass. `test_explicit_local_mode_still_mutates` fails on the `config init-local` line (subcommand doesn't exist yet).
 
-- [ ] **Step 3: Add the hard-error path in `_resolve_write_root`**
+- [x] **Step 3: Add the hard-error path in `_resolve_write_root`**
 
 In `tools/tasktool/commands.py`, update the imports near the top of the file to add `is_authoritative_required`:
 
@@ -433,7 +435,7 @@ def _resolve_write_root(repo_root: Path) -> tuple[Path, bool, str, str]:
     )
 ```
 
-- [ ] **Step 4: Run the tests again**
+- [x] **Step 4: Run the tests again**
 
 ```bash
 PYTHONPATH=tools pytest tools/tasktool/tests/test_unconfigured_mutation.py -v
@@ -441,7 +443,7 @@ PYTHONPATH=tools pytest tools/tasktool/tests/test_unconfigured_mutation.py -v
 
 Expected: every test except `test_explicit_local_mode_still_mutates` passes. The latter still fails on `config init-local` (forward-referenced to Task 3).
 
-- [ ] **Step 5: Run the full tasktool suite to surface regressions**
+- [x] **Step 5: Run the full tasktool suite to surface regressions**
 
 ```bash
 PYTHONPATH=tools pytest tools/tasktool/tests/ -v
@@ -449,7 +451,7 @@ PYTHONPATH=tools pytest tools/tasktool/tests/ -v
 
 Expected: failures in any test that called `tasktool init` / `tasktool start` etc. against a fresh `tmp_path` without first configuring authority. Capture the list — those tests get explicit `config init-local` or `config init-authority` setup in Task 6.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add tools/tasktool/commands.py tools/tasktool/tests/test_unconfigured_mutation.py
@@ -465,7 +467,7 @@ git commit -m "X12: refuse mutations when tasktool authority routing is unconfig
 - Modify: `tools/tasktool/cli.py`
 - Create: `tools/tasktool/tests/test_init_local.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tools/tasktool/tests/test_init_local.py`:
 
@@ -525,7 +527,7 @@ def test_init_local_refuses_overwriting_authoritative(tmp_path):
     assert "already configured" in r.stderr or "already configured" in r.stdout
 ```
 
-- [ ] **Step 2: Run the test, expect failure**
+- [x] **Step 2: Run the test, expect failure**
 
 ```bash
 PYTHONPATH=tools pytest tools/tasktool/tests/test_init_local.py -v
@@ -533,7 +535,7 @@ PYTHONPATH=tools pytest tools/tasktool/tests/test_init_local.py -v
 
 Expected: argparse-level failures (`invalid choice: 'init-local'`).
 
-- [ ] **Step 3: Add `cmd_config_init_local` to commands.py**
+- [x] **Step 3: Add `cmd_config_init_local` to commands.py**
 
 In `tools/tasktool/commands.py`, immediately after `cmd_config_init_authority`, add:
 
@@ -572,7 +574,7 @@ def cmd_config_init_local(*, repo_root: Path) -> None:
 
 Ensure `json` is imported at the top of `commands.py` (it already is — check the existing import block).
 
-- [ ] **Step 4: Register the subcommand in cli.py**
+- [x] **Step 4: Register the subcommand in cli.py**
 
 In `tools/tasktool/cli.py`, immediately after the `init-authority` parser registration (around line 29-30), add:
 
@@ -588,7 +590,7 @@ In the dispatch block where `config_cmd == "init-authority"` is handled (around 
                 commands.cmd_config_init_local(repo_root=repo_root)
 ```
 
-- [ ] **Step 5: Run the test, expect pass**
+- [x] **Step 5: Run the test, expect pass**
 
 ```bash
 PYTHONPATH=tools pytest tools/tasktool/tests/test_init_local.py tools/tasktool/tests/test_unconfigured_mutation.py -v
@@ -596,7 +598,7 @@ PYTHONPATH=tools pytest tools/tasktool/tests/test_init_local.py tools/tasktool/t
 
 Expected: both files pass in full now.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add tools/tasktool/commands.py tools/tasktool/cli.py tools/tasktool/tests/test_init_local.py
@@ -611,7 +613,7 @@ git commit -m "X12: add tasktool config init-local for auditable local-mode opt-
 - Create: `tools/tasktool/migrate.py`
 - Create: `tools/tasktool/tests/test_migrate.py`
 
-- [ ] **Step 1: Write the failing test for the diff walker**
+- [x] **Step 1: Write the failing test for the diff walker**
 
 Create `tools/tasktool/tests/test_migrate.py`:
 
@@ -890,7 +892,7 @@ def test_per_field_migration_acceptance(row_type):
         )
 ```
 
-- [ ] **Step 2: Run, expect ImportError**
+- [x] **Step 2: Run, expect ImportError**
 
 ```bash
 PYTHONPATH=tools pytest tools/tasktool/tests/test_migrate.py -v
@@ -898,7 +900,7 @@ PYTHONPATH=tools pytest tools/tasktool/tests/test_migrate.py -v
 
 Expected: `ModuleNotFoundError: No module named 'tasktool.migrate'`.
 
-- [ ] **Step 3: Implement the migrator**
+- [x] **Step 3: Implement the migrator**
 
 Create `tools/tasktool/migrate.py`:
 
@@ -1178,15 +1180,15 @@ def _fmt_value(v: object) -> str:
     return repr(v)
 ```
 
-- [ ] **Step 4: Run the migrate tests, expect pass**
+- [x] **Step 4: Run the migrate tests, expect pass**
 
 ```bash
 PYTHONPATH=tools pytest tools/tasktool/tests/test_migrate.py -v
 ```
 
-Expected: all tests pass (10 named tests plus the parametrized full-field migration test, which expands to ~30 test cases across the six row dataclasses).
+Expected: all tests pass, including the row-type-parametrized full-field migration acceptance test that loops over every supported dataclass field. Pytest reports six parametrized cases for that test (one per row dataclass); per-field assertions run inside each case.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tools/tasktool/migrate.py tools/tasktool/tests/test_migrate.py
@@ -1202,7 +1204,7 @@ git commit -m "X12: add dataclass-driven migrator for tasktool drift reconciliat
 - Modify: `tools/tasktool/cli.py`
 - Create: `tools/tasktool/tests/test_migrate_cli.py`
 
-- [ ] **Step 1: Write the failing CLI integration test**
+- [x] **Step 1: Write the failing CLI integration test**
 
 Create `tools/tasktool/tests/test_migrate_cli.py`:
 
@@ -1519,7 +1521,7 @@ def test_migrate_emits_notify_events_for_task_transitions(tmp_path):
     assert task_events, f"no notify event found for task status change. events={events}"
 ```
 
-- [ ] **Step 2: Run, expect failure**
+- [x] **Step 2: Run, expect failure**
 
 ```bash
 PYTHONPATH=tools pytest tools/tasktool/tests/test_migrate_cli.py -v
@@ -1527,7 +1529,7 @@ PYTHONPATH=tools pytest tools/tasktool/tests/test_migrate_cli.py -v
 
 Expected: `argparse` errors (`invalid choice: 'migrate-from-local'`).
 
-- [ ] **Step 3: Add the command body**
+- [x] **Step 3: Add the command body**
 
 Before writing the body, make `same_repository` available — `commands.py` currently imports selected names from `tasktool.worktree` but not this one. Update the existing import block at the top of `tools/tasktool/commands.py` to add `same_repository`:
 
@@ -1726,7 +1728,7 @@ def _notify_status_transitions(local: "Project", pre_merge_authoritative: "Proje
 
 `load_project` is already imported at the top of `commands.py` — no new import needed.
 
-- [ ] **Step 4: Register CLI subparser**
+- [x] **Step 4: Register CLI subparser**
 
 In `tools/tasktool/cli.py`, after the `init-local` registration (added in Task 3), add:
 
@@ -1757,7 +1759,7 @@ In the dispatch block, immediately after the `init-local` branch:
                 )
 ```
 
-- [ ] **Step 5: Run the CLI test, expect pass**
+- [x] **Step 5: Run the CLI test, expect pass**
 
 ```bash
 PYTHONPATH=tools pytest tools/tasktool/tests/test_migrate_cli.py -v
@@ -1765,7 +1767,7 @@ PYTHONPATH=tools pytest tools/tasktool/tests/test_migrate_cli.py -v
 
 Expected: all 7 tests pass.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add tools/tasktool/commands.py tools/tasktool/cli.py tools/tasktool/tests/test_migrate_cli.py
@@ -1782,7 +1784,7 @@ git commit -m "X12: add tasktool config migrate-from-local subcommand"
 - Modify: `skills/tasklist-discipline/SKILL.md`
 - Modify: `skills/using-git-worktrees/SKILL.md`
 
-- [ ] **Step 1: Run the full tasktool suite**
+- [x] **Step 1: Run the full tasktool suite**
 
 ```bash
 PYTHONPATH=tools pytest tools/tasktool/tests/ -v 2>&1 | tee /tmp/x12-test-output.txt
@@ -1792,7 +1794,7 @@ Capture failing tests. Each likely failure is one of:
 1. A test that calls `tasktool init` (or any mutating command) against `tmp_path` without first running `config init-local` or `config init-authority`.
 2. A test that asserts behaviour that depended on the implicit-`local` default.
 
-- [ ] **Step 2: Repair each failing test by adding explicit `init-local`**
+- [x] **Step 2: Repair each failing test by adding explicit `init-local`**
 
 For each failing test that depended on implicit-`local`, prepend a `tasktool config init-local` invocation. Example pattern (apply to each occurrence):
 
@@ -1816,7 +1818,7 @@ def test_foo(tmp_path):
 
 For tests that specifically exercise the *authoritative* path, replace with `config init-authority --branch main`.
 
-- [ ] **Step 3: Re-run, expect green**
+- [x] **Step 3: Re-run, expect green**
 
 ```bash
 PYTHONPATH=tools pytest tools/tasktool/tests/ -v
@@ -1824,7 +1826,7 @@ PYTHONPATH=tools pytest tools/tasktool/tests/ -v
 
 Expected: full suite passes.
 
-- [ ] **Step 4: Update `skills/project-setup/SKILL.md`**
+- [x] **Step 4: Update `skills/project-setup/SKILL.md`**
 
 Locate the section in `skills/project-setup/SKILL.md` that describes tasktool bootstrap (search for `tasktool init`). Replace it with the new ordered sequence:
 
@@ -1848,7 +1850,7 @@ Locate the section in `skills/project-setup/SKILL.md` that describes tasktool bo
 If a repo opts out of authoritative routing on purpose (no worktree convention, single-checkout workflows), the operator may run `tasktool config init-local` instead of `init-authority`. The opt-out should be a deliberate, committed choice — never the implicit default.
 ```
 
-- [ ] **Step 5: Update `skills/tasklist-discipline/SKILL.md`**
+- [x] **Step 5: Update `skills/tasklist-discipline/SKILL.md`**
 
 Find the existing paragraph that opens "When `.tasktool/config.json` sets `tasklist.mutation_mode` to `authoritative-checkout`…" (around line 12). Replace it with:
 
@@ -1858,7 +1860,7 @@ Tasktool requires authoritative-checkout routing for any mutating command. When 
 If a mutation errors with `no authoritative-checkout routing configured`, run `tasktool config init-authority --branch <branch>` from the target branch (or, for an audited single-checkout workflow, `tasktool config init-local`). To reconcile a tasklist that drifted under the previous default — i.e. a worktree's `docs/tasklist.json` that was mutated without routing — run `tasktool config migrate-from-local --authority-root <path> --accept-local` from the drifted worktree.
 ```
 
-- [ ] **Step 6: Update `skills/using-git-worktrees/SKILL.md`**
+- [x] **Step 6: Update `skills/using-git-worktrees/SKILL.md`**
 
 Find the line that begins "If tasktool authoritative-checkout routing is configured" (around line 16). Replace it with:
 
@@ -1866,7 +1868,7 @@ Find the line that begins "If tasktool authoritative-checkout routing is configu
 Tasktool mutations from worktrees always route through the configured authoritative checkout. If `.tasktool/config.json` is missing in a repo you intend to work in, set it up first via `tasktool config init-authority --branch <branch>` from the target branch. Once routing is configured, mutations may be invoked from the implementation worktree: stay put, do not leave the worktree to hand-edit the authoritative checkout or run lifecycle commands elsewhere; run `tasktool start`, `tasktool ref`, `tasktool note`, and `tasktool close` from the active implementation worktree and let routing write through the configured authority.
 ```
 
-- [ ] **Step 7: Skim-test the skill text**
+- [x] **Step 7: Skim-test the skill text**
 
 ```bash
 grep -n "mutation_mode\|authoritative\|migrate-from-local" skills/project-setup/SKILL.md skills/tasklist-discipline/SKILL.md skills/using-git-worktrees/SKILL.md
@@ -1874,7 +1876,7 @@ grep -n "mutation_mode\|authoritative\|migrate-from-local" skills/project-setup/
 
 Confirm: no remaining "when configured" / conditional phrasing for the rule itself; `migrate-from-local` mentioned at least once for the remediation path.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add tools/tasktool/tests/ skills/project-setup/SKILL.md skills/tasklist-discipline/SKILL.md skills/using-git-worktrees/SKILL.md
@@ -1885,7 +1887,7 @@ git commit -m "X12: tighten tasktool skills to require authoritative routing"
 
 ## Task 7: Close X12 and prepare for review
 
-- [ ] **Step 1: Run the full suite once more**
+- [x] **Step 1: Run the full suite once more**
 
 ```bash
 PYTHONPATH=tools pytest tools/tasktool/tests/ -v
@@ -1893,17 +1895,24 @@ PYTHONPATH=tools pytest tools/tasktool/tests/ -v
 
 Expected: all tests pass.
 
-- [ ] **Step 2: Mark X12 review-ready**
+- [x] **Step 2: Mark X12 review-ready**
 
 The cross-cutting item moves to status `done` only after external `post-slice` review (next step in execution). Leave it `in_progress` here; closure happens via `tasktool close X12` after the post-slice review verdict.
 
-- [ ] **Step 3: Capture evidence for the post-slice review**
+- [x] **Step 3: Capture evidence for the post-slice review**
 
 Note for the post-slice reviewer:
 - Spec: `docs/specs/2026-05-20-X12-tasktool-require-authoritative-routing-design.md`
 - Plan: this document
 - Spec reviewer chain: `docs/reviewer/x12-tasktool-require-authoritative-routing-design-spec/`
 - Implementation evidence: commits `X12: *` on this branch.
+
+Post-slice resolution evidence, 2026-05-20:
+- RED: `PYTHONPATH=tools pytest tools/tasktool/tests/test_cli_integration.py::test_config_init_authority_ignores_ambient_ancestor_git_repo tools/tasktool/tests/test_migrate_cli.py::test_accept_authoritative_is_noop tools/tasktool/tests/test_migrate_cli.py::test_accept_authoritative_acquires_authority_lock -q` failed with 3 expected failures before the fix.
+- GREEN: the same targeted regression command passed with `3 passed`.
+- GREEN: `PYTHONPATH=tools pytest tools/tasktool/tests/test_cli_integration.py tools/tasktool/tests/test_migrate_cli.py -v` passed with `36 passed`.
+- GREEN: `PYTHONPATH=tools pytest tools/tasktool/tests/ -q` passed with `310 passed`.
+- Authority state: `/home/simon/Dev/sigreer/skills/superstar ./tools/tasktool/tasktool show X12` reports `status: in_progress`, `started: 2026-05-20`; routed lifecycle state lives there, not in this worktree's stale review-context tasklist.
 
 ---
 

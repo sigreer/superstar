@@ -24,7 +24,8 @@ For each check the skill must report **status** (`present` / `missing` / `partia
 | # | Check                                                    | Pass criteria                                                          | Scaffold action                                                              |
 |---|----------------------------------------------------------|------------------------------------------------------------------------|------------------------------------------------------------------------------|
 | 0 | Local git repo                                           | `git rev-parse --is-inside-work-tree` succeeds.                        | `git init` before installing hooks or running git-backed verification.        |
-| 1 | `docs/tasklist.json`                                     | File exists and validates clean (`tools/tasktool/tasktool validate`, or `tasktool validate` when the global shim is installed). | `tools/tasktool/tasktool init --project <name>`.                             |
+| 1 | `docs/tasklist.json`                                     | File exists and validates clean (`tools/tasktool/tasktool validate`, or `tasktool validate` when the global shim is installed). | Run `tools/tasktool/tasktool config init-authority --branch <main-branch>` first, then `tools/tasktool/tasktool init --project <name>`. |
+| 1a| `.tasktool/config.json` authoritative routing             | File exists with `tasklist.mutation_mode` set to `authoritative-checkout` for the repo's main branch. Missing or unconfigured authority is a setup precondition failure, the same as a missing tasklist. | `tools/tasktool/tasktool config init-authority --branch <main-branch>` from the authoritative checkout before `tasktool init`. |
 | 1b| `.git/hooks/pre-commit` (tasktool hook)                  | Tasktool hook installed (`grep -q 'tasktool-pre-commit-hook' .git/hooks/pre-commit`). | `bash tools/tasktool/install.sh --hook` (or the equivalent for non-superstar repos). |
 | 1c| Legacy `docs/TASKLIST.md` import decision                | If `docs/TASKLIST.md` exists, the user has explicitly chosen `tasktool import docs/TASKLIST.md --project <name>` or chosen to start with a new empty tracker. | Show `tools/tasktool/tasktool import docs/TASKLIST.md --dry-run --project <name>`, surface warnings, then ask whether to import, start empty, or stop. |
 | 1d| Implementation worktree location                         | `git check-ignore -q .worktrees/` succeeds (or the repo's explicit worktree directory such as `worktrees/` succeeds). | Add `.worktrees/` to `.gitignore` (create the file if needed). Do not create per-slice worktrees here; `[[using-git-worktrees]]` owns that. |
@@ -33,7 +34,8 @@ For each check the skill must report **status** (`present` / `missing` / `partia
 | 4 | `docs/handoffs/` directory                               | Directory exists.                                                      | `mkdir -p docs/handoffs` and add a `.gitkeep`.                               |
 | 5 | `docs/reviewer/` directory                               | Directory exists (chain folders land here).                            | `mkdir -p docs/reviewer` and add a `.gitkeep`.                               |
 | 6 | `docs/archived-tasks/` directory                         | Directory exists (phase-close target).                                 | `mkdir -p docs/archived-tasks` and add a `.gitkeep`.                         |
-| 7 | `scripts/external-reviewer.py`                           | Either present at the repo root, or `AGENT_REVIEWER_CMD` is set.       | Copy from `skills/external-review/scripts/external-reviewer.py`, `chmod +x`. |
+| 7 | Global `external-reviewer` bridge available | `command -v external-reviewer` succeeds and `external-reviewer --help` exits 0. | Run or print `bash <active-superstar-checkout>/skills/external-review/install.sh` after confirmation. |
+| 7b | Repo-local `scripts/external-reviewer.py` legacy drift | Pass: absent. Compatibility-pass: present and contains `Compatibility shim for old Superstar handoffs` plus an `external-reviewer` delegation. Partial: present but any other content. | Offer to replace Partial files with `skills/project-setup/scripts/external-reviewer-shim.py`; do not copy the full bridge. |
 | 8 | Reviewer command available                               | `AGENT_REVIEWER_CMD` (env) is set, or the default `reviewer-agent` is on `PATH`. | Print the exact command to install `skills/project-setup/scripts/reviewer-agent` to a user-chosen bin dir, or the exact `AGENT_REVIEWER_CMD` override. Do **not** install third-party tools or edit shell config without confirmation. The wrapper must not use provider bypass/no-sandbox flags. |
 | 9 | CLAUDE.md mentions superstar planning discipline | The repo's CLAUDE.md (or AGENTS.md / GEMINI.md) references the skill set. | Append a small "Planning & implementation discipline" block referencing `brainstorming`, `writing-plans`, `subagent-driven-development`, `external-review`, `tasklist-discipline`. |
 
@@ -57,15 +59,16 @@ Setup is its own change. Do not continue into `[[brainstorming]]`, `[[writing-pl
 After any accepted scaffold or legacy migration:
 
 1. Run `git status --short` and classify every dirty path as one of:
-   - setup/migration (`docs/tasklist.json`, `.gitignore` worktree-ignore entries, `docs/specs/`, `docs/plans/`, `docs/handoffs/`, `docs/reviewer/`, `docs/archived-tasks/`, `scripts/external-reviewer.py`, `.git/hooks/pre-commit`, `CLAUDE.md` / `AGENTS.md` / `GEMINI.md`, legacy `docs/superpowers/` moves);
+   - setup/migration (`docs/tasklist.json`, `.gitignore` worktree-ignore entries, `docs/specs/`, `docs/plans/`, `docs/handoffs/`, `docs/reviewer/`, `docs/archived-tasks/`, global `external-reviewer` shim installation, repo-local `scripts/external-reviewer.py` compatibility shim replacement, `.git/hooks/pre-commit`, `CLAUDE.md` / `AGENTS.md` / `GEMINI.md`, legacy `docs/superpowers/` moves);
    - feature implementation;
    - local noise or user-owned changes.
-2. Run `tools/tasktool/tasktool validate` when the repo-local launcher exists, otherwise `tasktool validate`.
-3. If `docs/TASKLIST.md` exists, stop until the user chooses one path:
+2. Confirm `.tasktool/config.json` exists and names `authoritative-checkout` routing for the repo's main branch. If it is missing or lacks `tasklist.mutation_mode`, run `tools/tasktool/tasktool config init-authority --branch <main-branch>` from the authoritative checkout before any `tasktool init` or other mutating command.
+3. Run `tools/tasktool/tasktool validate` when the repo-local launcher exists, otherwise `tasktool validate`.
+4. If `docs/TASKLIST.md` exists, stop until the user chooses one path:
    - import it with `tools/tasktool/tasktool import docs/TASKLIST.md --project <name>` after first showing `--dry-run` output;
    - start with an empty tracker and leave/delete the legacy file by explicit user choice;
    - stop setup.
-4. If migration moved dated historical files into `docs/specs/` or `docs/plans/`, dry-run the orphan check before any commit:
+5. If migration moved dated historical files into `docs/specs/` or `docs/plans/`, dry-run the orphan check before any commit:
    ```bash
    TASKTOOL=tasktool
    test -x tools/tasktool/tasktool && TASKTOOL=tools/tasktool/tasktool
@@ -74,7 +77,7 @@ After any accepted scaffold or legacy migration:
      xargs -r "$TASKTOOL" validate --check-orphans
    ```
    If this fails, do not press on. Ask the user whether to import matching IDs, keep those historical docs outside orphan-checked paths, or defer tracking `docs/tasklist.json`.
-5. Stop at the boundary. Ask the user to choose one of:
+6. Stop at the boundary. Ask the user to choose one of:
    - commit the setup/migration as a standalone setup commit;
    - stash/shelve it;
    - leave it dirty and pause feature work.
@@ -185,7 +188,7 @@ Order rows by dependency: a row that scaffolds a directory must precede a row th
 
 | Thought                                                        | Reality                                                                |
 |----------------------------------------------------------------|------------------------------------------------------------------------|
-| "`docs/tasklist.json` is missing, I'll just create it"         | Run the audit, present the table, ask. Don't `tasktool init` without consent. |
+| "`docs/tasklist.json` is missing, I'll just create it"         | Run the audit, present the table, ask. Configure authority with `tasktool config init-authority --branch <main-branch>` before `tasktool init`, and don't run either without consent. |
 | "The user said 'set up everything', skip the confirmations"   | Confirm the *list* once, then proceed. Don't write files without showing what.|
 | "AGENT_REVIEWER_CMD is unset, I'll edit their shell rc"        | Out of scope. Print the suggested value and stop.                      |
 | "Existing CLAUDE.md is fine, I'll rewrite it cleaner"          | No. Append a section if needed; never rewrite.                         |
@@ -193,6 +196,6 @@ Order rows by dependency: a row that scaffolds a directory must precede a row th
 ## Integration
 
 - `[[tasklist-discipline]]` — describes tasktool conventions; the CLI itself ships the canonical scaffold via `tools/tasktool/tasktool init`.
-- `[[external-review]]` — provides the reviewer script and the `AGENT_REVIEWER_CMD` expectation.
+- `[[external-review]]` — provides the global bridge command contract and the `AGENT_REVIEWER_CMD` expectation.
 - `[[writing-plans]]` — relies on the `docs/specs/`, `docs/plans/`, `docs/handoffs/` tree.
 - `[[subagent-driven-development]]` — relies on `docs/reviewer/` for chain folders.

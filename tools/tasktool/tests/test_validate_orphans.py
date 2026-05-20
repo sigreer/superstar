@@ -16,6 +16,7 @@ def _seed(tmp_path):
     (tmp_path / "docs").mkdir()
     (tmp_path / "docs" / "specs").mkdir()
     (tmp_path / "docs" / "plans").mkdir()
+    assert _run(tmp_path, "config", "init-local").returncode == 0
     _run(tmp_path, "init", "--project", "demo")
     pid = _run(tmp_path, "create", "phase", "--title", "Phase one").stdout.strip()
     sid = _run(tmp_path, "create", "slice", pid, "--title", "Slice one").stdout.strip()

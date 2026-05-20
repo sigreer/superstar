@@ -15,6 +15,7 @@ class _Tmp:
         self._td = tempfile.TemporaryDirectory()
         self.root = Path(self._td.name)
         (self.root / "docs").mkdir()
+        commands.cmd_config_init_local(repo_root=self.root)
     def cleanup(self):
         self._td.cleanup()
 

@@ -12,6 +12,21 @@ def _find_repo_root(start: Path) -> Path:
             return p
     return cur
 
+def _is_project_marker(path: Path) -> bool:
+    return (path / "docs").is_dir() or (path / ".git").exists() or (path / ".tasktool").exists()
+
+def _resolve_project_root(args: argparse.Namespace) -> Path:
+    if args.project_root is not None:
+        return args.project_root
+    cwd = Path.cwd()
+    if (
+        args.cmd == "config"
+        and args.config_cmd in {"init-authority", "init-local"}
+        and not _is_project_marker(cwd)
+    ):
+        return cwd.resolve()
+    return _find_repo_root(cwd)
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="tasktool")
     parser.add_argument("--project-root", type=Path, default=None,
@@ -28,6 +43,14 @@ def _build_parser() -> argparse.ArgumentParser:
     config_sub = p_config.add_subparsers(dest="config_cmd", required=True)
     p_config_auth = config_sub.add_parser("init-authority")
     p_config_auth.add_argument("--branch", default="main")
+    config_sub.add_parser("init-local")
+    p_config_migrate = config_sub.add_parser("migrate-from-local")
+    p_config_migrate.add_argument("--authority-root", type=Path)
+    p_config_migrate.add_argument("--local-root", type=Path)
+    p_config_migrate.add_argument("--dry-run", action="store_true")
+    migrate_policy = p_config_migrate.add_mutually_exclusive_group()
+    migrate_policy.add_argument("--accept-local", action="store_true")
+    migrate_policy.add_argument("--accept-authoritative", action="store_true")
 
     p_init = sub.add_parser("init")
     p_init.add_argument("--project", default=None,
@@ -182,7 +205,7 @@ def _build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str]) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
-    root = args.project_root or _find_repo_root(Path.cwd())
+    root = _resolve_project_root(args)
     # Plumb --no-stage into the commands module's process-global toggle.
     commands.STAGE_AFTER_WRITE = not args.no_stage
 
@@ -192,6 +215,18 @@ def main(argv: list[str]) -> int:
                 commands.cmd_config_init_authority(
                     repo_root=root,
                     branch=args.branch,
+                )
+            elif args.config_cmd == "init-local":
+                commands.cmd_config_init_local(repo_root=root)
+            elif args.config_cmd == "migrate-from-local":
+                commands.cmd_config_migrate_from_local(
+                    repo_root=root,
+                    authority_root=args.authority_root,
+                    local_root=args.local_root,
+                    dry_run=args.dry_run,
+                    accept_local=args.accept_local,
+                    accept_authoritative=args.accept_authoritative,
+                    stdin_is_tty=sys.stdin.isatty(),
                 )
         elif args.cmd == "init":
             commands.cmd_init(repo_root=root, project=args.project, north_star=args.north_star, force=args.force)

@@ -49,6 +49,8 @@ class _CliTmp:
         self._td = tempfile.TemporaryDirectory()
         self.root = Path(self._td.name)
         (self.root / "docs").mkdir()
+        r = run_cli("config", "init-local", cwd=self.root)
+        assert r.returncode == 0, r.stderr
     def cleanup(self):
         self._td.cleanup()
 
@@ -386,6 +388,24 @@ def test_config_init_authority_writes_project_config(tmp_path):
     assert data["tasklist"]["mutation_mode"] == "authoritative-checkout"
     assert "authoritative_root" not in data["tasklist"]
     assert data["tasklist"]["authoritative_branch"] == "main"
+
+
+def test_config_init_authority_ignores_ambient_ancestor_git_repo(tmp_path):
+    ambient = tmp_path / "ambient"
+    ambient.mkdir()
+    subprocess.run(["git", "init", "-b", "main"], cwd=ambient, check=True, text=True, capture_output=True)
+    project = ambient / "nested-project"
+    project.mkdir()
+
+    r = run_cli(
+        "config", "init-authority",
+        "--branch", "main",
+        cwd=project,
+    )
+
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert (project / ".tasktool" / "config.json").exists()
+    assert not (ambient / ".tasktool" / "config.json").exists()
 
 
 def test_config_init_authority_rejects_wrong_checkout_branch(tmp_path):

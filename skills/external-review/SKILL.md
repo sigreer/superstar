@@ -5,9 +5,9 @@ description: Use after writing a spec, after writing a plan, after completing a 
 
 # External Review
 
-An independent reviewer (not the coordinating agent) reviews a target document or completed slice/phase. The bridge is `external-reviewer.py` — provider-neutral, configured via `AGENT_REVIEWER_CMD`. Each round writes a `request.md` and `response.md` pair under a per-document chain folder so the iteration history is durable and committable.
+An independent reviewer (not the coordinating agent) reviews a target document or completed slice/phase. The bridge is the global `external-reviewer` command — provider-neutral, configured via `AGENT_REVIEWER_CMD`. Each round writes a `request.md` and `response.md` pair under a per-document chain folder so the iteration history is durable and committable.
 
-**Script location.** The script ships at `skills/external-review/scripts/external-reviewer.py` inside this plugin. `[[project-setup]]` copies it to `scripts/external-reviewer.py` at the consuming project's root, which is the path used in all examples below. If neither path resolves in your project, fall back to `$CLAUDE_PLUGIN_DIR/skills/external-review/scripts/external-reviewer.py` (when running inside a Claude Code plugin context) or run `[[project-setup]]` to vendor a copy.
+**Bridge command.** `external-reviewer` is the global canonical review-chain bridge command. It is installed by `skills/external-review/install.sh` and delegates to `skills/external-review/scripts/external-reviewer.py` in the active Superstar checkout. When the source script is under `$HOME`, the generated shim stores a literal `$HOME/...` path so it does not pin a machine-specific `/home/simon/...` string while still expanding to the checkout at runtime. Do not run or copy a full repo-local `scripts/external-reviewer.py` bridge. Existing repos may keep a tiny compatibility shim at that path only so old handoffs continue to delegate to the global command.
 
 **Announce at start:** "I'm using the external-review skill to run a `<kind>` review on `<target>`."
 
@@ -92,12 +92,14 @@ Use the requested `--work-id` to judge scope before review:
 A reviewer is expected to fail a boundary review when the artifact set is ambiguous, but the coordinator should block before spending reviewer time.
 
 ```bash
-python3 scripts/external-reviewer.py review \
+external-reviewer review \
     --kind <spec|plan|post-slice|post-phase> \
     --file <path/to/target.md> \
     --work-id <P2.S3 | P2>   # required for post-slice / post-phase
     [--context <path>]... \
     [--review-depth thorough] \
+    [--reviewer-provider auto|codex|claude|custom] \
+    [--caller-provider auto|claude|codex|unknown] \
     [--incremental-budget-chars 400000] \
     --emit json
 ```
@@ -162,9 +164,9 @@ On exit 8 the coordinator MUST present this menu via `AskUserQuestion` (no auto-
 
 | Option | Mechanism |
 |---|---|
-| **Manual approve** | Coordinator collects a one-line note, then runs `external-reviewer.py manual-approve --kind X --file Y --work-id Z --note "..."`. Writes a synthetic round with `status: "manual-approved"`, `verdict: "ready"`. Chain advances. |
+| **Manual approve** | Coordinator collects a one-line note, then runs `external-reviewer manual-approve --kind X --file Y --work-id Z --note "..."`. Writes a synthetic round with `status: "manual-approved"`, `verdict: "ready"`. Chain advances. |
 | **Schedule retry** | Coordinator invokes the **harness-level `schedule` skill** to register a one-shot routine at `reset_at + 5 min` re-invoking the same `review` command. If the harness lacks `schedule`, falls back to printing an `at`/`cron`-suitable command for the operator. Current chain gate pauses. |
-| **Human bridge** | Coordinator prints `r{N}-request.md` path. Operator obtains a response from an external reviewer (web UI, manual reading, etc.) and either pastes the text in chat or provides a local file path. Coordinator runs `external-reviewer.py ingest-response --kind X --file Y --work-id Z (--from-paste FILE \| --from-link PATH)`. Writes the response with status `human-bridged`. |
+| **Human bridge** | Coordinator prints `r{N}-request.md` path. Operator obtains a response from an external reviewer (web UI, manual reading, etc.) and either pastes the text in chat or provides a local file path. Coordinator runs `external-reviewer ingest-response --kind X --file Y --work-id Z (--from-paste FILE \| --from-link PATH)`. Writes the response with status `human-bridged`. |
 | **Hold** | Do nothing. Exit the current gate. State persists; next session sees the same limit. |
 
 Repeated refusals against the **same chain** while the limit is open do NOT append new rounds — they coalesce onto the head rate-limited round via `last_refused_at` / `refused_at[]` (capped at 20).
@@ -182,11 +184,11 @@ Manual-approved (`status: "manual-approved"`) and human-bridged (`status: "human
 
 | Subcommand | Purpose |
 |---|---|
-| `manual-approve` | Record an operator-approved closure on the chain. |
-| `ingest-response` | Write an externally-obtained reviewer response into the chain. |
-| `stats [--json]` | Summarize review-chain timing and usage estimates from `docs/reviewer/**/chain.json`. |
-| `show-limit` | Print the current `~/.config/superstar/reviewer-state.json` content. |
-| `clear-limit [--reviewer-cmd X]` | Clear the limit entry (for a single reviewer or all). Idempotent. |
+| `external-reviewer manual-approve ...` | Record an operator-approved closure on the chain. |
+| `external-reviewer ingest-response ...` | Write an externally-obtained reviewer response into the chain. |
+| `external-reviewer stats [--json]` | Summarize review-chain timing and usage estimates from `docs/reviewer/**/chain.json`. |
+| `external-reviewer show-limit` | Print the current `~/.config/superstar/reviewer-state.json` content. |
+| `external-reviewer clear-limit [--reviewer-cmd X]` | Clear the limit entry (for a single reviewer or all). Idempotent. |
 
 ## Reading the response
 
