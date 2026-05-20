@@ -21,6 +21,7 @@ def run(root, *args):
 
 def seed(root):
     (root / "docs").mkdir()
+    assert run(root, "config", "init-local").returncode == 0
     assert run(root, "init", "--project", "demo").returncode == 0
     assert run(root, "create", "phase", "--title", "Phase").returncode == 0
     assert run(root, "create", "slice", "P1", "--title", "Slice").returncode == 0

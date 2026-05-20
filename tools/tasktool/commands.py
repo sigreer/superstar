@@ -5,7 +5,13 @@ import sys
 import subprocess as _subprocess
 from contextlib import contextmanager
 from pathlib import Path
-from tasktool.config import TasklistConfig, TasktoolConfig, load_config, save_config
+from tasktool.config import (
+    TasklistConfig,
+    TasktoolConfig,
+    is_authoritative_required,
+    load_config,
+    save_config,
+)
 from tasktool.model import (
     Project, Phase, Slice, Task, CrossCutting, BlockedOn, Status, PlanningStatus,
 )
@@ -15,12 +21,14 @@ from tasktool.allocate import (
     next_phase_id, next_slice_id, next_task_id, next_cross_id, next_followup_letter,
 )
 from tasktool.ids import split_qualified, kind_of, is_slice_id, parse_id
+from tasktool.migrate import apply_deltas, compute_deltas, render_diff
 from tasktool.reviewer_gate import check_gate, GateError, GatePass
 from tasktool.notify import notify_tasktool_status
 from tasktool.worktree import (
     AuthorityError,
     find_authoritative_root,
     git_current_branch,
+    same_repository,
     tasklist_has_unsafe_dirty_state,
     tasktool_lock,
     validate_authoritative_checkout,
@@ -30,6 +38,13 @@ class CommandError(RuntimeError):
     pass
 
 DEFAULT_JSON_REL = "docs/tasklist.json"
+UNCONFIGURED_HINT = (
+    "tasktool: this repository has no authoritative-checkout routing configured. "
+    "Run `tasktool config init-authority --branch <branch>` from the authoritative "
+    "checkout to enable safe routing. Existing local-mode tasklists can be reconciled "
+    "with `tasktool config migrate-from-local`. To opt out explicitly, run "
+    "`tasktool config init-local`."
+)
 
 # Process-global toggle for `--no-stage`. Set by cli.main() before dispatch.
 STAGE_AFTER_WRITE: bool = True
@@ -53,6 +68,13 @@ def _today() -> str:
 
 def _tasklist_path(repo_root: Path) -> Path:
     return repo_root / DEFAULT_JSON_REL
+
+def _ensure_authoritative_tasklist_clean(repo_root: Path) -> None:
+    if tasklist_has_unsafe_dirty_state(repo_root):
+        raise CommandError(
+            "authoritative docs/tasklist.json has unstaged changes; "
+            "commit, stash, or normalise them before running tasktool"
+        )
 
 def _load(repo_root: Path) -> Project:
     path = _tasklist_path(repo_root)
@@ -79,6 +101,8 @@ def _notify_status(*, qid: str, kind: str, status: Status, title: str) -> None:
 
 def _resolve_write_root(repo_root: Path) -> tuple[Path, bool, str, str]:
     cfg = load_config(repo_root)
+    if is_authoritative_required(cfg):
+        raise CommandError(UNCONFIGURED_HINT)
     if cfg.tasklist.mutation_mode == "local":
         return repo_root, False, cfg.tasklist.mutation_mode, cfg.tasklist.authoritative_branch
     try:
@@ -108,11 +132,7 @@ def _write_context(repo_root: Path):
                     expected_branch=authoritative_branch,
                     caller_root=repo_root,
                 )
-                if tasklist_has_unsafe_dirty_state(write_root):
-                    raise CommandError(
-                        "authoritative docs/tasklist.json has unstaged changes; "
-                        "commit, stash, or normalise them before running tasktool"
-                    )
+                _ensure_authoritative_tasklist_clean(write_root)
                 if routed:
                     print(
                         f"tasktool: routed mutation to authoritative checkout: {write_root}",
@@ -141,6 +161,185 @@ def cmd_config_init_authority(*, repo_root: Path, branch: str) -> None:
     )
     save_config(repo_root, cfg)
     _git_stage(repo_root, repo_root / ".tasktool" / "config.json")
+
+def cmd_config_init_local(*, repo_root: Path) -> None:
+    cfg = load_config(repo_root)
+    if cfg.tasklist.mutation_mode == "local":
+        return
+    if cfg.tasklist.mutation_mode == "authoritative-checkout":
+        raise CommandError(
+            "tasktool is already configured for authoritative-checkout; "
+            "refusing to overwrite with local mode"
+        )
+    cfg = TasktoolConfig(
+        tasklist=TasklistConfig(
+            mutation_mode="local",
+            authoritative_branch=cfg.tasklist.authoritative_branch,
+        )
+    )
+    save_config(repo_root, cfg)
+    _git_stage(repo_root, repo_root / ".tasktool" / "config.json")
+    print(
+        "tasktool: configured local mutation mode; worktree-side mutations will not be routed.",
+        file=sys.stderr,
+    )
+
+def _git_root(path: Path) -> Path:
+    try:
+        out = _subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            cwd=path,
+            text=True,
+            capture_output=True,
+            check=True,
+        ).stdout.strip()
+    except _subprocess.CalledProcessError as exc:
+        raise CommandError(f"not a git checkout: {path}") from exc
+    return Path(out).resolve()
+
+def _resolve_root_arg(base_root: Path, raw: Path | None) -> Path:
+    if raw is None:
+        return _git_root(base_root)
+    candidate = raw.expanduser()
+    if not candidate.is_absolute():
+        candidate = base_root / candidate
+    return _git_root(candidate.resolve())
+
+def _iter_project_rows(p: Project):
+    yield "<project>", "project", p.project, p
+    for phase in p.phases:
+        yield phase.id, "phase", phase.title, phase
+        for slc in phase.slices:
+            slice_qid = f"{phase.id}.{slc.id}"
+            yield slice_qid, "slice", slc.title, slc
+            for task in slc.tasks:
+                yield f"{slice_qid}.{task.id}", "task", task.title, task
+    for item in p.cross_cutting:
+        yield item.id, "cross", item.title, item
+
+def _notify_migrated_status_transitions(authoritative: Project, row_ids: set[str]) -> None:
+    for qid, kind, title, item in _iter_project_rows(authoritative):
+        if qid in row_ids and hasattr(item, "status"):
+            _notify_status(qid=qid, kind=kind, status=item.status, title=title)
+
+def cmd_config_migrate_from_local(
+    *,
+    repo_root: Path,
+    authority_root: Path | None,
+    local_root: Path | None = None,
+    dry_run: bool = False,
+    accept_local: bool = False,
+    accept_authoritative: bool = False,
+    stdin_is_tty: bool = False,
+) -> None:
+    if authority_root is None:
+        raise CommandError("migrate-from-local requires --authority-root <path>")
+    if accept_local and accept_authoritative:
+        raise CommandError("migrate-from-local accepts only one policy flag")
+
+    authority = _resolve_root_arg(repo_root, authority_root)
+    local = _resolve_root_arg(repo_root, local_root)
+    if not same_repository(authority, local):
+        raise CommandError("authority root and local root are not the same repository")
+
+    cfg = load_config(authority)
+    config_path = authority / ".tasktool" / "config.json"
+    needs_config = is_authoritative_required(cfg)
+    expected_branch = cfg.tasklist.authoritative_branch
+    if needs_config:
+        expected_branch = git_current_branch(authority)
+        if not expected_branch:
+            raise CommandError("authority checkout must be on a branch")
+
+    try:
+        validate_authoritative_checkout(
+            authority,
+            expected_branch=expected_branch,
+            caller_root=local,
+        )
+    except AuthorityError as exc:
+        raise CommandError(str(exc)) from exc
+
+    _ensure_authoritative_tasklist_clean(authority)
+
+    local_project = _load(local)
+    authoritative_project = _load(authority)
+    deltas, conflicts = compute_deltas(local_project, authoritative_project)
+    if not deltas and not conflicts:
+        print("no drift detected")
+        return
+
+    diff_text = render_diff(deltas, conflicts)
+    sys.stdout.write(diff_text)
+    if dry_run:
+        return
+    if not accept_local and not accept_authoritative:
+        if not stdin_is_tty:
+            raise CommandError(
+                "migrate-from-local requires one of --accept-local or "
+                "--accept-authoritative in non-interactive contexts"
+            )
+        choice = input("Accept local, authoritative, or abort? [local/authoritative/abort] ").strip().lower()
+        if choice == "local":
+            accept_local = True
+        elif choice == "authoritative":
+            accept_authoritative = True
+        else:
+            raise CommandError("migrate-from-local aborted")
+    if accept_authoritative:
+        try:
+            with tasktool_lock(authority):
+                _ensure_authoritative_tasklist_clean(authority)
+                authoritative_project = _load(authority)
+                compute_deltas(local_project, authoritative_project)
+        except AuthorityError as exc:
+            raise CommandError(str(exc)) from exc
+        print(
+            f"accepted authoritative tasklist; migrated 0 rows "
+            f"(0 status transitions) to {authority}"
+        )
+        return
+
+    status_transition_rows: set[str] = set()
+    migrated_rows: set[str] = set()
+    try:
+        with tasktool_lock(authority):
+            _ensure_authoritative_tasklist_clean(authority)
+            authoritative_project = _load(authority)
+            deltas, conflicts = compute_deltas(local_project, authoritative_project)
+            status_transition_rows = {
+                delta.row_id
+                for delta in deltas
+                if delta.kind == "field" and delta.field == "status"
+            }
+            migrated_rows = {delta.row_id for delta in deltas}
+            merged = apply_deltas(
+                authoritative=authoritative_project,
+                local=local_project,
+                deltas=deltas,
+                conflicts=conflicts,
+                policy="accept-local",
+            )
+            _save(authority, merged)
+            if needs_config:
+                save_config(
+                    authority,
+                    TasktoolConfig(
+                        tasklist=TasklistConfig(
+                            mutation_mode="authoritative-checkout",
+                            authoritative_branch=expected_branch,
+                        )
+                    ),
+                )
+                _git_stage(authority, config_path)
+            _notify_migrated_status_transitions(merged, status_transition_rows)
+    except AuthorityError as exc:
+        raise CommandError(str(exc)) from exc
+
+    print(
+        f"migrated {len(migrated_rows)} rows "
+        f"({len(status_transition_rows)} status transitions) to {authority}"
+    )
 
 # ───── init ─────
 

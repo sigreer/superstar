@@ -29,7 +29,7 @@ def test_using_git_worktrees_allows_routed_tasktool_writes_from_worktrees() -> N
     assert "tasktool" in text
     assert "implementation worktree" in text
     assert "authoritative-checkout" in text
-    assert "routing is configured" in text
+    assert "configure it with `tasktool config init-authority --branch <main-branch>`" in text
     assert "do not leave the worktree" in text
 
 
