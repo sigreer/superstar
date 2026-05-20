@@ -11,6 +11,20 @@
 
 The remainder of this file is upstream-inherited context. Read it for background; do not treat it as enforceable policy in this fork.
 
+## Releases & version bumps (binding)
+
+This fork is distributed as a versioned plugin. Version strings live in many declared files (`package.json`, `.claude-plugin/plugin.json`, marketplace manifests, etc.) and are kept in sync by `scripts/bump-version.sh`.
+
+**Before committing finished work that ships to users — skill changes, hook changes, tooling changes, anything in `plugins/superstar/`, `skills/`, `hooks/`, or `tools/` — ask the user whether to bump the version.**
+
+- Default question: "Bump the version before/after this commit? (current: X.Y.Z → patch X.Y.(Z+1) / minor X.(Y+1).0 / no bump)"
+- "Finished work" means a slice/phase closeout, a merge-to-`main`, or any standalone fix the user asked you to commit and push. It does NOT mean every in-progress commit on a feature branch.
+- If the user says yes, run `./scripts/bump-version.sh <new-version>`, commit the bump in its own commit titled `Bump Superstar to <new-version>`, and only then run release scripts (`scripts/publish-to-local-codex.sh`, `scripts/sync-to-codex-plugin.sh`).
+- If the user says no, proceed without bumping. Do not silently bump.
+- If a release script is about to run and the version was not bumped since the last release, surface this and ask again before publishing.
+
+Docs-only changes, in-progress work on feature branches, and tasktool tracker mutations do not need a bump.
+
 ---
 
 ## Upstream Contributor Guidelines (reference only — not binding in this fork)
