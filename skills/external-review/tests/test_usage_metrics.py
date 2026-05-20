@@ -47,14 +47,22 @@ def _init_repo(tmp_path):
     return repo
 
 
+def _subprocess_env(tmp_path, **overrides):
+    env = {
+        "PATH": os.environ["PATH"],
+        "AGENT_REVIEWER_STATE_FILE": str(tmp_path / "reviewer-state.json"),
+    }
+    env.update(overrides)
+    return env
+
+
 def test_review_round_records_timing_estimates_and_exact_sidecar_usage(tmp_path):
     repo = _init_repo(tmp_path)
     reviewer = repo / "reviewer.py"
     reviewer.write_text(FAKE_REVIEWER_WITH_USAGE)
     reviewer.chmod(0o755)
 
-    env = os.environ.copy()
-    env["AGENT_REVIEWER_CMD"] = str(reviewer)
+    env = _subprocess_env(tmp_path, AGENT_REVIEWER_CMD=str(reviewer))
     result = subprocess.run(
         [
             sys.executable,
@@ -99,8 +107,7 @@ def test_stats_reports_grouped_round_metrics_and_provider_comparison(tmp_path):
     reviewer = repo / "reviewer.py"
     reviewer.write_text(FAKE_REVIEWER_WITH_USAGE)
     reviewer.chmod(0o755)
-    env = os.environ.copy()
-    env["AGENT_REVIEWER_CMD"] = str(reviewer)
+    env = _subprocess_env(tmp_path, AGENT_REVIEWER_CMD=str(reviewer))
 
     subprocess.run(
         [
@@ -177,6 +184,64 @@ def test_stats_estimates_usage_for_legacy_rounds_from_request_and_response_files
     assert stats["provider_comparison"]["claude"]["round_count"] == 1
     assert stats["provider_comparison"]["claude"]["estimated_input_tokens"] == 10
     assert stats["provider_comparison"]["claude"]["estimated_output_tokens"] == 5
+
+
+def test_stats_counts_each_reviewer_invocation_for_provider_comparison(tmp_path):
+    repo = _init_repo(tmp_path)
+    chain_dir = repo / "docs" / "reviewer" / "sweep-plan"
+    chain_dir.mkdir(parents=True)
+    (chain_dir / "primary-request.md").write_text("a" * 40)
+    (chain_dir / "primary-response.md").write_text("b" * 20)
+    (chain_dir / "sweep-request.md").write_text("c" * 80)
+    (chain_dir / "sweep-response.md").write_text("d" * 40)
+    (chain_dir / "chain.json").write_text(json.dumps({
+        "schema_version": 1,
+        "chain": "sweep-plan",
+        "kind": "plan",
+        "target": "plan.md",
+        "rounds": [{
+            "round": 1,
+            "status": "ok",
+            "returncode": 0,
+            "verdict": "ready",
+            "verdict_valid": True,
+            "request": "primary-request.md",
+            "response": "primary-response.md",
+            "reviewers": [
+                {
+                    "role": "primary",
+                    "provider": "codex",
+                    "duration_ms": 100,
+                    "request": "primary-request.md",
+                    "response": "primary-response.md",
+                    "estimated_usage": {
+                        "estimated_input_tokens": 10,
+                        "estimated_output_tokens": 5,
+                        "estimated_total_tokens": 15,
+                    },
+                },
+                {
+                    "role": "sweep",
+                    "provider": "codex",
+                    "duration_ms": 200,
+                    "request": "sweep-request.md",
+                    "response": "sweep-response.md",
+                    "estimated_usage": {
+                        "estimated_input_tokens": 20,
+                        "estimated_output_tokens": 10,
+                        "estimated_total_tokens": 30,
+                    },
+                },
+            ],
+        }],
+    }))
+
+    stats = er.collect_review_stats(repo / "docs" / "reviewer")
+
+    assert stats["groups"]["plan"]["round_count"] == 1
+    assert stats["provider_comparison"]["codex"]["round_count"] == 2
+    assert stats["provider_comparison"]["codex"]["estimated_total_tokens"] == 45
+    assert stats["provider_comparison"]["codex"]["total_duration_ms"] == 300
 
 
 def test_usage_sidecar_parses_codex_token_count_events(tmp_path):

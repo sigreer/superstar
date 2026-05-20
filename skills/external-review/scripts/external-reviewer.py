@@ -2067,6 +2067,27 @@ def _estimated_usage_for_stats(chain_dir: Path, round_entry: dict) -> dict | Non
         return None
 
 
+def _provider_usage_records_for_stats(chain_dir: Path, round_entry: dict) -> list[dict]:
+    reviewers = round_entry.get("reviewers")
+    if isinstance(reviewers, list) and reviewers:
+        sources = [r for r in reviewers if isinstance(r, dict)]
+    else:
+        sources = [round_entry]
+
+    records = []
+    for source in sources:
+        exact_usage = source.get("exact_usage") if isinstance(source.get("exact_usage"), dict) else {}
+        provider = exact_usage.get("provider") or source.get("provider")
+        estimated = _estimated_usage_for_stats(chain_dir, source)
+        if provider and isinstance(estimated, dict):
+            records.append({
+                "provider": provider,
+                "estimated_usage": estimated,
+                "duration_ms": source.get("duration_ms"),
+            })
+    return records
+
+
 def collect_review_stats(output_dir: Path) -> dict:
     groups = {kind: _empty_stats_group() for kind in STATS_KINDS}
     providers: dict[str, dict] = {}
@@ -2100,10 +2121,10 @@ def collect_review_stats(output_dir: Path) -> dict:
             elif (round_entry.get("merged_verdict") or round_entry.get("verdict")) == "revise":
                 group["revise_count"] += 1
 
-            exact_usage = round_entry.get("exact_usage") if isinstance(round_entry.get("exact_usage"), dict) else {}
-            provider = exact_usage.get("provider") or round_entry.get("provider")
-            estimated = _estimated_usage_for_stats(manifest_path.parent, round_entry)
-            if provider and isinstance(estimated, dict):
+            for record in _provider_usage_records_for_stats(manifest_path.parent, round_entry):
+                provider = record["provider"]
+                estimated = record["estimated_usage"]
+                invocation_duration = record["duration_ms"]
                 provider_stats = providers.setdefault(provider, {
                     "round_count": 0,
                     "estimated_input_tokens": 0,
@@ -2116,8 +2137,8 @@ def collect_review_stats(output_dir: Path) -> dict:
                 provider_stats["estimated_input_tokens"] += int(estimated.get("estimated_input_tokens") or 0)
                 provider_stats["estimated_output_tokens"] += int(estimated.get("estimated_output_tokens") or 0)
                 provider_stats["estimated_total_tokens"] += int(estimated.get("estimated_total_tokens") or 0)
-                if isinstance(duration, (int, float)):
-                    provider_stats["total_duration_ms"] += int(duration)
+                if isinstance(invocation_duration, (int, float)):
+                    provider_stats["total_duration_ms"] += int(invocation_duration)
 
     for group in groups.values():
         if group["round_count"]:

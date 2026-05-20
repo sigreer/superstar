@@ -33,15 +33,14 @@ def _env(tmp_path, provider):
     for p in (response_dir, scratch_dir, repo):
         p.mkdir(parents=True, exist_ok=True)
     target.write_text("# Plan\n")
-    env = os.environ.copy()
-    env.update({
-        "PATH": f"{tmp_path}:{env['PATH']}",
+    env = {
+        "PATH": f"{tmp_path}:{os.environ['PATH']}",
         "AGENT_REVIEWER_PROVIDER": provider,
         "AGENT_REVIEWER_REPO_ROOT": str(repo),
         "AGENT_REVIEWER_RESPONSE_DIR": str(response_dir),
         "AGENT_REVIEWER_SCRATCH_DIR": str(scratch_dir),
         "AGENT_REVIEWER_TARGET_FILE": str(target),
-    })
+    }
     return env
 
 
@@ -88,9 +87,10 @@ def test_claude_wrapper_uses_print_and_plan_mode(tmp_path):
 
 def test_wrapper_fails_when_required_env_missing(tmp_path):
     _fake_bin(tmp_path, "codex")
-    env = os.environ.copy()
-    env["PATH"] = f"{tmp_path}:{env['PATH']}"
-    env["AGENT_REVIEWER_PROVIDER"] = "codex"
+    env = {
+        "PATH": f"{tmp_path}:{os.environ['PATH']}",
+        "AGENT_REVIEWER_PROVIDER": "codex",
+    }
     result = subprocess.run([str(WRAPPER)], input="x", env=env, text=True, capture_output=True, timeout=20)
     assert result.returncode == 2
     assert "AGENT_REVIEWER_REPO_ROOT" in result.stderr

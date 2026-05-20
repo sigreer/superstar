@@ -186,7 +186,7 @@ Manual-approved (`status: "manual-approved"`) and human-bridged (`status: "human
 |---|---|
 | `external-reviewer manual-approve ...` | Record an operator-approved closure on the chain. |
 | `external-reviewer ingest-response ...` | Write an externally-obtained reviewer response into the chain. |
-| `external-reviewer stats [--json]` | Summarize review-chain timing and usage estimates from `docs/reviewer/**/chain.json`. |
+| `external-reviewer stats [--json]` | Summarize review-chain timing and usage estimates from `docs/reviewer/**/chain.json`. Provider comparison counts reviewer invocations, including sweeps. |
 | `external-reviewer show-limit` | Print the current `~/.config/superstar/reviewer-state.json` content. |
 | `external-reviewer clear-limit [--reviewer-cmd X]` | Clear the limit entry (for a single reviewer or all). Idempotent. |
 
