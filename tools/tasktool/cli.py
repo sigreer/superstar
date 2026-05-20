@@ -28,6 +28,7 @@ def _build_parser() -> argparse.ArgumentParser:
     config_sub = p_config.add_subparsers(dest="config_cmd", required=True)
     p_config_auth = config_sub.add_parser("init-authority")
     p_config_auth.add_argument("--branch", default="main")
+    config_sub.add_parser("init-local")
 
     p_init = sub.add_parser("init")
     p_init.add_argument("--project", default=None,
@@ -193,6 +194,8 @@ def main(argv: list[str]) -> int:
                     repo_root=root,
                     branch=args.branch,
                 )
+            elif args.config_cmd == "init-local":
+                commands.cmd_config_init_local(repo_root=root)
         elif args.cmd == "init":
             commands.cmd_init(repo_root=root, project=args.project, north_star=args.north_star, force=args.force)
         elif args.cmd == "create":

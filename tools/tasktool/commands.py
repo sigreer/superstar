@@ -157,6 +157,28 @@ def cmd_config_init_authority(*, repo_root: Path, branch: str) -> None:
     save_config(repo_root, cfg)
     _git_stage(repo_root, repo_root / ".tasktool" / "config.json")
 
+def cmd_config_init_local(*, repo_root: Path) -> None:
+    cfg = load_config(repo_root)
+    if cfg.tasklist.mutation_mode == "local":
+        return
+    if cfg.tasklist.mutation_mode == "authoritative-checkout":
+        raise CommandError(
+            "tasktool is already configured for authoritative-checkout; "
+            "refusing to overwrite with local mode"
+        )
+    cfg = TasktoolConfig(
+        tasklist=TasklistConfig(
+            mutation_mode="local",
+            authoritative_branch=cfg.tasklist.authoritative_branch,
+        )
+    )
+    save_config(repo_root, cfg)
+    _git_stage(repo_root, repo_root / ".tasktool" / "config.json")
+    print(
+        "tasktool: configured local mutation mode; worktree-side mutations will not be routed.",
+        file=sys.stderr,
+    )
+
 # ───── init ─────
 
 def cmd_init(*, repo_root: Path, project: str | None = None, north_star: str = "", force: bool = False) -> None:
