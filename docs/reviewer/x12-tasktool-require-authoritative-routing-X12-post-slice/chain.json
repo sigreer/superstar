@@ -67,10 +67,67 @@
       "base_ref": null,
       "base_ref_source": null,
       "diff_included": false
+    },
+    {
+      "round": 2,
+      "reviewers": [
+        {
+          "role": "primary",
+          "sweep_group": null,
+          "parent_round": 2,
+          "request": "r2-2026-05-20T1530-primary-request.md",
+          "response": "r2-2026-05-20T1530-primary-response.md",
+          "verdict": "ready",
+          "verdict_valid": true,
+          "returncode": 0,
+          "status": "ok",
+          "provider": "custom",
+          "caller_provider": "unknown",
+          "sandbox": null
+        },
+        {
+          "role": "sweep",
+          "sweep_group": 1,
+          "parent_round": 2,
+          "request": "r2-2026-05-20T1530-sweep1-request.md",
+          "response": "r2-2026-05-20T1530-sweep1-response.md",
+          "verdict": "ready with small edits",
+          "verdict_valid": true,
+          "returncode": 0,
+          "status": "ok",
+          "provider": "codex",
+          "caller_provider": "codex",
+          "sandbox": {
+            "repo_root": "/home/simon/Dev/sigreer/skills/superstar/.worktrees/x12-tasktool-authority",
+            "scratch_dir": "/tmp/superstar-reviewer-x12-tasktool-require-authoritative-routing-X12-post-slice-r2-sweep1-uy7ru8ck",
+            "response_dir": "docs/reviewer/x12-tasktool-require-authoritative-routing-X12-post-slice/.reviewer-output/r2-sweep1",
+            "mode": "workspace-write-with-read-access"
+          }
+        }
+      ],
+      "status": "ok",
+      "returncode": 0,
+      "merged_verdict": "ready with small edits",
+      "merged_findings": "r2-merged-findings.md",
+      "request": "r2-2026-05-20T1530-primary-request.md",
+      "response": "r2-2026-05-20T1530-primary-response.md",
+      "resolution": "r1-resolution.md",
+      "resolution_parse_status": "partial",
+      "resolution_waiver": false,
+      "head_sha_at_request": "6f8092d4a2f9fde18a9bc664017da02d38c0c4e0",
+      "head_sha_after_round": "6f8092d4a2f9fde18a9bc664017da02d38c0c4e0",
+      "worktree_dirty_at_request": false,
+      "verdict": "ready",
+      "verdict_valid": true,
+      "findings_count": 3,
+      "blocking_findings_count": 2,
+      "base_ref": "f966d23316b7254dca58b8c9610960449f143c03",
+      "base_ref_source": "auto",
+      "diff_included": true
     }
   ],
   "sweep_checkpoints": {
     "first-round": "completed",
-    "final-ready": "pending"
+    "final-ready": "completed"
   }
 }
