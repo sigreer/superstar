@@ -35,6 +35,30 @@ EOF
 """
 
 
+FAKE_REVIEWER_BARE_HEADING_STYLE = """#!/usr/bin/env bash
+cat <<'EOF'
+## Findings
+none
+
+**Verdict**
+
+ready with small edits
+EOF
+"""
+
+
+def test_bare_heading_style_verdict_parses(tmp_path):
+    """Claude commonly emits `**Verdict**\\n\\nvalue` (no `Overall`).
+
+    The bare form must normalise the same way the `Overall verdict` heading
+    style does, so end-to-end the round records verdict_valid=True.
+    """
+    payload = _run(FAKE_REVIEWER_BARE_HEADING_STYLE, tmp_path)
+    assert payload["verdict"] == "ready with small edits"
+    assert payload["verdict_valid"] is True
+    assert payload["merged_verdict"] == "ready with small edits"
+
+
 def _run(reviewer_script: str, tmp_path):
     repo = tmp_path / "repo"; repo.mkdir()
     subprocess.run(["git", "-C", str(repo), "init", "-q"], check=True)
