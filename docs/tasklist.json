@@ -178,7 +178,8 @@
       "id": "X12",
       "notes": "",
       "refs": [
-        "docs/specs/2026-05-20-X12-tasktool-require-authoritative-routing-design.md"
+        "docs/specs/2026-05-20-X12-tasktool-require-authoritative-routing-design.md",
+        "docs/plans/2026-05-20-X12-tasktool-require-authoritative-routing.md"
       ],
       "started": null,
       "status": "ready",
