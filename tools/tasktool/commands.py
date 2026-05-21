@@ -1914,3 +1914,21 @@ def cmd_worktree_adopt(*, repo_root: Path, id: str, path: Path) -> None:
         # Adopt clears a previously recorded pruned-at marker; it represents a fresh association.
         item.worktree_pruned_at = None
         _save(write_root, p)
+
+
+def cmd_worktree_ensure_gitignore(*, repo_root: Path) -> str:
+    from tasktool.worktree_lifecycle import ensure_gitignore_entry
+    changed = ensure_gitignore_entry(repo_root)
+    return "added .worktrees/ to .gitignore\n" if changed else ".worktrees/ already ignored\n"
+
+
+def cmd_worktree_check_legacy(*, repo_root: Path, project_name: str) -> tuple[str, int]:
+    from tasktool.worktree_lifecycle import legacy_worktree_dirs
+    import os
+    home = Path(os.path.expanduser("~"))
+    found = legacy_worktree_dirs(repo_root, home=home, project_name=project_name)
+    if not found:
+        return ("no legacy worktree directories detected\n", 0)
+    lines = ["legacy worktree directories detected (warn-only, not removed):"]
+    lines.extend(f"  - {p}" for p in found)
+    return ("\n".join(lines) + "\n", 1)

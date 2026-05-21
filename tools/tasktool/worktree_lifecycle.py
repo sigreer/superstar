@@ -149,3 +149,42 @@ def is_inside_linked_worktree(cwd: Path) -> bool:
     except subprocess.CalledProcessError:
         return False
     return Path(gd).resolve() != Path(cd).resolve()
+
+
+def legacy_worktree_dirs(
+    repo_root: Path,
+    *,
+    home: Path,
+    project_name: str,
+) -> list[Path]:
+    """Return any legacy per-harness worktree directories that exist.
+
+    Spec §5.4. Used by `project-setup` to warn the operator. Tasktool does
+    NOT delete or move anything — this is detection only. Removal is
+    scheduled one minor version after P5 ships.
+    """
+    candidates = [
+        repo_root / ".claude" / "worktrees",
+        repo_root / ".codex" / "worktrees",
+        home / ".config" / "superstar" / "worktrees" / project_name,
+    ]
+    return [c for c in candidates if c.exists()]
+
+
+def ensure_gitignore_entry(repo_root: Path, *, entry: str = ".worktrees/") -> bool:
+    """Ensure `entry` (default `.worktrees/`) is a literal line in `<repo>/.gitignore`.
+
+    Idempotent: returns True when the file was created or the line was appended,
+    False when the line was already present. Used by `project-setup` row 1d.
+    """
+    gi = repo_root / ".gitignore"
+    if not gi.exists():
+        gi.write_text(entry + "\n")
+        return True
+    text = gi.read_text()
+    lines = text.splitlines()
+    if any(line.strip() == entry.rstrip("/") or line.strip() == entry for line in lines):
+        return False
+    sep = "" if text.endswith("\n") else "\n"
+    gi.write_text(text + sep + entry + "\n")
+    return True

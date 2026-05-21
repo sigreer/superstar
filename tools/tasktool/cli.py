@@ -111,6 +111,9 @@ def _build_parser() -> argparse.ArgumentParser:
     p_wt_adopt = wt_sub.add_parser("adopt")
     p_wt_adopt.add_argument("id")
     p_wt_adopt.add_argument("path")
+    wt_sub.add_parser("ensure-gitignore")
+    p_wt_legacy = wt_sub.add_parser("check-legacy")
+    p_wt_legacy.add_argument("--project", required=True)
 
     p_close = sub.add_parser("close")
     p_close.add_argument("id")
@@ -343,6 +346,13 @@ def main(argv: list[str]) -> int:
                 sys.stdout.write(commands.cmd_worktree_status(repo_root=root, id=args.id))
             elif args.wt_cmd == "adopt":
                 commands.cmd_worktree_adopt(repo_root=root, id=args.id, path=Path(args.path))
+            elif args.wt_cmd == "ensure-gitignore":
+                sys.stdout.write(commands.cmd_worktree_ensure_gitignore(repo_root=root))
+            elif args.wt_cmd == "check-legacy":
+                text, rc = commands.cmd_worktree_check_legacy(repo_root=root, project_name=args.project)
+                sys.stdout.write(text)
+                if rc != 0:
+                    return rc
         elif args.cmd == "close":
             refs = _comma_split(args.refs) or None
             commands.cmd_close(

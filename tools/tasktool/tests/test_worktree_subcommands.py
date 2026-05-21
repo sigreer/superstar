@@ -170,6 +170,35 @@ def test_worktree_adopt_refuses_to_overwrite_live_record(tmp_path):
     assert "already" in (r.stdout + r.stderr)
 
 
+def test_worktree_ensure_gitignore_idempotent_via_cli(tmp_path):
+    root = tmp_path / "repo"
+    root.mkdir()
+    r1 = run(root, "worktree", "ensure-gitignore")
+    assert r1.returncode == 0, r1.stdout + r1.stderr
+    assert "added .worktrees/ to .gitignore" in r1.stdout
+    r2 = run(root, "worktree", "ensure-gitignore")
+    assert r2.returncode == 0, r2.stdout + r2.stderr
+    assert "already ignored" in r2.stdout
+    assert (root / ".gitignore").read_text().count(".worktrees/\n") == 1
+
+
+def test_worktree_check_legacy_via_cli(tmp_path, monkeypatch):
+    root = tmp_path / "repo"
+    root.mkdir()
+    fake_home = tmp_path / "home"
+    fake_home.mkdir()
+    monkeypatch.setenv("HOME", str(fake_home))
+    r = run(root, "worktree", "check-legacy", "--project", "demo")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "no legacy worktree directories detected" in r.stdout
+    # Create a legacy dir; CLI should now exit non-zero and list it.
+    (root / ".claude" / "worktrees").mkdir(parents=True)
+    r2 = run(root, "worktree", "check-legacy", "--project", "demo")
+    assert r2.returncode != 0
+    assert "legacy worktree directories detected" in r2.stdout
+    assert ".claude/worktrees" in r2.stdout
+
+
 def test_worktree_adopt_overwrites_dead_record(tmp_path):
     root = seed_with_started_slice(tmp_path)
     # Kill the live worktree but keep the branch
