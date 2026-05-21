@@ -230,3 +230,15 @@ def test_prune_happy_path(project_with_worktree):
     # Audit fields recorded.
     show = _tasktool(repo, "show", "P1.S1").stdout
     assert "worktree_pruned_at" in show
+
+
+def test_prune_keep_branch_leaves_branch(project_with_worktree):
+    repo, wt = project_with_worktree
+    _tasktool(repo, "close", "P1.S1", "--skip-review-gate")
+    _run(repo, "git", "merge", "--no-ff", "-q", "-m", "m",
+         "worktree-p1-s1-first-slice")
+    res = _tasktool(repo, "worktree", "prune", "P1.S1", "--keep-branch")
+    assert res.returncode == 0
+    assert not wt.exists()
+    from tasktool.worktree import branch_exists
+    assert branch_exists(repo, "worktree-p1-s1-first-slice") is True
