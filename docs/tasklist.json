@@ -292,9 +292,10 @@
           "plan_path": "docs/plans/2026-05-21-P5-S2-prune-and-repair.md",
           "planning_status": "proposed",
           "refs": [
-            "docs/plans/2026-05-21-P5-S2-prune-and-repair.md"
+            "docs/plans/2026-05-21-P5-S2-prune-and-repair.md",
+            "docs/reviewer/p5-s2-prune-and-repair-plan"
           ],
-          "reviewer_chain": null,
+          "reviewer_chain": "docs/reviewer/p5-s2-prune-and-repair-plan",
           "started": null,
           "status": "ready",
           "tasks": [],

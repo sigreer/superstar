@@ -1,0 +1,35 @@
+1. Findings
+
+F1. RESOLVED — The plan still treats P5.S1 as a hard precondition and gives stop conditions for missing lifecycle state or CLI surface. Current repo state remains `P5.S1`/`P5.S2` as `ready` + `proposed`, and current `tasktool` still lacks `worktree` plus `start --in-place/--adopt/--ad-hoc`, but Task -1 correctly blocks execution before implementation (`docs/plans/2026-05-21-P5-S2-prune-and-repair.md:15`, `:48`).
+
+F2. RESOLVED — Serialization handling remains aligned with current `asdict(p)` emit behavior and keyword-based load behavior. The plan explicitly adds only load-path kwargs and normalizes `docs/tasklist.json` afterward (`docs/plans/2026-05-21-P5-S2-prune-and-repair.md:198`, `tools/tasktool/serialize.py:11`).
+
+F3. RESOLVED — The stash guard plan includes both unrelated-stash and same-branch-stash coverage, matching the “attributable to the worktree” intent (`docs/plans/2026-05-21-P5-S2-prune-and-repair.md:444`, `:466`).
+
+F4. RESOLVED — The parent branch helper now reads `.tasktool/config.json` through `load_config(...).tasklist.authoritative_branch`, with only the config default carrying `main` (`docs/plans/2026-05-21-P5-S2-prune-and-repair.md:935`).
+
+F5. RESOLVED — In-place prune lifecycle has explicit test coverage for no disk side effect plus audit recording (`docs/plans/2026-05-21-P5-S2-prune-and-repair.md:727`).
+
+F6. RESOLVED — Task 10 no longer depends on unsupported top-level `tasktool list --all`. It now discovers active ad-hoc cross rows via `tasktool list --kind cross`, which matches the current CLI surface (`docs/plans/2026-05-21-P5-S2-prune-and-repair.md:1261`, `:1277`; `tools/tasktool/cli.py:211`).
+
+F7. RESOLVED — The final pre-commit gate no longer masks failures with `|| true`. It now checks whether `pre-commit` is installed, runs it normally when present, and states that failures block progress (`docs/plans/2026-05-21-P5-S2-prune-and-repair.md:1535`).
+
+2. Open questions / assumptions
+
+- I am treating current unshipped P5.S1/P5.S2 state as acceptable for plan review because the plan has explicit preflight stop conditions.
+- The spec still mentions top-level `tasktool list --all` for ad-hoc visibility, while current CLI does not support it. This no longer breaks this P5.S2 plan after the Task 10 edit, but it remains a P5.S1/spec alignment detail.
+
+3. Suggested document edits
+
+- Optional: add one sentence near the Task 10 note saying it intentionally uses `list --kind cross` rather than top-level `list --all` because P5.S2 does not rely on a top-level `--all` contract.
+
+4. Verification gaps / commands that should be run
+
+- `tools/tasktool/tasktool show P5.S1`
+- `tools/tasktool/tasktool show P5.S2`
+- `tools/tasktool/tasktool worktree --help`
+- `tools/tasktool/tasktool start --help`
+- `tools/tasktool/tasktool list --help`
+- Once P5.S1 is actually shipped: `python -m pytest tools/tasktool/tests/test_worktree_prune.py -q -k ad_hoc`
+
+Overall verdict: ready
