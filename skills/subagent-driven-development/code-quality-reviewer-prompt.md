@@ -10,6 +10,21 @@ Use this template when dispatching a code quality reviewer subagent.
 Task tool (general-purpose):
   Use template at requesting-internal-review/code-reviewer.md
 
+  ## Subagent Role (mandatory)
+
+  You were dispatched by a coordinator. The first command you run in any
+  shell you open MUST be:
+
+  ```sh
+  export SUPERSTAR_SUBAGENT_ROLE=code-quality-reviewer
+  ```
+
+  This is a load-bearing signal. The tasktool CLI uses it to refuse
+  `tasktool start <id>` (slice creation belongs to the parent). Do not
+  unset it; do not start the slice yourself; do not run `tasktool start`
+  at all. If you need to record progress, use `tasktool note`,
+  `tasktool ref`, or ask the coordinator.
+
   DESCRIPTION: [task summary, from implementer's report]
   PLAN_OR_REQUIREMENTS: Task N from [plan-file]
   BASE_SHA: [commit before task]

@@ -8,8 +8,22 @@ TOOL = Path(__file__).resolve().parents[2] / "tasktool" / "__main__.py"
 PYTHONPATH = str(Path(__file__).resolve().parents[2])
 
 
+_SUBAGENT_GUARD_VARS = (
+    "SUPERSTAR_SUBAGENT_ROLE",
+    "CLAUDE_AGENT_ROLE",
+    "SUPERSTAR_FORCE_SUBAGENT",
+)
+
+
 def run(root, *args):
+    """Run tasktool in a child process. Strips ambient subagent-guard env vars
+    so positive lifecycle tests pass even when invoked from a shell that
+    followed the dispatched-subagent prompt directive (e.g. an implementer
+    subagent that exported SUPERSTAR_SUBAGENT_ROLE=implementer before running
+    pytest). Tests that need to exercise the guard use `_run_with_env`."""
     env = os.environ.copy()
+    for k in _SUBAGENT_GUARD_VARS:
+        env.pop(k, None)
     env["PYTHONPATH"] = PYTHONPATH + os.pathsep + env.get("PYTHONPATH", "")
     return subprocess.run(
         [sys.executable, str(TOOL), "--project-root", str(root), *args],
@@ -204,3 +218,169 @@ def test_set_done_started_slice_records_reviewer_chain(tmp_path):
     sl = tasklist(tmp_path)["phases"][0]["slices"][0]
     assert sl["status"] == "done"
     assert sl["reviewer_chain"] == "docs/reviewer/p1-s1-post-slice"
+
+
+REFUSAL_MARKER = "Subagents must inherit the parent's worktree"
+
+REFUSAL_SPEC_SENTENCE_TEMPLATE = (
+    "Subagents must inherit the parent's worktree; call the parent or "
+    "'cd' into the existing recorded path: {worktree_path}."
+)
+
+
+def _run_with_env(root, *args, extra_env=None):
+    env = os.environ.copy()
+    env["PYTHONPATH"] = PYTHONPATH + os.pathsep + env.get("PYTHONPATH", "")
+    if extra_env:
+        for k, v in extra_env.items():
+            if v is None:
+                env.pop(k, None)
+            else:
+                env[k] = v
+    return subprocess.run(
+        [sys.executable, str(TOOL), "--project-root", str(root), *args],
+        text=True,
+        capture_output=True,
+        env=env,
+    )
+
+
+def test_start_refuses_when_superstar_subagent_role_set(tmp_path):
+    seed(tmp_path)
+    r = _run_with_env(
+        tmp_path, "start", "P1.S1",
+        extra_env={"SUPERSTAR_SUBAGENT_ROLE": "implementer"},
+    )
+    assert r.returncode != 0, r.stdout + r.stderr
+    assert REFUSAL_MARKER in (r.stderr + r.stdout)
+
+
+def test_start_refuses_when_claude_agent_role_is_subagent(tmp_path):
+    seed(tmp_path)
+    r = _run_with_env(
+        tmp_path, "start", "P1.S1",
+        extra_env={
+            "SUPERSTAR_SUBAGENT_ROLE": None,
+            "CLAUDE_AGENT_ROLE": "subagent",
+        },
+    )
+    assert r.returncode != 0, r.stdout + r.stderr
+    assert REFUSAL_MARKER in (r.stderr + r.stdout)
+
+
+def test_start_proceeds_when_claude_agent_role_is_coordinator(tmp_path):
+    seed(tmp_path)
+    r = _run_with_env(
+        tmp_path, "start", "P1.S1",
+        extra_env={
+            "SUPERSTAR_SUBAGENT_ROLE": None,
+            "CLAUDE_AGENT_ROLE": "coordinator",
+        },
+    )
+    assert r.returncode == 0, r.stdout + r.stderr
+
+
+def test_start_proceeds_when_claude_agent_role_is_main(tmp_path):
+    seed(tmp_path)
+    r = _run_with_env(
+        tmp_path, "start", "P1.S1",
+        extra_env={
+            "SUPERSTAR_SUBAGENT_ROLE": None,
+            "CLAUDE_AGENT_ROLE": "main",
+        },
+    )
+    assert r.returncode == 0, r.stdout + r.stderr
+
+
+def test_start_refuses_when_force_subagent_set(tmp_path):
+    seed(tmp_path)
+    r = _run_with_env(
+        tmp_path, "start", "P1.S1",
+        extra_env={
+            "SUPERSTAR_SUBAGENT_ROLE": None,
+            "CLAUDE_AGENT_ROLE": None,
+            "SUPERSTAR_FORCE_SUBAGENT": "1",
+        },
+    )
+    assert r.returncode != 0, r.stdout + r.stderr
+    assert REFUSAL_MARKER in (r.stderr + r.stdout)
+
+
+def test_start_proceeds_in_plain_shell(tmp_path):
+    seed(tmp_path)
+    r = _run_with_env(
+        tmp_path, "start", "P1.S1",
+        extra_env={
+            "SUPERSTAR_SUBAGENT_ROLE": None,
+            "CLAUDE_AGENT_ROLE": None,
+            "SUPERSTAR_FORCE_SUBAGENT": None,
+        },
+    )
+    assert r.returncode == 0, r.stdout + r.stderr
+
+
+def test_start_signal_precedence_superstar_wins(tmp_path):
+    seed(tmp_path)
+    r = _run_with_env(
+        tmp_path, "start", "P1.S1",
+        extra_env={
+            "SUPERSTAR_SUBAGENT_ROLE": "implementer",
+            "CLAUDE_AGENT_ROLE": "coordinator",
+        },
+    )
+    assert r.returncode != 0, (
+        "SUPERSTAR_SUBAGENT_ROLE must win over CLAUDE_AGENT_ROLE=coordinator"
+    )
+    assert REFUSAL_MARKER in (r.stderr + r.stdout)
+
+
+def test_start_refusal_message_matches_spec_verbatim(tmp_path):
+    seed(tmp_path)
+    r = _run_with_env(
+        tmp_path, "start", "P1.S1",
+        extra_env={"SUPERSTAR_SUBAGENT_ROLE": "implementer"},
+    )
+    assert r.returncode != 0
+    expected_sentence = REFUSAL_SPEC_SENTENCE_TEMPLATE.format(
+        worktree_path="<not recorded>"
+    )
+    combined = r.stderr + r.stdout
+    assert expected_sentence in combined, (
+        f"refusal message must contain the spec sentence verbatim "
+        f"(including trailing period). Looking for:\n  {expected_sentence!r}\n"
+        f"Got:\n{combined!r}"
+    )
+
+
+def test_start_env_i_bash_subshell_proceeds(tmp_path):
+    seed(tmp_path)
+    cmd = (
+        f"PATH={os.environ.get('PATH','')} "
+        f"PYTHONPATH={PYTHONPATH} "
+        f"{sys.executable} {TOOL} --project-root {tmp_path} start P1.S1"
+    )
+    r = subprocess.run(
+        ["env", "-i", "bash", "-c", cmd],
+        text=True, capture_output=True,
+    )
+    assert r.returncode == 0, r.stdout + r.stderr
+
+
+def test_run_helper_strips_ambient_subagent_guard_env(tmp_path, monkeypatch):
+    """Regression: a dispatched subagent that follows the prompt directive
+    `export SUPERSTAR_SUBAGENT_ROLE=implementer` and then runs pytest should
+    still see positive lifecycle tests pass. The `run` helper scrubs the
+    three guard env vars so the test subprocess does not inherit them.
+    Sweep S1.F1 (post-slice r2)."""
+    monkeypatch.setenv("SUPERSTAR_SUBAGENT_ROLE", "implementer")
+    monkeypatch.setenv("CLAUDE_AGENT_ROLE", "subagent")
+    monkeypatch.setenv("SUPERSTAR_FORCE_SUBAGENT", "1")
+    seed(tmp_path)
+    r = run(tmp_path, "start", "P1.S1")
+    assert r.returncode == 0, (
+        f"`run` helper must strip ambient subagent-guard env so positive "
+        f"lifecycle tests pass under a dispatched-subagent shell. "
+        f"stdout={r.stdout!r} stderr={r.stderr!r}"
+    )
+    sl = tasklist(tmp_path)["phases"][0]["slices"][0]
+    assert sl["status"] == "in_progress"

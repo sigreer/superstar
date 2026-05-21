@@ -27,16 +27,6 @@ def test_tasklist_discipline_documents_authority_and_start_workflow() -> None:
     assert "archived x ids are still reserved" in text.lower()
 
 
-def test_using_git_worktrees_allows_routed_tasktool_writes_from_worktrees() -> None:
-    text = skill_text("using-git-worktrees")
-
-    assert "tasktool" in text
-    assert "implementation worktree" in text
-    assert "authoritative-checkout" in text
-    assert "configure it with `tasktool config init-authority --branch <main-branch>`" in text
-    assert "do not leave the worktree" in text
-
-
 def test_subagent_driven_development_starts_slice_before_dispatch() -> None:
     text = skill_text("subagent-driven-development")
 
@@ -76,3 +66,86 @@ def test_planning_skills_reference_artifact_transactions() -> None:
     assert "tasktool artifact status" in writing
     assert "workflow artifacts" in discipline
     assert "tasktool artifact add" in review
+
+
+def test_using_git_worktrees_is_thin_and_has_subagent_stop_block() -> None:
+    text = skill_text("using-git-worktrees")
+    lines = text.splitlines()
+    assert len(lines) <= 40, (
+        f"using-git-worktrees SKILL.md must be <=40 lines (spec §5.5); "
+        f"got {len(lines)}"
+    )
+    assert "<SUBAGENT-STOP>" in text, "missing <SUBAGENT-STOP> opening tag"
+    assert "</SUBAGENT-STOP>" in text, "missing </SUBAGENT-STOP> closing tag"
+    # The block must precede the human-facing heading.
+    assert text.index("<SUBAGENT-STOP>") < text.index("# Using Git Worktrees")
+
+
+def test_using_git_worktrees_points_at_tasktool_start() -> None:
+    text = skill_text("using-git-worktrees")
+    assert "tasktool start" in text, "skill must instruct calling tasktool start"
+    assert "--in-place" in text, "skill must document the --in-place opt-out"
+
+
+def test_using_git_worktrees_has_no_forbidden_sections() -> None:
+    text = skill_text("using-git-worktrees")
+    forbidden = ["## Quick Reference", "## Common Mistakes", "## Red Flags",
+                 "### 1a.", "### 1b.", "## Step 0", "## Step 1", "## Step 3", "## Step 4"]
+    for marker in forbidden:
+        assert marker not in text, (
+            f"forbidden section/heading present (spec §5.5 forbids it): {marker!r}"
+        )
+
+
+def test_using_git_worktrees_references_submodules_doc() -> None:
+    text = skill_text("using-git-worktrees")
+    assert "references/submodules.md" in text, (
+        "skill must point at references/submodules.md for the submodule guard"
+    )
+    from pathlib import Path
+    submod = Path(__file__).resolve().parents[3] / "skills" / "using-git-worktrees" / "references" / "submodules.md"
+    assert submod.is_file(), f"references/submodules.md must exist at {submod}"
+
+
+def test_using_git_worktrees_matches_token_budget_fixture() -> None:
+    """Token-budget regression. If you must edit the skill, update the fixture
+    in the same commit so the diff is visible in review. Spec P5.S3 §6."""
+    from pathlib import Path
+    live = (Path(__file__).resolve().parents[3]
+            / "skills" / "using-git-worktrees" / "SKILL.md").read_text()
+    fixture = (Path(__file__).resolve().parent / "fixtures"
+               / "p5_s3_skill_body.txt").read_text()
+    def norm(s: str) -> str:
+        return "\n".join(line.rstrip() for line in s.splitlines())
+    assert norm(live) == norm(fixture), (
+        "using-git-worktrees SKILL.md drifted from the P5.S3 token-budget "
+        "fixture. If this is intentional, update "
+        "tools/tasktool/tests/fixtures/p5_s3_skill_body.txt in the same commit."
+    )
+
+
+def test_subagent_early_exit_load_matches_fixture() -> None:
+    """Spec §6 P5.S3 transcript regression. A compliant subagent loads only
+    the bytes inside the <SUBAGENT-STOP> ... </SUBAGENT-STOP> block."""
+    from pathlib import Path
+    live = (Path(__file__).resolve().parents[3]
+            / "skills" / "using-git-worktrees" / "SKILL.md").read_text()
+    start_tag = "<SUBAGENT-STOP>"
+    end_tag = "</SUBAGENT-STOP>"
+    assert start_tag in live and end_tag in live, "early-exit tags missing"
+    start = live.index(start_tag)
+    end = live.index(end_tag) + len(end_tag)
+    span = live[start:end]
+
+    fixture = (Path(__file__).resolve().parent / "fixtures"
+               / "p5_s3_subagent_load.txt").read_text()
+    assert span == fixture, (
+        "subagent early-exit span drifted from the P5.S3 transcript fixture. "
+        "Update tools/tasktool/tests/fixtures/p5_s3_subagent_load.txt in the "
+        "same commit and explain the behavior change in the commit message."
+    )
+
+    assert len(span) < len(live), "early-exit span must be a proper subset"
+    assert "tasktool start" in span and (
+        "do not call" in span.lower() or "do not" in span.lower()
+    ), "early-exit block must forbid `tasktool start` from a subagent"

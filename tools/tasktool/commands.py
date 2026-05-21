@@ -2,6 +2,7 @@
 from __future__ import annotations
 import datetime as _dt
 import json as _json
+import os as _os
 import sys
 import subprocess as _subprocess
 from contextlib import contextmanager
@@ -677,6 +678,49 @@ def _archive_cross_at_root(
     archive_path.write_text("\n".join(summary_lines), encoding="utf-8")
     return archive_path, archive_rel
 
+_SUBAGENT_REFUSAL = (
+    "Subagents must inherit the parent's worktree; call the parent or "
+    "'cd' into the existing recorded path: {worktree_path}."
+)
+
+
+def _subagent_signal() -> str | None:
+    """Return the name of the first env signal indicating dispatched-subagent
+    status, in precedence order, or None if no signal is present.
+
+    Precedence (spec §5.3):
+      1. SUPERSTAR_SUBAGENT_ROLE  -- any non-empty value
+      2. CLAUDE_AGENT_ROLE        -- any value other than 'coordinator' / 'main'
+      3. SUPERSTAR_FORCE_SUBAGENT -- value == '1' (test-only override)
+
+    No fingerprinting fallback. Absence of all three signals = not a subagent.
+    """
+    role = _os.environ.get("SUPERSTAR_SUBAGENT_ROLE", "")
+    if role.strip():
+        return "SUPERSTAR_SUBAGENT_ROLE"
+    claude_role = _os.environ.get("CLAUDE_AGENT_ROLE", "").strip().lower()
+    if claude_role and claude_role not in {"coordinator", "main"}:
+        return "CLAUDE_AGENT_ROLE"
+    if _os.environ.get("SUPERSTAR_FORCE_SUBAGENT", "") == "1":
+        return "SUPERSTAR_FORCE_SUBAGENT"
+    return None
+
+
+def _lookup_worktree_path_for_refusal(repo_root: Path, id: str | None) -> str:
+    """Best-effort lookup of the slice's recorded worktree_path for inclusion
+    in the subagent refusal message. Never raises; returns '<not recorded>' on
+    any failure."""
+    if not id:
+        return "<not recorded>"
+    try:
+        with _write_context(repo_root) as write_root:
+            p = _load(write_root)
+            _qid, _container, item = _find_item(p, id)
+            return getattr(item, "worktree_path", None) or "<not recorded>"
+    except Exception:
+        return "<not recorded>"
+
+
 def cmd_start(
     *,
     repo_root: Path,
@@ -686,6 +730,13 @@ def cmd_start(
     adopt: str | None = None,
     ad_hoc: str | None = None,
 ) -> None:
+    signal = _subagent_signal()
+    if signal is not None:
+        worktree_path = _lookup_worktree_path_for_refusal(repo_root, id)
+        raise CommandError(
+            _SUBAGENT_REFUSAL.format(worktree_path=worktree_path)
+            + f" [signal: {signal}]"
+        )
     if ad_hoc is not None:
         # Reject a positional id alongside --ad-hoc at the command layer too,
         # so the rejection holds even when callers reach cmd_start without going

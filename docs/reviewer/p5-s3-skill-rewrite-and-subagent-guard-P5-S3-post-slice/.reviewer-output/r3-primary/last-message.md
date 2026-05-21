@@ -1,0 +1,27 @@
+1. Findings
+
+F1 — RESOLVED — Severity: blocking — P5.S3 still records the required lifecycle evidence: `status: in_progress`, `started: 2026-05-21`, `reviewer_chain`, and the worktree branch/path are present in `docs/tasklist.json` lines 320-331. `tools/tasktool/tasktool show P5.S3` reports the same state.
+
+F2 — RESOLVED — Severity: important — The post-slice reviewer chain remains registered on the row via `refs` and `reviewer_chain` in `docs/tasklist.json` lines 320-325. `tools/tasktool/tasktool artifact status P5.S3 --strict` reports `artifact status: ok`.
+
+S1.F1 — RESOLVED — Severity: blocking — The lifecycle test helper now strips the three ambient subagent guard variables before launching tasktool subprocesses (`tools/tasktool/tests/test_lifecycle_start.py` lines 11-33), while guard-specific tests still use `_run_with_env` (`lines 231-245`). The new regression `test_run_helper_strips_ambient_subagent_guard_env` sets `SUPERSTAR_SUBAGENT_ROLE`, `CLAUDE_AGENT_ROLE`, and `SUPERSTAR_FORCE_SUBAGENT`, then confirms positive `tasktool start` behavior still passes (`lines 369-386`). The exact r2 failure repro now passes.
+
+2. Open questions / assumptions
+
+I am treating the current untracked `r3` request and `.reviewer-output/r3-primary/` files as this in-progress review round’s bridge output, not slice dirt.
+
+3. Suggested document edits
+
+No required edits.
+
+4. Verification gaps / commands that should be run, if any
+
+Run during this review:
+`tools/tasktool/tasktool show P5.S3` -> reports `status: in_progress`, `started: 2026-05-21`, and the recorded worktree path.
+`tools/tasktool/tasktool validate --strict-format` -> `ok`
+`tools/tasktool/tasktool artifact status P5.S3 --strict` -> `artifact status: ok`
+`SUPERSTAR_SUBAGENT_ROLE=implementer python -m pytest tools/tasktool/tests/test_lifecycle_start.py::test_start_slice_sets_in_progress_and_started -q` -> `1 passed, 1 warning`
+`python -m pytest tools/tasktool/tests/test_lifecycle_start.py -q` -> `23 passed, 1 warning`
+`python -m pytest tools/tasktool/tests -q` -> `527 passed, 1 warning`
+
+Overall verdict: ready

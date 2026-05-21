@@ -17,10 +17,12 @@ Load plan, review critically, execute all tasks, report when complete.
 
 ### Step 0: Verify Implementation Workspace
 
-Before reading the plan as executable work, run `[[using-git-worktrees]]` as the first executable gate. Verify one of these is true:
+Before reading the plan as executable work, run `[[using-git-worktrees]]` as the first executable gate. The parent coordinator (you) creates or adopts the slice worktree via `tasktool start <slice-id>` — that single command is the lifecycle gate. Verify one of these is true:
 
-- You are already in a linked worktree for this slice/work item; or
-- You created or entered a new isolated worktree for this slice/work item.
+- You are already in a linked worktree for this slice and the slice row's `worktree_path` matches your cwd; or
+- You ran `tasktool start <slice-id>` and `cd`d into the printed path.
+
+Subagents dispatched by you inherit cwd and must not call `tasktool start` themselves — see `[[tasklist-discipline]]` "Subagent rule (load-bearing)" and the `<SUBAGENT-STOP>` block at the top of `[[using-git-worktrees]]`.
 
 If you are in a normal repo checkout, especially on `main` or `master`, it is read-only/planning-only by default. Do not edit files, run tests that create artifacts, write reviewer chains, or mutate tasktool state for the implementation slice there unless the human partner explicitly opts out of isolation in the current turn.
 
