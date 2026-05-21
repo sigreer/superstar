@@ -411,3 +411,19 @@ def test_finalize_succeeds_when_all_preconditions_met(project_with_worktree):
     show = _tasktool(repo, "show", "P1.S1").stdout
     assert "worktree_pruned_at" in show
     assert "worktree_prune_pending" not in show or "false" in show.lower()
+
+
+def test_prune_emits_recent_head_note_but_succeeds(project_with_worktree):
+    repo, wt = project_with_worktree
+    _tasktool(repo, "close", "P1.S1", "--skip-review-gate")
+    _run(repo, "git", "merge", "--no-ff", "-q", "-m", "m",
+         "worktree-p1-s1-first-slice")
+    # Create a fresh commit in the worktree before merging again to advance HEAD;
+    # since branch is already merged into main as a separate ref, refresh the HEAD
+    # timestamp on the worktree by amending.
+    _run(wt, "git", "commit", "--allow-empty", "-q",
+         "--amend", "--no-edit", "--date=now")
+    res = _tasktool(repo, "worktree", "prune", "P1.S1", "--force",
+                    check=False)
+    assert res.returncode == 0
+    assert "HEAD moved" in res.stderr
