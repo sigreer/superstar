@@ -128,3 +128,55 @@ def test_worktree_status_in_place_slice(tmp_path):
     r = run(root, "worktree", "status", "P1.S2")
     assert r.returncode == 0
     assert "in-place" in r.stdout
+
+
+def test_worktree_adopt_records_external_worktree(tmp_path):
+    root = tmp_path / "repo"
+    root.mkdir()
+    _git(root, "init", "-b", "main")
+    _git(root, "config", "user.email", "t@example.invalid")
+    _git(root, "config", "user.name", "T")
+    (root / "docs").mkdir()
+    assert run(root, "config", "init-local").returncode == 0
+    assert run(root, "init", "--project", "demo").returncode == 0
+    _git(root, "add", "-A")
+    _git(root, "commit", "-m", "init")
+    assert run(root, "create", "phase", "--title", "P").returncode == 0
+    assert run(root, "create", "slice", "P1", "--title", "Slice").returncode == 0
+    external = tmp_path / "external"
+    _git(root, "worktree", "add", "-b", "external-branch", str(external))
+    r = run(root, "worktree", "adopt", "P1.S1", str(external))
+    assert r.returncode == 0, r.stdout + r.stderr
+    sl = json.loads((root / "docs" / "tasklist.json").read_text())["phases"][0]["slices"][0]
+    assert sl["worktree_branch"] == "external-branch"
+    assert sl["worktree_path"].endswith("external")
+
+
+def test_worktree_adopt_refuses_non_worktree(tmp_path):
+    root = seed_with_started_slice(tmp_path)
+    plain = tmp_path / "plain"
+    plain.mkdir()
+    r = run(root, "worktree", "adopt", "P1.S1", str(plain))
+    assert r.returncode != 0
+    assert "not a linked worktree" in (r.stdout + r.stderr)
+
+
+def test_worktree_adopt_refuses_to_overwrite_live_record(tmp_path):
+    root = seed_with_started_slice(tmp_path)
+    external = tmp_path / "external"
+    _git(root, "worktree", "add", "-b", "external-branch", str(external))
+    r = run(root, "worktree", "adopt", "P1.S1", str(external))
+    assert r.returncode != 0
+    assert "already" in (r.stdout + r.stderr)
+
+
+def test_worktree_adopt_overwrites_dead_record(tmp_path):
+    root = seed_with_started_slice(tmp_path)
+    # Kill the live worktree but keep the branch
+    _git(root, "worktree", "remove", "--force", ".worktrees/worktree-p1-s1-slice-one")
+    external = tmp_path / "external"
+    _git(root, "worktree", "add", "-b", "external-branch", str(external))
+    r = run(root, "worktree", "adopt", "P1.S1", str(external))
+    assert r.returncode == 0, r.stdout + r.stderr
+    sl = json.loads((root / "docs" / "tasklist.json").read_text())["phases"][0]["slices"][0]
+    assert sl["worktree_branch"] == "external-branch"

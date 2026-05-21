@@ -1880,4 +1880,37 @@ def cmd_worktree_status(*, repo_root: Path, id: str) -> str:
 
 
 def cmd_worktree_adopt(*, repo_root: Path, id: str, path: Path) -> None:
-    raise NotImplementedError("cmd_worktree_adopt ships in Task 10")
+    from tasktool.worktree_lifecycle import (
+        RecordedState, classify_recorded_state, linked_worktree_branch,
+    )
+    path = path.expanduser().resolve()
+    with _write_context(repo_root) as write_root:
+        p = _load(write_root)
+        qid, _container, item = _find_item(p, id)
+        if item.worktree_in_place:
+            raise CommandError(f"{qid}: cannot adopt; slice is marked --in-place")
+        branch = linked_worktree_branch(write_root, path)
+        if branch is None:
+            raise CommandError(f"{qid}: {path} is not a linked worktree of this repository.")
+        # If the current record is still live and consistent, refuse to clobber.
+        if item.worktree_path is not None:
+            recorded = (write_root / item.worktree_path).resolve()
+            state = classify_recorded_state(
+                write_root, recorded_path=recorded, recorded_branch=item.worktree_branch,
+            )
+            if state == RecordedState.CONSISTENT and recorded != path:
+                raise CommandError(
+                    f"{qid}: a live worktree is already recorded at {item.worktree_path!r}; "
+                    f"prune it first (P5.S2) before adopting a new path."
+                )
+        try:
+            rel = path.relative_to(write_root.resolve())
+            rel_str = str(rel)
+        except ValueError:
+            rel_str = str(path)
+        item.worktree_path = rel_str
+        item.worktree_branch = branch
+        item.worktree_in_place = False
+        # Adopt clears a previously recorded pruned-at marker; it represents a fresh association.
+        item.worktree_pruned_at = None
+        _save(write_root, p)
