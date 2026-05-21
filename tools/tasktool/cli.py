@@ -4,6 +4,7 @@ import argparse
 import sys
 from pathlib import Path
 from tasktool import commands
+from tasktool import hook_handshake
 
 def _find_repo_root(start: Path) -> Path:
     cur = start.resolve()
@@ -251,6 +252,10 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 def main(argv: list[str]) -> int:
+    hook_drift_msg = hook_handshake.check_pre_commit_hook()
+    if hook_drift_msg is not None:
+        print(hook_drift_msg, file=sys.stderr)
+        return 1
     parser = _build_parser()
     args = parser.parse_args(argv)
     root = _resolve_project_root(args)
