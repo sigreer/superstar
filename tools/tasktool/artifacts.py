@@ -170,16 +170,23 @@ def is_workflow_artifact_path(rel: str) -> bool:
     return artifact_kind_for_path(rel) is not None
 
 
+def normalize_workflow_artifact_ref(rel: str) -> str:
+    if not is_workflow_artifact_path(rel):
+        return rel
+    normalized = rel.rstrip("/")
+    return normalized if normalized else rel
+
+
 def referenced_paths_for_item(item) -> set[str]:
     paths = {
-        path
+        normalize_workflow_artifact_ref(path)
         for path in (getattr(item, "refs", []) or [])
         if is_workflow_artifact_path(path)
     }
     for attr in ("spec_path", "plan_path", "planning_path", "reviewer_chain", "phase_reviewer_chain"):
         value = getattr(item, attr, None)
         if value and is_workflow_artifact_path(value):
-            paths.add(value)
+            paths.add(normalize_workflow_artifact_ref(value))
     return paths
 
 
@@ -211,6 +218,7 @@ def referenced_paths_for_archives(project, repo_root: Path) -> set[str]:
         archived_path = getattr(archived, "archived_path", None)
         if not archived_path or not is_workflow_artifact_path(archived_path):
             continue
+        archived_path = normalize_workflow_artifact_ref(archived_path)
         paths.add(archived_path)
 
         path = repo_root / archived_path

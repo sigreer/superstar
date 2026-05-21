@@ -349,6 +349,22 @@ def test_artifact_status_reports_unreferenced_reviewer_directory(tmp_path: Path)
     assert "docs/reviewer/x1-plan" in r.stdout
 
 
+def test_artifact_status_accepts_registered_reviewer_directory_with_trailing_slash(tmp_path: Path) -> None:
+    root = _repo(tmp_path)
+    chain = root / "docs" / "reviewer" / "x1-artifact-post-slice"
+    chain.mkdir(parents=True)
+    (chain / "chain.json").write_text('{"rounds":[]}\n', encoding="utf-8")
+    data = json.loads((root / "docs/tasklist.json").read_text(encoding="utf-8"))
+    data["cross_cutting"][0]["refs"].append("docs/reviewer/x1-artifact-post-slice/")
+    (root / "docs/tasklist.json").write_text(json.dumps(data), encoding="utf-8")
+    _git(root, "add", ".")
+    _git(root, "commit", "-m", "register reviewer chain with trailing slash")
+
+    r = _tasktool(root, "artifact", "status", "--strict")
+
+    assert r.returncode == 0, r.stdout + r.stderr
+
+
 def test_artifact_status_accepts_archived_phase_and_snapshot_artifacts(tmp_path: Path) -> None:
     root = _repo(tmp_path)
     archive_rel = "docs/archived-tasks/P1-archived-work.md"

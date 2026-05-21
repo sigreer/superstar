@@ -242,19 +242,20 @@
       "title": "Stamp installed shims and enforce version drift refusal"
     },
     {
-      "closed": null,
+      "closed": "2026-05-21",
       "created": "2026-05-21",
       "id": "X17",
-      "notes": "",
+      "notes": "Added transactional tasktool handling for spec/plan/handoff/reviewer artifacts.",
       "refs": [
         "docs/specs/2026-05-21-X17-transactional-spec-plan-artifacts-design.md",
         "docs/reviewer/x17-transactional-spec-plan-artifacts-design-spec",
         "docs/plans/2026-05-21-X17-transactional-spec-plan-artifacts.md",
         "docs/reviewer/x17-transactional-spec-plan-artifacts-plan",
-        "docs/handoffs/2026-05-21-X17-transactional-spec-plan-artifacts-prompt.md"
+        "docs/handoffs/2026-05-21-X17-transactional-spec-plan-artifacts-prompt.md",
+        "docs/reviewer/x17-transactional-spec-plan-artifacts-X17-post-slice/"
       ],
-      "started": null,
-      "status": "ready",
+      "started": "2026-05-21",
+      "status": "done",
       "title": "Make spec and plan artifact handling transactional"
     }
   ],
