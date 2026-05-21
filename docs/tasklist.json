@@ -208,6 +208,18 @@
       "started": "2026-05-20",
       "status": "done",
       "title": "Stabilize local Claude/Codex plugin current entrypoints"
+    },
+    {
+      "closed": null,
+      "created": "2026-05-21",
+      "id": "X16",
+      "notes": "",
+      "refs": [
+        "docs/specs/2026-05-21-X16-shim-version-stamping-design.md"
+      ],
+      "started": null,
+      "status": "ready",
+      "title": "Stamp installed shims and enforce version drift refusal"
     }
   ],
   "last_reviewed": "2026-05-18",
