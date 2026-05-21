@@ -281,7 +281,7 @@
         },
         {
           "blocked_on": null,
-          "closed": null,
+          "closed": "2026-05-21",
           "created": "2026-05-21",
           "depends_on": [
             "P5.S1"
@@ -293,11 +293,12 @@
           "planning_status": "ratified",
           "refs": [
             "docs/plans/2026-05-21-P5-S2-prune-and-repair.md",
-            "docs/reviewer/p5-s2-prune-and-repair-plan"
+            "docs/reviewer/p5-s2-prune-and-repair-plan",
+            "docs/reviewer/p5-s2-prune-and-repair-P5-S2-post-slice"
           ],
-          "reviewer_chain": "docs/reviewer/p5-s2-prune-and-repair-plan",
+          "reviewer_chain": "docs/reviewer/p5-s2-prune-and-repair-P5-S2-post-slice",
           "started": "2026-05-21",
-          "status": "in_progress",
+          "status": "done",
           "tasks": [],
           "title": "Prune + repair",
           "worktree_branch": "worktree-P5.S2-prune-and-repair",
