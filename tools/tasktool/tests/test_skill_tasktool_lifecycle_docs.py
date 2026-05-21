@@ -21,6 +21,10 @@ def test_tasklist_discipline_documents_authority_and_start_workflow() -> None:
     assert "compatibility" in text
     assert "tasktool unblock <slice-id> --resume" in text
     assert "stamps `started` when needed" in text
+    assert "tasktool close <x-id>" in text
+    assert "--no-archive" in text
+    assert "archive-cross" in text
+    assert "archived x ids are still reserved" in text.lower()
 
 
 def test_using_git_worktrees_allows_routed_tasktool_writes_from_worktrees() -> None:

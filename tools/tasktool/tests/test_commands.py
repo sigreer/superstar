@@ -9,6 +9,7 @@ from unittest.mock import patch
 from tasktool import commands
 from tasktool.serialize import load_project
 from tasktool.model import Status
+from tasktool.validate import ValidationError
 
 class _Tmp:
     def __init__(self):
@@ -114,6 +115,158 @@ class CreateTests(unittest.TestCase):
         self.assertEqual(events[-1]["id"], "P1")
         self.assertEqual(events[-1]["status"], "ready")
         self.assertEqual(events[-1]["message"], "P1 ready: Tasktool")
+
+
+class CrossArchiveTests(unittest.TestCase):
+    def setUp(self):
+        self.t = _Tmp()
+        commands.cmd_init(repo_root=self.t.root, project="demo")
+
+    def tearDown(self):
+        self.t.cleanup()
+
+    def test_close_cross_archives_by_default(self):
+        commands.cmd_create_cross(repo_root=self.t.root, title="archive me")
+
+        commands.cmd_close(repo_root=self.t.root, id="X1")
+
+        p = load_project(self.t.root / "docs/tasklist.json")
+        self.assertEqual(p.cross_cutting, [])
+        self.assertEqual(p.archived_cross_cutting[0].id, "X1")
+        archive_path = self.t.root / p.archived_cross_cutting[0].archived_path
+        self.assertTrue(archive_path.exists())
+        self.assertIn('"id": "X1"', archive_path.read_text(encoding="utf-8"))
+
+    def test_close_cross_no_archive_keeps_visible(self):
+        commands.cmd_create_cross(repo_root=self.t.root, title="keep visible")
+
+        commands.cmd_close(repo_root=self.t.root, id="X1", no_archive=True)
+
+        p = load_project(self.t.root / "docs/tasklist.json")
+        self.assertEqual(p.cross_cutting[0].status, Status.DONE)
+        self.assertEqual(p.archived_cross_cutting, [])
+
+    def test_archive_cross_archives_done_visible_item(self):
+        commands.cmd_create_cross(repo_root=self.t.root, title="later")
+        commands.cmd_close(repo_root=self.t.root, id="X1", no_archive=True)
+
+        commands.cmd_archive_cross(repo_root=self.t.root, id="X1")
+
+        p = load_project(self.t.root / "docs/tasklist.json")
+        self.assertEqual(p.cross_cutting, [])
+        self.assertEqual(p.archived_cross_cutting[0].id, "X1")
+
+    def test_create_cross_does_not_reuse_archived_id(self):
+        commands.cmd_create_cross(repo_root=self.t.root, title="archived")
+        commands.cmd_close(repo_root=self.t.root, id="X1")
+
+        new_id = commands.cmd_create_cross(repo_root=self.t.root, title="new")
+
+        self.assertEqual(new_id, "X2")
+
+    def test_archive_cross_rejects_ready_item(self):
+        commands.cmd_create_cross(repo_root=self.t.root, title="not done")
+
+        with self.assertRaisesRegex(commands.CommandError, "must be done before archive"):
+            commands.cmd_archive_cross(repo_root=self.t.root, id="X1")
+
+    def test_close_no_archive_rejects_non_cross_items(self):
+        commands.cmd_create_phase(repo_root=self.t.root, title="phase")
+
+        with self.assertRaisesRegex(
+            commands.CommandError,
+            "--no-archive is only valid for cross-cutting items",
+        ):
+            commands.cmd_close(
+                repo_root=self.t.root,
+                id="P1",
+                no_archive=True,
+            )
+
+    def test_archive_cross_preserves_full_json(self):
+        commands.cmd_create_cross(repo_root=self.t.root, title="full data")
+        commands.cmd_close(
+            repo_root=self.t.root,
+            id="X1",
+            no_archive=True,
+            refs=["docs/specs/example.md"],
+            note="important note",
+        )
+
+        commands.cmd_archive_cross(repo_root=self.t.root, id="X1")
+
+        p = load_project(self.t.root / "docs/tasklist.json")
+        text = (self.t.root / p.archived_cross_cutting[0].archived_path).read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('"id": "X1"', text)
+        self.assertIn('"refs": [', text)
+        self.assertIn('"docs/specs/example.md"', text)
+        self.assertIn('"notes": "important note"', text)
+
+    def test_close_archived_cross_reports_archived_hint(self):
+        commands.cmd_create_cross(repo_root=self.t.root, title="already archived")
+        commands.cmd_close(repo_root=self.t.root, id="X1")
+
+        with self.assertRaisesRegex(commands.CommandError, "may already be archived"):
+            commands.cmd_close(repo_root=self.t.root, id="X1")
+
+    def test_archive_cross_archived_id_reports_archived_error(self):
+        commands.cmd_create_cross(repo_root=self.t.root, title="already archived")
+        commands.cmd_close(repo_root=self.t.root, id="X1")
+
+        with self.assertRaisesRegex(
+            commands.CommandError,
+            "cross-cutting X1 is already archived",
+        ):
+            commands.cmd_archive_cross(repo_root=self.t.root, id="X1")
+
+    def test_brief_archived_cross_is_not_active_surface(self):
+        from tasktool.brief import brief
+
+        commands.cmd_create_cross(repo_root=self.t.root, title="brief archived")
+        commands.cmd_close(repo_root=self.t.root, id="X1")
+        p = load_project(self.t.root / "docs/tasklist.json")
+
+        with self.assertRaisesRegex(ValueError, "X1: not found"):
+            brief(p, "X1")
+
+    def test_archive_cross_atomicity_no_orphan_file_on_validation_failure(self):
+        commands.cmd_create_cross(repo_root=self.t.root, title="atomic")
+        commands.cmd_close(repo_root=self.t.root, id="X1", no_archive=True)
+
+        with patch("tasktool.commands.validate_project", side_effect=ValidationError("forced")):
+            with self.assertRaises(ValidationError):
+                commands.cmd_archive_cross(repo_root=self.t.root, id="X1")
+
+        self.assertFalse((self.t.root / "docs/archived-tasks/X1-atomic.md").exists())
+        p = load_project(self.t.root / "docs/tasklist.json")
+        self.assertEqual(p.cross_cutting[0].id, "X1")
+
+    def test_archive_cross_does_not_reemit_done_notification(self):
+        commands.cmd_create_cross(repo_root=self.t.root, title="notify once")
+        log = self.t.root / "notify.jsonl"
+        with patch.dict(
+            os.environ,
+            {
+                "SUPERSTAR_NOTIFY_DISABLE": "0",
+                "SUPERSTAR_NOTIFY_DRY_RUN": "1",
+                "SUPERSTAR_NOTIFY_LOG": str(log),
+            },
+        ):
+            commands.cmd_close(repo_root=self.t.root, id="X1", no_archive=True)
+            commands.cmd_archive_cross(repo_root=self.t.root, id="X1")
+
+        events = [
+            json.loads(line)
+            for line in log.read_text(encoding="utf-8").splitlines()
+        ]
+        done_events = [
+            event
+            for event in events
+            if event["id"] == "X1" and event["status"] == "done"
+        ]
+        self.assertEqual(len(done_events), 1)
 
 import json
 

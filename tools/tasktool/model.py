@@ -84,6 +84,13 @@ class ArchivedPhase:
     archived_date: str
 
 @dataclass(slots=True)
+class ArchivedCrossCutting:
+    id: str
+    title: str
+    archived_path: str
+    archived_date: str
+
+@dataclass(slots=True)
 class Project:
     project: str
     schema_version: int = SCHEMA_VERSION
@@ -92,3 +99,4 @@ class Project:
     phases: list[Phase] = field(default_factory=list)
     cross_cutting: list[CrossCutting] = field(default_factory=list)
     archived_phases: list[ArchivedPhase] = field(default_factory=list)
+    archived_cross_cutting: list[ArchivedCrossCutting] = field(default_factory=list)

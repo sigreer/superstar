@@ -19,6 +19,7 @@ Prefer the repo-local launcher `tools/tasktool/tasktool` when it exists; it work
 - About to start implementation for a slice → `tasktool start <slice-id>`. This records the lifecycle start and moves the row to `in_progress`; do this before dispatching implementation or editing implementation files.
 - About to close a slice → `tasktool close <slice-id>`. The CLI enforces the post-slice external-review gate.
 - About to close a phase → `tasktool archive-phase <phase-id>`. The CLI enforces the post-phase gate and writes the archive note.
+- About to close a cross-cutting item → `tasktool close <x-id>`. The CLI marks it done and archives it by default. Use `--no-archive` only when the closed X-item must remain visible temporarily; later run `tasktool archive-cross <x-id>`.
 - Entering a slice → `tasktool brief <slice-id>` instead of reading the JSON.
 - Onboarding a project — `[[project-setup]]` runs `tasktool init` and installs the hook.
 
@@ -36,6 +37,8 @@ Onboarding has a hard setup boundary: after `[[project-setup]]` configures `.tas
 | Cross-cutting | `X4` | `X4` (top-level; not nested under a phase) |
 
 IDs are assigned at birth and **never renumbered**. The `tasktool create` family does orphan-aware allocation (`max+1` across `docs/tasklist.json`, `docs/specs/`, `docs/plans/`, `docs/reviewer/`) and prints the new ID.
+Archived X IDs are still reserved, so a new cross-cutting item will not reuse an ID that has moved to `archived_cross_cutting`.
+Commands run against an archived X-id report a may-already-be-archived hint because archive files are evidence, not part of the active tasklist workflow surface.
 
 Status enum: `ready | in_progress | blocked | done`. Only slices may take `blocked` (and only via `tasktool block <slice-id> --on …`). Emoji are a render concern; `tasktool render` and `tasktool brief` handle that. `tasktool start <slice-id>` is the normal way to enter `in_progress`; `tasktool set <id> --status in_progress` is a compatibility alias for older plans and ad-hoc rows. `tasktool unblock <slice-id> --resume` resumes through the same lifecycle path and stamps `started` when needed. `done` requires `closed`; the CLI stamps it.
 
@@ -63,6 +66,9 @@ tools/tasktool/tasktool schedule <phase-id>
 tools/tasktool/tasktool ready-slices <phase-id>
 tools/tasktool/tasktool phase-status
 tools/tasktool/tasktool close <slice-id>      # enforces post-slice review gate
+tools/tasktool/tasktool close <x-id>          # closes and archives cross-cutting by default
+tools/tasktool/tasktool close <x-id> --no-archive
+tools/tasktool/tasktool archive-cross <x-id>  # archive a done visible cross-cutting item
 tools/tasktool/tasktool archive-phase <phase-id>  # enforces post-phase review gate
 tools/tasktool/tasktool validate              # full validation
 ```
@@ -73,6 +79,7 @@ Run `tools/tasktool/tasktool --help` (or `tools/tasktool/tasktool <cmd> --help`)
 
 - **Post-slice external review.** `tasktool close <slice-id>` reads `chain.json` from the slice's reviewer chain folder (`docs/reviewer/<slug>-post-slice/` by default; override with `--reviewer-chain`). It refuses unless the latest round's verdict ∈ {`ready`, `ready with small edits`}. Per-task internal reviews do not satisfy this gate.
 - **Post-phase external review.** `tasktool archive-phase <phase-id>` refuses until every slice is `done` *and* the phase's post-phase chain returns `ready` / `ready with small edits`.
+- **Cross-cutting archive.** `tasktool close <x-id>` is ungated by external review and moves the completed X-item out of active `cross_cutting` into `archived_cross_cutting`, with a lossless markdown archive under `docs/archived-tasks/`. `--no-archive` leaves it visible as `done`; `tasktool archive-cross <x-id>` moves it later without sending another done notification.
 - **`--skip-review-gate`** exists for emergencies and is recorded in the slice/phase `notes` with a timestamp. Use it only when the operator has explicitly chosen to bypass.
 
 See `[[external-review]]` for how to drive the reviewer.

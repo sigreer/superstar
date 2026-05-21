@@ -2,7 +2,7 @@ from __future__ import annotations
 import unittest
 from tasktool.model import (
     Project, Phase, Slice, Task, CrossCutting, BlockedOn, Status,
-    PlanningStatus, SCHEMA_VERSION,
+    PlanningStatus, ArchivedCrossCutting, SCHEMA_VERSION,
 )
 
 class StatusTests(unittest.TestCase):
@@ -25,6 +25,7 @@ class ConstructionTests(unittest.TestCase):
         self.assertEqual(p.phases, [])
         self.assertEqual(p.cross_cutting, [])
         self.assertEqual(p.archived_phases, [])
+        self.assertEqual(p.archived_cross_cutting, [])
 
     def test_phase_defaults(self):
         ph = Phase(id="P2", title="tasktool", created="2026-05-17")
@@ -80,6 +81,7 @@ class PublicAPITests(unittest.TestCase):
         for name in [
             "load_project", "save_project", "dumps_canonical", "loads_project",
             "Project", "Phase", "Slice", "Task", "CrossCutting", "BlockedOn",
-            "Status", "PlanningStatus", "ArchivedPhase", "SCHEMA_VERSION",
+            "Status", "PlanningStatus", "ArchivedPhase", "ArchivedCrossCutting",
+            "SCHEMA_VERSION",
         ]:
             self.assertTrue(hasattr(tasktool, name), f"tasktool.{name} missing")

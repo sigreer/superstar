@@ -93,3 +93,19 @@ def test_started_field_round_trips_on_slice():
     p = loads_project(text)
     assert p.phases[0].slices[0].started == "2026-05-19"
     assert '"started": "2026-05-19"' in dumps_canonical(p)
+
+
+def test_legacy_tasklist_without_archived_cross_cutting_loads():
+    project = loads_project(
+        json.dumps(
+            {
+                "project": "demo",
+                "schema_version": 1,
+                "phases": [],
+                "cross_cutting": [],
+                "archived_phases": [],
+            }
+        )
+    )
+
+    assert project.archived_cross_cutting == []

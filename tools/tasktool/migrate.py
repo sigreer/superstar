@@ -5,11 +5,24 @@ from dataclasses import dataclass, fields
 from enum import Enum
 from typing import Literal
 
-from tasktool.model import ArchivedPhase, CrossCutting, Phase, Project, Slice, Task
+from tasktool.model import (
+    ArchivedCrossCutting,
+    ArchivedPhase,
+    CrossCutting,
+    Phase,
+    Project,
+    Slice,
+    Task,
+)
 
 Policy = Literal["accept-local", "accept-authoritative"]
 
-_PROJECT_COLLECTIONS = ("phases", "cross_cutting", "archived_phases")
+_PROJECT_COLLECTIONS = (
+    "phases",
+    "cross_cutting",
+    "archived_phases",
+    "archived_cross_cutting",
+)
 
 
 @dataclass(frozen=True)
@@ -78,6 +91,9 @@ def walker_field_coverage() -> dict[str, set[str]]:
         "Task": {field.name for field in fields(Task)},
         "CrossCutting": {field.name for field in fields(CrossCutting)},
         "ArchivedPhase": {field.name for field in fields(ArchivedPhase)},
+        "ArchivedCrossCutting": {
+            field.name for field in fields(ArchivedCrossCutting)
+        },
     }
 
 
@@ -127,6 +143,15 @@ def _diff_project(
         authoritative_rows=authoritative.archived_phases,
         id_prefix="",
         row_dataclass=ArchivedPhase,
+        nested=[],
+        deltas=deltas,
+        conflicts=conflicts,
+    )
+    _diff_collection(
+        local_rows=local.archived_cross_cutting,
+        authoritative_rows=authoritative.archived_cross_cutting,
+        id_prefix="",
+        row_dataclass=ArchivedCrossCutting,
         nested=[],
         deltas=deltas,
         conflicts=conflicts,
@@ -240,6 +265,13 @@ def _apply_local(authoritative: Project, local: Project, deltas: list[Delta]) ->
     _apply_collection(
         authoritative_rows=merged.archived_phases,
         local_rows=local.archived_phases,
+        deltas=deltas,
+        id_prefix="",
+        nested=[],
+    )
+    _apply_collection(
+        authoritative_rows=merged.archived_cross_cutting,
+        local_rows=local.archived_cross_cutting,
         deltas=deltas,
         id_prefix="",
         nested=[],

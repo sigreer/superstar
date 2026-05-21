@@ -2,7 +2,16 @@
 from __future__ import annotations
 import re
 from pathlib import Path
-from tasktool.model import Project, Phase, Slice, Task, CrossCutting, Status, PlanningStatus
+from tasktool.model import (
+    ArchivedCrossCutting,
+    Project,
+    Phase,
+    Slice,
+    Task,
+    CrossCutting,
+    Status,
+    PlanningStatus,
+)
 from tasktool.serialize import load_project, save_project, dumps_canonical
 from tasktool.ids import parse_id, IdParseError
 
@@ -105,6 +114,12 @@ def _check_cross(c: CrossCutting, scope: str) -> None:
         _require(c.closed is not None, f"{scope}: status=done requires closed date")
     _check_dates(c.created, c.started, c.closed, scope)
 
+def _check_archived_cross(c: ArchivedCrossCutting, scope: str) -> None:
+    _check_id(c.id, _CROSS_RE, scope)
+    _require(bool(c.title.strip()), f"{scope}: archived cross title is required")
+    _require(bool(c.archived_path.strip()), f"{scope}: archived_path is required")
+    _check_date(c.archived_date, scope, "archived_date")
+
 def validate_project(p: Project) -> None:
     """Raise ValidationError on rule violation. Returns None on clean."""
     seen_phase: set[str] = set()
@@ -118,6 +133,18 @@ def validate_project(p: Project) -> None:
         _require(c.id not in seen_cross, f"X*: duplicate cross id {c.id}")
         seen_cross.add(c.id)
         _check_cross(c, c.id)
+    seen_archived_cross: set[str] = set()
+    for c in p.archived_cross_cutting:
+        _require(
+            c.id not in seen_archived_cross,
+            f"X*: duplicate archived cross id {c.id}",
+        )
+        _require(
+            c.id not in seen_cross,
+            f"{c.id} appears in both active and archived cross-cutting",
+        )
+        seen_archived_cross.add(c.id)
+        _check_archived_cross(c, c.id)
 
 def _check_slice_dependencies(ph: Phase) -> None:
     slice_ids = {f"{ph.id}.{s.id}" for s in ph.slices}
@@ -225,6 +252,8 @@ def collect_known_ids(p):
                 ids.add(f"{ph.id}.{sl.id}.{t.id}")
     for ph in getattr(p, "archived_phases", []) or []:
         ids.add(ph.id if hasattr(ph, "id") else ph["id"])
+    for x in getattr(p, "archived_cross_cutting", []) or []:
+        ids.add(x.id if hasattr(x, "id") else x["id"])
     for x in p.cross_cutting:
         ids.add(x.id)
     return ids

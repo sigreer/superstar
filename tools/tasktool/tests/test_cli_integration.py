@@ -4,6 +4,8 @@ import subprocess
 import sys
 import unittest
 from pathlib import Path
+from tasktool.model import Status
+from tasktool.serialize import load_project
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 PKG_DIR = REPO_ROOT / "tools"
@@ -144,6 +146,54 @@ class CliEndToEndTests(unittest.TestCase):
             r = run_cli("phase-status", cwd=t.root)
             self.assertEqual(r.returncode, 0, r.stderr)
             self.assertIn("Open phases", r.stdout)
+        finally:
+            t.cleanup()
+
+    def test_close_cross_no_archive_keeps_visible(self):
+        t = _CliTmp()
+        try:
+            self.assertEqual(run_cli("init", "--project", "demo", cwd=t.root).returncode, 0)
+            run_cli("create", "cross", "--title", "visible", cwd=t.root)
+
+            r = run_cli("close", "X1", "--no-archive", cwd=t.root)
+
+            self.assertEqual(r.returncode, 0, r.stderr)
+            project = load_project(t.root / "docs/tasklist.json")
+            self.assertEqual(project.cross_cutting[0].id, "X1")
+            self.assertEqual(project.cross_cutting[0].status, Status.DONE)
+            self.assertEqual(project.archived_cross_cutting, [])
+        finally:
+            t.cleanup()
+
+    def test_archive_cross_moves_done_item(self):
+        t = _CliTmp()
+        try:
+            self.assertEqual(run_cli("init", "--project", "demo", cwd=t.root).returncode, 0)
+            run_cli("create", "cross", "--title", "later", cwd=t.root)
+            run_cli("close", "X1", "--no-archive", cwd=t.root)
+
+            r = run_cli("archive-cross", "X1", cwd=t.root)
+
+            self.assertEqual(r.returncode, 0, r.stderr)
+            project = load_project(t.root / "docs/tasklist.json")
+            self.assertEqual(project.cross_cutting, [])
+            self.assertEqual(project.archived_cross_cutting[0].id, "X1")
+        finally:
+            t.cleanup()
+
+    def test_list_kind_cross_excludes_archived_items(self):
+        t = _CliTmp()
+        try:
+            self.assertEqual(run_cli("init", "--project", "demo", cwd=t.root).returncode, 0)
+            run_cli("create", "cross", "--title", "archived", cwd=t.root)
+            run_cli("create", "cross", "--title", "active", cwd=t.root)
+            run_cli("close", "X1", cwd=t.root)
+
+            r = run_cli("list", "--kind", "cross", cwd=t.root)
+
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertNotIn("X1", r.stdout)
+            self.assertIn("X2", r.stdout)
         finally:
             t.cleanup()
 

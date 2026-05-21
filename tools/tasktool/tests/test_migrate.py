@@ -12,6 +12,7 @@ from tasktool.migrate import (
     walker_field_coverage,
 )
 from tasktool.model import (
+    ArchivedCrossCutting,
     ArchivedPhase,
     CrossCutting,
     Phase,
@@ -185,7 +186,15 @@ def test_render_diff_prints_field_changes_and_authoritative_only_rows():
 
 def test_walker_covers_every_dataclass_field():
     coverage = walker_field_coverage()
-    for row_type in (Project, Phase, Slice, Task, CrossCutting, ArchivedPhase):
+    for row_type in (
+        Project,
+        Phase,
+        Slice,
+        Task,
+        CrossCutting,
+        ArchivedPhase,
+        ArchivedCrossCutting,
+    ):
         declared = {f.name for f in fields(row_type)}
         walked = coverage.get(row_type.__name__, set())
         missing = declared - walked
@@ -213,6 +222,32 @@ def test_archived_phase_drift_migrates():
     assert conflicts == []
 
 
+def test_archived_cross_cutting_drift_migrates():
+    local = _project_with_slice()
+    local.archived_cross_cutting.append(
+        ArchivedCrossCutting(
+            id="X1",
+            title="archived cross",
+            archived_path="docs/archived-tasks/X1-archived-cross.md",
+            archived_date=_today(),
+        )
+    )
+    authoritative = _project_with_slice()
+
+    deltas, conflicts = compute_deltas(local=local, authoritative=authoritative)
+    merged = apply_deltas(
+        authoritative=authoritative,
+        local=local,
+        deltas=deltas,
+        conflicts=conflicts,
+        policy="accept-local",
+    )
+
+    assert any(d.kind == "add" and d.row_id == "X1" for d in deltas)
+    assert conflicts == []
+    assert merged.archived_cross_cutting[0].id == "X1"
+
+
 def test_top_level_project_field_drift_migrates():
     local = _project_with_slice()
     local.north_star = "new mission"
@@ -226,7 +261,15 @@ def test_top_level_project_field_drift_migrates():
 
 
 def _value_pair_for_field(row_type, field) -> tuple[object, object]:
-    if field.name in {"id", "phases", "slices", "tasks", "cross_cutting", "archived_phases"}:
+    if field.name in {
+        "id",
+        "phases",
+        "slices",
+        "tasks",
+        "cross_cutting",
+        "archived_phases",
+        "archived_cross_cutting",
+    }:
         return (None, None)
     if field.name == "schema_version":
         return (1, 2)
@@ -270,7 +313,7 @@ def _value_pair_for_field(row_type, field) -> tuple[object, object]:
 
 @pytest.mark.parametrize(
     "row_type",
-    [Project, Phase, Slice, Task, CrossCutting, ArchivedPhase],
+    [Project, Phase, Slice, Task, CrossCutting, ArchivedPhase, ArchivedCrossCutting],
 )
 def test_per_field_migration_acceptance_for_non_identity_non_collection_fields(row_type):
     for f in fields(row_type):
@@ -311,6 +354,17 @@ def test_per_field_migration_acceptance_for_non_identity_non_collection_fields(r
                         )
                     )
                 setattr(tree.archived_phases[0], f.name, value)
+            elif type_ is ArchivedCrossCutting:
+                if not tree.archived_cross_cutting:
+                    tree.archived_cross_cutting.append(
+                        ArchivedCrossCutting(
+                            id="X0",
+                            title="archived cross",
+                            archived_path="docs/archived-tasks/X0-archived-cross.md",
+                            archived_date=_today(),
+                        )
+                    )
+                setattr(tree.archived_cross_cutting[0], f.name, value)
             else:
                 raise AssertionError(f"unknown row type: {type_}")
 
@@ -327,6 +381,8 @@ def test_per_field_migration_acceptance_for_non_identity_non_collection_fields(r
                 return getattr(tree.cross_cutting[0], f.name)
             if type_ is ArchivedPhase:
                 return getattr(tree.archived_phases[0], f.name)
+            if type_ is ArchivedCrossCutting:
+                return getattr(tree.archived_cross_cutting[0], f.name)
             raise AssertionError(f"unknown row type: {type_}")
 
         set_on(local, local_val)

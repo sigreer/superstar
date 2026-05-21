@@ -97,6 +97,8 @@ def next_task_id(p: Project, phase_id: str, slice_id: str) -> str:
     return f"T{n}"
 
 def next_cross_id(p: Project, repo_root: Path) -> str:
-    used = {int(c.id[1:]) for c in p.cross_cutting} | scan_orphan_ids(repo_root, "cross")
+    used = {int(c.id[1:]) for c in p.cross_cutting}
+    used |= {int(c.id[1:]) for c in p.archived_cross_cutting}
+    used |= scan_orphan_ids(repo_root, "cross")
     n = max(used, default=0) + 1
     return f"X{n}"

@@ -109,6 +109,7 @@ def _build_parser() -> argparse.ArgumentParser:
     p_close.add_argument("--skip-review-gate", action="store_true")
     p_close.add_argument("--allow-ready-close", action="store_true")
     p_close.add_argument("--reason")
+    p_close.add_argument("--no-archive", action="store_true")
 
     p_block = sub.add_parser("block")
     p_block.add_argument("slice_id")
@@ -240,6 +241,9 @@ def _build_parser() -> argparse.ArgumentParser:
     p_arch.add_argument("--reviewer-chain", type=Path)
     p_arch.add_argument("--skip-review-gate", action="store_true")
 
+    p_arch_cross = sub.add_parser("archive-cross")
+    p_arch_cross.add_argument("id")
+
     p_nextid = sub.add_parser("next-id")
     p_nextid.add_argument("--kind", required=True, choices=["phase", "slice", "task", "cross"])
     p_nextid.add_argument("--phase")
@@ -311,6 +315,7 @@ def main(argv: list[str]) -> int:
                 closed_date=args.closed_date, note=args.note,
                 reviewer_chain=args.reviewer_chain, skip_review_gate=args.skip_review_gate,
                 allow_ready_close=args.allow_ready_close, reason=args.reason,
+                no_archive=args.no_archive,
             )
         elif args.cmd == "block":
             commands.cmd_block(repo_root=root, slice_id=args.slice_id, on=args.on)
@@ -415,6 +420,8 @@ def main(argv: list[str]) -> int:
                 reviewer_chain=args.reviewer_chain,
                 skip_review_gate=args.skip_review_gate,
             )
+        elif args.cmd == "archive-cross":
+            commands.cmd_archive_cross(repo_root=root, id=args.id)
         elif args.cmd == "next-id":
             print(commands.cmd_next_id(
                 repo_root=root, kind=args.kind, phase=args.phase, slice=args.slice,

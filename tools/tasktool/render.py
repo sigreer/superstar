@@ -76,4 +76,9 @@ def render_project(p: Project) -> str:
         for a in p.archived_phases:
             lines.append(f"- **{a.id}** — {a.title} → [`{a.archived_path}`]({a.archived_path}) ({a.archived_date})")
         lines.append("")
+    if p.archived_cross_cutting:
+        lines += ["## Archived cross-cutting (`X*`)", ""]
+        for a in p.archived_cross_cutting:
+            lines.append(f"- **{a.id}** — {a.title} → [`{a.archived_path}`]({a.archived_path}) ({a.archived_date})")
+        lines.append("")
     return "\n".join(lines).rstrip() + "\n"

@@ -106,6 +106,17 @@ def build_schema() -> dict:
         },
         "additionalProperties": False,
     }
+    archived_cross = {
+        "type": "object",
+        "required": ["id", "title", "archived_path", "archived_date"],
+        "properties": {
+            "id": {"type": "string", "pattern": r"^X\d+$"},
+            "title": {"type": "string"},
+            "archived_path": {"type": "string"},
+            "archived_date": date_str,
+        },
+        "additionalProperties": False,
+    }
     return {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "title": "tasktool tasklist.json",
@@ -119,6 +130,7 @@ def build_schema() -> dict:
             "phases": {"type": "array", "items": phase},
             "cross_cutting": {"type": "array", "items": cross},
             "archived_phases": {"type": "array", "items": archived},
+            "archived_cross_cutting": {"type": "array", "items": archived_cross},
         },
         "additionalProperties": False,
     }

@@ -1,9 +1,11 @@
 # tools/tasktool/commands.py
 from __future__ import annotations
 import datetime as _dt
+import json as _json
 import sys
 import subprocess as _subprocess
 from contextlib import contextmanager
+from dataclasses import asdict as _asdict
 from pathlib import Path
 from tasktool.config import (
     TasklistConfig,
@@ -13,6 +15,7 @@ from tasktool.config import (
     save_config,
 )
 from tasktool.model import (
+    ArchivedCrossCutting,
     Project, Phase, Slice, Task, CrossCutting, BlockedOn, Status, PlanningStatus,
 )
 from tasktool.serialize import load_project, save_project
@@ -508,6 +511,10 @@ def _find_item(p: Project, id: str):
         for c in p.cross_cutting:
             if c.id == qid:
                 return qid, p.cross_cutting, c
+        if any(a.id == qid for a in p.archived_cross_cutting):
+            raise CommandError(
+                f"cross-cutting {qid} not found in active tasklist; it may already be archived"
+            )
         raise CommandError(f"cross-cutting {qid} not found")
     phase_part, slice_part, task_part = split_qualified(qid)
     phase = next((ph for ph in p.phases if ph.id == phase_part), None)
@@ -577,6 +584,78 @@ def _apply_ready_close_override(qid: str, item, *, reason: str | None) -> None:
     audit = f"[{ts}] ready-close override for {qid}: {reason.strip()}"
     item.notes = (item.notes + "\n" + audit).strip() if item.notes else audit
 
+def _archive_cross_at_root(
+    write_root: Path,
+    p: Project,
+    item: CrossCutting,
+) -> tuple[Path, str]:
+    if item.status != Status.DONE:
+        raise CommandError(
+            f"cross-cutting {item.id} must be done before archive; run tasktool close {item.id} first"
+        )
+    if any(a.id == item.id for a in p.archived_cross_cutting):
+        raise CommandError(f"cross-cutting {item.id} is already archived")
+
+    slug = _slugify(item.title)
+    archive_rel = f"docs/archived-tasks/{item.id}-{slug}.md"
+    archive_path = write_root / archive_rel
+    if archive_path.exists():
+        raise CommandError(f"archive path already exists: {archive_rel}")
+
+    def _coerce_cross_json(node):
+        if isinstance(node, Status):
+            return node.value
+        if isinstance(node, dict):
+            return {key: _coerce_cross_json(value) for key, value in node.items()}
+        if isinstance(node, list):
+            return [_coerce_cross_json(value) for value in node]
+        return node
+
+    cross_json = _json.dumps(
+        _coerce_cross_json(_asdict(item)),
+        indent=2,
+        sort_keys=True,
+        ensure_ascii=False,
+    ) + "\n"
+    summary_lines = [
+        f"# {item.id} - {item.title}",
+        "",
+        f"status: {item.status.value}",
+        f"created: {item.created}",
+    ]
+    if item.started:
+        summary_lines.append(f"started: {item.started}")
+    if item.closed:
+        summary_lines.append(f"closed: {item.closed}")
+    if item.refs:
+        summary_lines += ["", "## References", ""]
+        summary_lines.extend(f"- {ref}" for ref in item.refs)
+    if item.notes:
+        summary_lines += ["", "## Notes", "", item.notes]
+    summary_lines += [
+        "",
+        "## Full cross-cutting JSON (for tasktool unarchive)",
+        "",
+        "```json",
+        cross_json.rstrip(),
+        "```",
+        "",
+    ]
+
+    p.cross_cutting = [cross for cross in p.cross_cutting if cross.id != item.id]
+    p.archived_cross_cutting.append(
+        ArchivedCrossCutting(
+            id=item.id,
+            title=item.title,
+            archived_path=archive_rel,
+            archived_date=_today(),
+        )
+    )
+    validate_project(p)
+    archive_path.parent.mkdir(parents=True, exist_ok=True)
+    archive_path.write_text("\n".join(summary_lines), encoding="utf-8")
+    return archive_path, archive_rel
+
 def cmd_start(*, repo_root: Path, id: str, resume: bool = False) -> None:
     with _write_context(repo_root) as write_root:
         p = _load(write_root)
@@ -622,11 +701,14 @@ def cmd_close(
     note: str | None = None,
     reviewer_chain: Path | None = None, skip_review_gate: bool = False,
     allow_ready_close: bool = False, reason: str | None = None,
+    no_archive: bool = False,
 ) -> None:
     with _write_context(repo_root) as write_root:
         p = _load(write_root)
         qid, _container, item = _find_item(p, id)
         kind = parse_id(qid)[0]
+        if no_archive and kind != "cross":
+            raise CommandError("--no-archive is only valid for cross-cutting items")
         if kind == "task" or kind == "cross":
             pass  # no gate; just close
         elif kind in ("slice", "phase"):
@@ -645,8 +727,26 @@ def cmd_close(
                     item.refs.append(r)
         if note:
             item.notes = (item.notes + "\n" + note).strip() if item.notes else note
+        archive_path: Path | None = None
+        if kind == "cross" and not no_archive:
+            archive_path, _archive_rel = _archive_cross_at_root(write_root, p, item)
         _save(write_root, p)
+        if archive_path is not None:
+            _git_stage(write_root, archive_path)
         _notify_status(qid=qid, kind=kind, status=item.status, title=item.title)
+
+def cmd_archive_cross(*, repo_root: Path, id: str) -> None:
+    with _write_context(repo_root) as write_root:
+        p = _load(write_root)
+        if any(a.id == id for a in p.archived_cross_cutting):
+            raise CommandError(f"cross-cutting {id} is already archived")
+        qid, _container, item = _find_item(p, id)
+        kind = parse_id(qid)[0]
+        if kind != "cross":
+            raise CommandError(f"archive-cross only works on cross-cutting items; {qid} is a {kind}")
+        archive_path, _archive_rel = _archive_cross_at_root(write_root, p, item)
+        _save(write_root, p)
+        _git_stage(write_root, archive_path)
 
 def cmd_block(*, repo_root: Path, slice_id: str, on: str) -> None:
     with _write_context(repo_root) as write_root:

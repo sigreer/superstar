@@ -1,6 +1,14 @@
 from __future__ import annotations
 import unittest
-from tasktool.model import Project, Phase, Slice, CrossCutting, Status, BlockedOn
+from tasktool.model import (
+    ArchivedCrossCutting,
+    Project,
+    Phase,
+    Slice,
+    CrossCutting,
+    Status,
+    BlockedOn,
+)
 from tasktool.render import render_project
 
 class TestRender(unittest.TestCase):
@@ -52,6 +60,30 @@ class TestRender(unittest.TestCase):
         out = render_project(p)
         self.assertIn("☐", out)
         self.assertNotIn("⏸", out)
+
+    def test_render_shows_archived_cross_section(self):
+        p = Project(project="demo")
+        p.cross_cutting.append(
+            CrossCutting(id="X1", title="active cross", created="2026-05-21")
+        )
+        p.archived_cross_cutting.append(
+            ArchivedCrossCutting(
+                id="X2",
+                title="archived cross",
+                archived_path="docs/archived-tasks/X2-archived-cross.md",
+                archived_date="2026-05-21",
+            )
+        )
+
+        out = render_project(p)
+
+        self.assertIn("## Cross-cutting (`X*`)", out)
+        self.assertIn("## Archived cross-cutting (`X*`)", out)
+        active_section, archived_section = out.split("## Archived cross-cutting (`X*`)", 1)
+        self.assertIn("**X1**", active_section)
+        self.assertNotIn("**X2**", active_section)
+        self.assertIn("**X2**", archived_section)
+        self.assertIn("docs/archived-tasks/X2-archived-cross.md", archived_section)
 
 
 if __name__ == "__main__":

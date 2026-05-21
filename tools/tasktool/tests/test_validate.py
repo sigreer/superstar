@@ -3,7 +3,16 @@ from __future__ import annotations
 import tempfile
 import unittest
 from pathlib import Path
-from tasktool.model import Project, Phase, Slice, Task, CrossCutting, BlockedOn, Status
+from tasktool.model import (
+    ArchivedCrossCutting,
+    Project,
+    Phase,
+    Slice,
+    Task,
+    CrossCutting,
+    BlockedOn,
+    Status,
+)
 from tasktool.serialize import save_project, dumps_canonical
 from tasktool.validate import (
     validate_project, ValidationError, strict_format_check, normalise_file,
@@ -41,6 +50,46 @@ class UniquenessTests(unittest.TestCase):
         p = _project_with_slice()
         p.phases[0].slices.append(Slice(id="S1", title="dup", created="2026-05-17"))
         with self.assertRaises(ValidationError):
+            validate_project(p)
+
+    def test_duplicate_archived_cross_ids(self):
+        p = Project(project="demo")
+        p.archived_cross_cutting.extend([
+            ArchivedCrossCutting(
+                id="X1",
+                title="one",
+                archived_path="docs/archived-tasks/X1-one.md",
+                archived_date="2026-05-21",
+            ),
+            ArchivedCrossCutting(
+                id="X1",
+                title="two",
+                archived_path="docs/archived-tasks/X1-two.md",
+                archived_date="2026-05-21",
+            ),
+        ])
+
+        with self.assertRaisesRegex(ValidationError, "duplicate archived cross id X1"):
+            validate_project(p)
+
+    def test_active_and_archived_cross_id_collision(self):
+        p = Project(project="demo")
+        p.cross_cutting.append(
+            CrossCutting(id="X1", title="active", created="2026-05-21")
+        )
+        p.archived_cross_cutting.append(
+            ArchivedCrossCutting(
+                id="X1",
+                title="archived",
+                archived_path="docs/archived-tasks/X1-archived.md",
+                archived_date="2026-05-21",
+            )
+        )
+
+        with self.assertRaisesRegex(
+            ValidationError,
+            "X1 appears in both active and archived cross-cutting",
+        ):
             validate_project(p)
 
 class StatusTransitionTests(unittest.TestCase):
@@ -215,6 +264,20 @@ class DateFormatTests(unittest.TestCase):
         p.cross_cutting.append(
             CrossCutting(id="X1", title="x", created="2026-05-17", started="2026-02-31"),
         )
+        with self.assertRaises(ValidationError):
+            validate_project(p)
+
+    def test_malformed_archived_cross_date_and_path_rejected(self):
+        p = Project(project="demo")
+        p.archived_cross_cutting.append(
+            ArchivedCrossCutting(
+                id="X1",
+                title="archived",
+                archived_path="",
+                archived_date="20260521",
+            )
+        )
+
         with self.assertRaises(ValidationError):
             validate_project(p)
 

@@ -11,6 +11,7 @@ from tasktool.model import (
     Status,
     PlanningStatus,
     ArchivedPhase,
+    ArchivedCrossCutting,
     SCHEMA_VERSION,
 )
 from tasktool.serialize import load_project, save_project, dumps_canonical, loads_project
@@ -29,6 +30,7 @@ __all__ = [
     "Status",
     "PlanningStatus",
     "ArchivedPhase",
+    "ArchivedCrossCutting",
     "SCHEMA_VERSION",
     "load_project",
     "save_project",

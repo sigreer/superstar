@@ -3,7 +3,8 @@ import json
 from dataclasses import asdict
 from pathlib import Path
 from tasktool.model import (
-    Project, Phase, Slice, Task, CrossCutting, ArchivedPhase, BlockedOn,
+    Project, Phase, Slice, Task, CrossCutting, ArchivedPhase,
+    ArchivedCrossCutting, BlockedOn,
     Status, PlanningStatus, SCHEMA_VERSION,
 )
 
@@ -80,6 +81,11 @@ def from_dict(d: dict) -> Project:
             id=ad["id"], title=ad["title"],
             archived_path=ad["archived_path"], archived_date=ad["archived_date"],
         )
+    def _arch_cross(ad):
+        return ArchivedCrossCutting(
+            id=ad["id"], title=ad["title"],
+            archived_path=ad["archived_path"], archived_date=ad["archived_date"],
+        )
     return Project(
         project=d["project"],
         schema_version=d.get("schema_version", SCHEMA_VERSION),
@@ -88,6 +94,9 @@ def from_dict(d: dict) -> Project:
         phases=[_phase(p) for p in d.get("phases", [])],
         cross_cutting=[_cross(x) for x in d.get("cross_cutting", [])],
         archived_phases=[_arch(a) for a in d.get("archived_phases", [])],
+        archived_cross_cutting=[
+            _arch_cross(a) for a in d.get("archived_cross_cutting", [])
+        ],
     )
 
 def dumps_canonical(p: Project) -> str:
