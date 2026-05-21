@@ -102,6 +102,16 @@ def _build_parser() -> argparse.ArgumentParser:
     p_start_mode.add_argument("--adopt", metavar="PATH")
     p_start_mode.add_argument("--ad-hoc", metavar="SLUG")
 
+    p_wt = sub.add_parser("worktree")
+    wt_sub = p_wt.add_subparsers(dest="wt_cmd", required=True)
+    p_wt_list = wt_sub.add_parser("list")
+    p_wt_list.add_argument("--all", action="store_true", dest="show_all")
+    p_wt_status = wt_sub.add_parser("status")
+    p_wt_status.add_argument("id")
+    p_wt_adopt = wt_sub.add_parser("adopt")
+    p_wt_adopt.add_argument("id")
+    p_wt_adopt.add_argument("path")
+
     p_close = sub.add_parser("close")
     p_close.add_argument("id")
     p_close.add_argument(
@@ -326,6 +336,13 @@ def main(argv: list[str]) -> int:
                 repo_root=root, id=args.id, resume=args.resume,
                 in_place=args.in_place, adopt=args.adopt, ad_hoc=args.ad_hoc,
             )
+        elif args.cmd == "worktree":
+            if args.wt_cmd == "list":
+                sys.stdout.write(commands.cmd_worktree_list(repo_root=root, show_all=args.show_all))
+            elif args.wt_cmd == "status":
+                sys.stdout.write(commands.cmd_worktree_status(repo_root=root, id=args.id))
+            elif args.wt_cmd == "adopt":
+                commands.cmd_worktree_adopt(repo_root=root, id=args.id, path=Path(args.path))
         elif args.cmd == "close":
             refs = _comma_split(args.refs) or None
             commands.cmd_close(

@@ -1769,3 +1769,74 @@ def cmd_brief(*, repo_root: Path, id: str) -> str:
     p = _load(repo_root)
     qid = _resolve_id(p, id)
     return _brief(p, qid)
+
+
+def _iter_worktree_rows(p):
+    """Yield (qid, item) pairs for every slice + cross row that may carry worktree fields."""
+    for ph in p.phases:
+        for s in ph.slices:
+            yield f"{ph.id}.{s.id}", s
+    for c in p.cross_cutting:
+        yield c.id, c
+
+
+def _health_for(write_root: Path, item) -> str:
+    from tasktool.worktree_lifecycle import (
+        RecordedState, classify_recorded_state,
+    )
+    if item.worktree_in_place:
+        return "in-place"
+    if item.worktree_path is None and item.worktree_branch is None:
+        if getattr(item, "worktree_pruned_at", None):
+            return "pruned"
+        return "absent"
+    recorded_path = (write_root / item.worktree_path).resolve() if item.worktree_path else None
+    state = classify_recorded_state(
+        write_root, recorded_path=recorded_path, recorded_branch=item.worktree_branch,
+    )
+    return {
+        RecordedState.CONSISTENT: "live",
+        RecordedState.BOTH_MISSING: "missing-path",
+        RecordedState.PATH_MISSING: "missing-path",
+        RecordedState.PATH_NOT_WORKTREE: "mismatched",
+        RecordedState.BRANCH_MISMATCH: "mismatched",
+        RecordedState.ABSENT: "absent",
+    }[state]
+
+
+def cmd_worktree_list(*, repo_root: Path, show_all: bool = False) -> str:
+    with _write_context(repo_root) as write_root:
+        p = _load(write_root)
+        rows = []
+        for qid, item in _iter_worktree_rows(p):
+            has_path = item.worktree_path is not None
+            is_in_place = item.worktree_in_place
+            is_pruned = (not has_path) and (not is_in_place) and bool(
+                getattr(item, "worktree_pruned_at", None)
+            )
+            if not show_all and not has_path:
+                continue
+            if is_in_place and not show_all:
+                continue
+            if is_pruned and not show_all:
+                continue
+            health = _health_for(write_root, item)
+            path = item.worktree_path or ""
+            branch = item.worktree_branch or ""
+            rows.append((qid, item.status.value, path, branch, health))
+        if not rows:
+            return "(no worktrees)\n"
+        widths = [max(len(str(r[i])) for r in rows) for i in range(5)]
+        headers = ("ID", "STATUS", "PATH", "BRANCH", "HEALTH")
+        widths = [max(widths[i], len(headers[i])) for i in range(5)]
+        line = lambda r: "  ".join(str(r[i]).ljust(widths[i]) for i in range(5))
+        out_lines = [line(headers)] + [line(r) for r in rows]
+        return "\n".join(out_lines) + "\n"
+
+
+def cmd_worktree_status(*, repo_root: Path, id: str) -> str:
+    raise NotImplementedError("cmd_worktree_status ships in Task 9")
+
+
+def cmd_worktree_adopt(*, repo_root: Path, id: str, path: Path) -> None:
+    raise NotImplementedError("cmd_worktree_adopt ships in Task 10")
