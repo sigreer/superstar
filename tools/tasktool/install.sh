@@ -12,15 +12,38 @@ if [[ "${1:-}" == "--hook" ]]; then
     echo "install.sh --hook: must be run inside a git working tree" >&2
     exit 1
   fi
-  HOOK_SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/templates/pre-commit-tasktool"
+  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  SOURCE_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"   # → superstar repo root
+  HOOK_SRC="$SCRIPT_DIR/templates/pre-commit-tasktool"
   HOOK_DEST="$REPO_ROOT/.git/hooks/pre-commit"
   if [[ -f "$HOOK_DEST" && "$FORCE_HOOK" -ne 1 ]]; then
-    if ! grep -q 'tasktool-pre-commit-hook' "$HOOK_DEST" 2>/dev/null; then
+    if grep -q 'tasktool-pre-commit-hook' "$HOOK_DEST" 2>/dev/null \
+       || grep -q 'superstar-hook-name: tasktool-pre-commit' "$HOOK_DEST" 2>/dev/null; then
+      : # ours; rewrite below
+    else
       echo "install.sh --hook: $HOOK_DEST exists and is not a tasktool hook. Re-run with --force to overwrite." >&2
       exit 1
     fi
   fi
-  install -m 0755 "$HOOK_SRC" "$HOOK_DEST"
+  SRC_VERSION="$(head -n1 "$SOURCE_ROOT/VERSION" | tr -d '[:space:]')"
+  if [[ -z "$SRC_VERSION" ]]; then
+    echo "install.sh --hook: $SOURCE_ROOT/VERSION is missing or empty" >&2
+    exit 1
+  fi
+  GENERATED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  if [[ "$SOURCE_ROOT" == "$HOME/"* ]]; then
+    STAMP_SOURCE_ROOT="\$HOME/${SOURCE_ROOT#"$HOME/"}"
+  else
+    STAMP_SOURCE_ROOT="$SOURCE_ROOT"
+  fi
+  TMP="$(mktemp)"
+  sed \
+    -e "s|__SUPERSTAR_HOOK_VERSION__|$SRC_VERSION|" \
+    -e "s|__SUPERSTAR_HOOK_SOURCE_ROOT__|${STAMP_SOURCE_ROOT//|/\\|}|" \
+    -e "s|__SUPERSTAR_HOOK_GENERATED_AT__|$GENERATED_AT|" \
+    "$HOOK_SRC" > "$TMP"
+  install -m 0755 "$TMP" "$HOOK_DEST"
+  rm -f "$TMP"
   echo "Installed $HOOK_DEST"
   exit 0
 fi

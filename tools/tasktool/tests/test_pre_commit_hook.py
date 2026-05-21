@@ -17,6 +17,21 @@ def _tasktool(repo, *args, env=None):
     return subprocess.run([sys.executable, str(TOOL), "--project-root", str(repo), *args],
                           capture_output=True, text=True, env=env)
 
+def _read_source_version() -> str:
+    """Return the Superstar source VERSION (single line)."""
+    return (REPO / "VERSION").read_text().splitlines()[0].strip()
+
+
+def _install_hook_only(repo, *, force: bool = False, check: bool = True):
+    args = ["bash", str(INSTALL), "--hook"]
+    if force:
+        args.append("--force")
+    result = subprocess.run(args, cwd=repo, capture_output=True, text=True, check=False)
+    if check:
+        assert result.returncode == 0, result.stdout + result.stderr
+    return result
+
+
 def _seed_repo(tmp_path):
     repo = tmp_path / "r"
     repo.mkdir()
@@ -183,3 +198,45 @@ def test_staged_good_dirty_worktree_passes(tmp_path):
         "hook must accept canonical index regardless of worktree dirt: "
         + r.stdout + r.stderr
     )
+
+
+def test_hook_install_writes_stamped_header(tmp_path):
+    repo, _env = _seed_repo(tmp_path)  # _seed_repo already ran install.sh --hook
+    hook = repo / ".git" / "hooks" / "pre-commit"
+    text = hook.read_text()
+    src_version = _read_source_version()
+    assert "superstar-hook-name: tasktool-pre-commit" in text
+    assert f"superstar-hook-version: {src_version}" in text
+    assert "superstar-hook-source-root:" in text
+    assert "superstar-hook-installer: tools/tasktool/install.sh --hook" in text
+    assert "superstar-hook-generated-at:" in text
+    assert "tasktool-pre-commit-hook" in text
+
+
+def test_hook_install_accepts_legacy_marker_without_force(tmp_path):
+    repo = tmp_path / "r"
+    repo.mkdir()
+    subprocess.run(["git", "-C", str(repo), "init", "-q", "-b", "main"], check=True)
+    hook = repo / ".git" / "hooks" / "pre-commit"
+    hook.parent.mkdir(parents=True, exist_ok=True)
+    hook.write_text("#!/usr/bin/env sh\n# tasktool-pre-commit-hook v1\nexit 0\n")
+    hook.chmod(0o755)
+    result = _install_hook_only(repo, force=False)
+    assert result.returncode == 0
+    text = hook.read_text()
+    assert "superstar-hook-name: tasktool-pre-commit" in text
+    src_version = _read_source_version()
+    assert f"superstar-hook-version: {src_version}" in text
+
+
+def test_hook_install_refuses_non_tasktool_hook_without_force(tmp_path):
+    repo = tmp_path / "r"
+    repo.mkdir()
+    subprocess.run(["git", "-C", str(repo), "init", "-q", "-b", "main"], check=True)
+    hook = repo / ".git" / "hooks" / "pre-commit"
+    hook.parent.mkdir(parents=True, exist_ok=True)
+    hook.write_text("#!/usr/bin/env sh\n# someone-elses-hook\nexit 0\n")
+    hook.chmod(0o755)
+    result = _install_hook_only(repo, force=False, check=False)
+    assert result.returncode != 0
+    assert "not a tasktool hook" in result.stderr

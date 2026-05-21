@@ -1,5 +1,12 @@
 #!/usr/bin/env sh
 # tasktool-pre-commit-hook v1
+# superstar-hook
+# superstar-hook-name: tasktool-pre-commit
+# superstar-hook-version: __SUPERSTAR_HOOK_VERSION__
+# superstar-hook-source-root: __SUPERSTAR_HOOK_SOURCE_ROOT__
+# superstar-hook-installer: tools/tasktool/install.sh --hook
+# superstar-hook-generated-at: __SUPERSTAR_HOOK_GENERATED_AT__
+#
 # Installed by `tools/tasktool/install.sh --hook`.
 # Validates the STAGED content (the index), not the working tree, so a clean
 # worktree with stale staged bytes cannot sneak past.
