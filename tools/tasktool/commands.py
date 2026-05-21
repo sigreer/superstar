@@ -1835,7 +1835,48 @@ def cmd_worktree_list(*, repo_root: Path, show_all: bool = False) -> str:
 
 
 def cmd_worktree_status(*, repo_root: Path, id: str) -> str:
-    raise NotImplementedError("cmd_worktree_status ships in Task 9")
+    with _write_context(repo_root) as write_root:
+        p = _load(write_root)
+        qid, _container, item = _find_item(p, id)
+        if item.worktree_in_place:
+            return f"{qid}: in-place (no worktree on disk)\n"
+        if item.worktree_path is None:
+            return f"{qid}: no worktree recorded\n"
+        wt = (write_root / item.worktree_path).resolve()
+        health = _health_for(write_root, item)
+        lines = [
+            f"{qid}: {health}",
+            f"path: {item.worktree_path}",
+            f"branch: {item.worktree_branch}",
+        ]
+        if health == "live":
+            # ahead/behind vs the configured authoritative parent branch (NOT a
+            # hardcoded "main"). _resolve_write_root already exposes this via
+            # `authoritative_branch`; we re-read config here directly to avoid
+            # double-routing inside the existing _write_context.
+            from tasktool.config import load_config
+            parent_branch = load_config(write_root).tasklist.authoritative_branch
+            try:
+                ab = _subprocess.run(
+                    ["git", "rev-list", "--left-right", "--count",
+                     f"{parent_branch}...{item.worktree_branch}"],
+                    cwd=write_root, text=True, capture_output=True, check=True,
+                ).stdout.strip().split()
+                behind, ahead = ab[0], ab[1]
+                lines.append(f"ahead/behind: {ahead}/{behind} (vs {parent_branch})")
+            except _subprocess.CalledProcessError:
+                lines.append(f"ahead/behind: unknown (vs {parent_branch})")
+            dirty = _subprocess.run(
+                ["git", "status", "--porcelain"],
+                cwd=wt, text=True, capture_output=True, check=True,
+            ).stdout.splitlines()
+            lines.append(f"dirty: {'clean' if not dirty else f'{len(dirty)} path(s)'}")
+            last = _subprocess.run(
+                ["git", "log", "-1", "--format=%cI"],
+                cwd=wt, text=True, capture_output=True, check=True,
+            ).stdout.strip()
+            lines.append(f"last_activity: {last}")
+        return "\n".join(lines) + "\n"
 
 
 def cmd_worktree_adopt(*, repo_root: Path, id: str, path: Path) -> None:

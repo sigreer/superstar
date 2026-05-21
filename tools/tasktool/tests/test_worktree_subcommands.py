@@ -66,3 +66,65 @@ def test_worktree_list_marks_missing_path(tmp_path):
     r = run(root, "worktree", "list")
     assert r.returncode == 0
     assert "missing-path" in r.stdout
+
+
+def test_worktree_status_live_slice_reports_clean(tmp_path):
+    root = seed_with_started_slice(tmp_path)
+    r = run(root, "worktree", "status", "P1.S1")
+    assert r.returncode == 0, r.stdout + r.stderr
+    out = r.stdout
+    assert "path:" in out
+    assert "branch: worktree-p1-s1-slice-one" in out
+    assert "ahead/behind:" in out
+    assert "dirty: clean" in out
+    assert "last_activity:" in out
+
+
+def test_worktree_status_reports_dirty_after_edit(tmp_path):
+    root = seed_with_started_slice(tmp_path)
+    wt = root / ".worktrees" / "worktree-p1-s1-slice-one"
+    (wt / "note.txt").write_text("dirty\n")
+    r = run(root, "worktree", "status", "P1.S1")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "dirty: 1 path(s)" in r.stdout
+
+
+def test_worktree_status_unknown_slice(tmp_path):
+    root = seed_with_started_slice(tmp_path)
+    r = run(root, "worktree", "status", "P9.S9")
+    assert r.returncode != 0
+    assert "not found" in (r.stdout + r.stderr)
+
+
+def test_worktree_status_uses_configured_authoritative_branch(tmp_path):
+    """F3: when `authoritative_branch=develop`, status must report ahead/behind
+    against `develop`, not against a hardcoded `main`."""
+    root = tmp_path / "repo"
+    root.mkdir()
+    _git(root, "init", "-b", "develop")
+    _git(root, "config", "user.email", "t@example.invalid")
+    _git(root, "config", "user.name", "T")
+    (root / "docs").mkdir()
+    assert run(root, "config", "init-authority", "--branch", "develop").returncode == 0
+    assert run(root, "init", "--project", "demo").returncode == 0
+    _git(root, "add", "-A")
+    _git(root, "commit", "-m", "init")
+    assert run(root, "create", "phase", "--title", "P").returncode == 0
+    assert run(root, "create", "slice", "P1", "--title", "Slice").returncode == 0
+    _git(root, "add", "-A")
+    _git(root, "commit", "-m", "seed slice")
+    assert run(root, "start", "P1.S1").returncode == 0
+    r = run(root, "worktree", "status", "P1.S1")
+    assert r.returncode == 0, r.stdout + r.stderr
+    # Crucially: the report names `develop` as the parent, not `main`.
+    assert "vs develop" in r.stdout
+    assert "vs main" not in r.stdout
+
+
+def test_worktree_status_in_place_slice(tmp_path):
+    root = seed_with_started_slice(tmp_path)
+    assert run(root, "create", "slice", "P1", "--title", "Spec slice").returncode == 0
+    assert run(root, "start", "P1.S2", "--in-place").returncode == 0
+    r = run(root, "worktree", "status", "P1.S2")
+    assert r.returncode == 0
+    assert "in-place" in r.stdout
