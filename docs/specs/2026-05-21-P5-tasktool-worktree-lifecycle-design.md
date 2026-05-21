@@ -1,0 +1,325 @@
+# P5 — Tasktool-owned worktree lifecycle & `using-git-worktrees` skill collapse
+
+**Date:** 2026-05-21
+**Phase ID:** P5
+**Status:** spec
+**Source material:** `docs/notes/2026-05-21-P5-using-git-worktrees-audit.md`, `docs/notes/2026-05-21-P5-worktree-lifecycle-feedback.md`
+
+---
+
+## 1. Problem
+
+Telemetry attributes roughly a third of session tokens in implementation-heavy work to the `using-git-worktrees` skill. The audit (see source) traces the cost to **repeated agent cognition**, not to skill bloat per se:
+
+- Subagents reload the skill and re-run Step 0 even when their cwd is already inside a linked worktree.
+- Every session re-derives the worktree directory, branch name, and naming convention from filesystem state and reflog history, because no per-project authority records the chosen convention.
+- The skill describes a four-branch decision tree (native tool vs fallback, multiple candidate dirs, submodule guard, in-place opt-out) that the agent walks through on every load.
+- In the audited multistore project the skill's assumptions only partially match reality — three ignored worktree dirs exist, only one is used, none are documented, and `git worktree list` shows zero live worktrees despite a reflog full of past `worktree-p13-*` merges. Drift between skill assumptions and project state guarantees re-derivation.
+
+The root cause is **ownership**. Worktree lifecycle is currently the agent's responsibility, mediated by prose. Tasktool already knows everything the agent re-derives — slice ID, slug, authoritative branch, repo root, lifecycle state, whether the work is implementation-bound — but does not own the worktree. This spec moves that ownership to tasktool.
+
+## 2. Thesis
+
+**P5 is not "make the skill shorter."** Shrinking the skill is a side effect. The work is to **remove the recurring decision from agent cognition** and make tasktool the lifecycle authority for worktrees. Once that is true, the skill collapses naturally to a thin pointer and a subagent early-exit.
+
+## 3. Goals
+
+1. **Authority shift.** Tasktool creates, adopts, tracks, and cleans up worktrees. The skill stops describing how to do any of those things.
+2. **Deterministic convention.** One canonical path (`.worktrees/worktree-<id>-<slug>`), one branch name (matches dir name), one `.gitignore` entry, enforced by the installer.
+3. **Drift elimination.** Slice state and worktree state are co-located in `tasklist.json`. Stale worktrees cannot accumulate silently; missing worktrees cannot be papered over.
+4. **Subagent token reduction.** Dispatched subagents already inside a linked worktree skip the skill entirely.
+5. **Native-harness coexistence.** When a harness creates its own worktree (e.g. `EnterWorktree`), tasktool adopts and tracks rather than fighting.
+
+## 4. Non-goals
+
+- Multi-worktree-per-slice. One slice → one worktree.
+- Remote-worktree management or cross-project worktree sharing.
+- Per-harness worktree directories. `.claude/worktrees/` and `.codex/worktrees/` are deprecated; the installer warns on detection but performs no automatic migration. Removal of the legacy paths is scheduled one minor version after P5 ships.
+- Replacing `git worktree` for ad-hoc human use outside the slice model. `tasktool worktree …` is slice-scoped tooling, not a generic git wrapper.
+
+## 5. Design
+
+### 5.1 Canonical layout
+
+- **Location:** `.worktrees/` at the authoritative repo root. Always git-ignored. The installer adds the entry if absent.
+- **Per-slice path:** `.worktrees/worktree-<id-slug>-<title-slug>`. See the canonical naming function below.
+- **Branch name:** identical to the directory base name. Eliminates the path/branch ambiguity that prune logic would otherwise face.
+
+#### Canonical naming function (normative)
+
+```
+worktree_name(id, title) =
+    "worktree-" + slugify_id(id) + "-" + slugify_title(title)
+
+slugify_id(id):
+    lowercase(id)
+    replace "." with "-"
+    strip any character not in [a-z0-9-]
+    collapse repeated "-" into single "-"
+    strip leading/trailing "-"
+
+slugify_title(title):
+    lowercase(title)
+    replace whitespace and "_" with "-"
+    strip any character not in [a-z0-9-]
+    collapse repeated "-" into single "-"
+    strip leading/trailing "-"
+    truncate to 40 characters at a "-" boundary if longer
+```
+
+Worked examples:
+
+| ID      | Title                                  | Directory & branch                                        |
+|---------|----------------------------------------|-----------------------------------------------------------|
+| `P5.S1` | "Tasktool worktree lifecycle core"     | `worktree-p5-s1-tasktool-worktree-lifecycle-core`         |
+| `X42`   | "Hotfix: shim drift"                   | `worktree-x42-hotfix-shim-drift`                          |
+| `P13.S2`| "Checkout rewrite"                     | `worktree-p13-s2-checkout-rewrite`                        |
+
+**Collision handling.** If the computed path or branch already exists and is not the recorded worktree for this slice, `start` fails with repair guidance (see §5.3 reuse rules). Tasktool never silently appends a suffix.
+- **Legacy paths:** `.claude/worktrees/`, `.codex/worktrees/`, and the global `~/.config/superstar/worktrees/<project>` path are deprecated. Installer warns on detection; removal one minor version after this phase ships.
+
+### 5.2 Schema additions (`docs/tasklist.json`)
+
+Each slice (and each cross-cutting item that runs implementation work) gains two optional fields:
+
+```json
+{
+  "worktree_path": ".worktrees/worktree-p5-s1-tasktool-worktree-core",
+  "worktree_branch": "worktree-p5-s1-tasktool-worktree-core"
+}
+```
+
+- Both fields default to `null`. Existing entries are not rewritten; `tasktool start` backfills on first invocation.
+- **Both** are stored (not just path) because prune guards need a stable branch reference even if the directory has been manually deleted, and start needs a stable path even if the branch has been force-renamed.
+- An `--in-place` start records `worktree_path: null` plus a `worktree_in_place: true` audit marker on the slice, so a later `close` does not interpret missing-worktree as broken state.
+- Additional audit fields written by lifecycle commands: `worktree_pruned_at` (set by successful `prune` / `prune --finalize`), `worktree_prune_pending: true` and `worktree_prune_pending_at` (set by prune-from-inside, cleared by `--finalize`). All are optional and null/absent by default.
+
+### 5.3 Tasktool CLI surface
+
+#### `tasktool start <id> [--in-place | --adopt <path>]` &nbsp;·&nbsp; `tasktool start --ad-hoc <slug>`
+
+Two syntaxes. The first takes a known tasklist ID. The second omits `<id>` because the ID is allocated by tasktool from the cross-cutting namespace as part of the call.
+
+Default behavior: create `.worktrees/worktree-<id>-<slug>` on a branch of the same name (forked from the slice's parent branch per existing tasktool rules), set slice → `in_progress`, record `worktree_path` and `worktree_branch`, print the `cd` line for the user.
+
+**Idempotent reuse rules.** If `worktree_path` is already recorded, tasktool checks the live state and chooses:
+
+| State | Behavior |
+|-------|----------|
+| Path exists, is a linked worktree, branch matches | Print the `cd` line. No-op. |
+| Path missing entirely, branch missing | Fail with repair guidance: `tasktool worktree repair <id>` will recreate from recorded fields. |
+| Path missing, branch still present | Fail with repair guidance pointing at `tasktool worktree adopt <id> <new-path>` or `tasktool worktree repair <id>`. |
+| Path present but not a linked worktree (e.g. plain dir) | Fail. Do not overwrite. Suggest `tasktool worktree prune <id> --force` then re-`start`. |
+| Path present, branch mismatched | Fail. This is genuinely ambiguous — refuse rather than guess. |
+
+Tasktool never silently recreates over ambiguous state. Repair is always an explicit command.
+
+**Flags:**
+- `--in-place` — explicit opt-out for planning/spec slices that do not touch code. Sets the `worktree_in_place` audit marker; subsequent `close` will not search for a worktree.
+- `--adopt <path>` — record an externally-created worktree (e.g. one created by `EnterWorktree`). Tasktool verifies the path is a linked worktree and that its branch is appropriate, then stores both fields. Auto-detect: if the caller's cwd is already inside a linked worktree of the parent repo, `start` switches to adopt mode automatically and uses the detected path.
+- `--ad-hoc <slug>` — throwaway worktrees for hotfixes / exploration outside a phase plan. Allocates a normal cross-cutting `X<n>` row (using existing `tasktool create cross` machinery and the existing `X\d+` ID grammar — no new ID family, no schema change to `archived_cross_cutting`), with `status: in_progress`, `title: "Ad-hoc: <slug>"`, `notes: "ad-hoc"`, and the standard `worktree_path` / `worktree_branch` fields. The row uses a deliberately non-default close path so worktree fields survive long enough for prune to run:
+   1. `tasktool close <Xn> --no-archive` — required for ad-hoc rows. Flips status to `done` and leaves the row in `cross_cutting` with `worktree_path` / `worktree_branch` intact. **Defaulting `close` to auto-archive (current behavior for cross-cutting rows) would delete the row before prune could find it; the spec requires `--no-archive` rather than changing the existing default.**
+   2. `tasktool worktree prune <Xn>` — standard three-guard prune; nulls worktree fields and records `worktree_pruned_at`.
+   3. `tasktool archive-cross <Xn>` — archives the now-pruned row via the existing workflow.
+
+  Ad-hoc rows are tagged with `notes: "ad-hoc"` so `tasktool list` can hide them by default (visible under `tasktool list --all`). The skill / `tasklist-discipline` doc spells out the three-step sequence; tasktool itself does not enforce the ordering beyond the existing close/archive command surface.
+
+**Subagent guard.** Tasktool refuses `start` when any of the following signals indicate the caller is a dispatched subagent. Signals are checked in this order; the first present wins:
+
+1. `SUPERSTAR_SUBAGENT_ROLE` env var set to any non-empty value. Set by the Superstar shim when a coordinator dispatches a subagent via the Claude `Task` tool or Codex `subagent` equivalent. This is the supported, harness-set signal.
+2. `CLAUDE_AGENT_ROLE` env var set to any value other than `coordinator` or `main`. Forward-compat hook for harness-native subagent signals when those become available.
+3. `SUPERSTAR_FORCE_SUBAGENT=1` env var. Test-only override; documented and used by P5.S3 fixtures.
+
+On any positive signal, `start` exits non-zero with: `"Subagents must inherit the parent's worktree; call the parent or 'cd' into the existing recorded path: <worktree_path>."`
+
+**Absence of all three signals is treated as "not a subagent."** Tasktool will not infer subagent status from parent-process fingerprinting, cwd heuristics, or pty introspection — those produce too many false positives in plain shells. This means a coordinator that loses its env (e.g. via `env -i`) will look like a top-level invocation and `start` will proceed; the `tasklist-discipline` doc rule is the load-bearing guard for that case and is documented as such.
+
+`SUPERSTAR_SUBAGENT_ROLE` is added to the Claude shim and Codex shim as part of P5.S3.
+
+#### `tasktool close <id>` — unchanged worktree semantics
+
+**`tasktool close` does not touch the worktree.** Its existing meaning — review-gated slice closure run at slice boundary, before merge-back — is preserved unchanged. The slice's `worktree_path` / `worktree_branch` / `worktree_in_place` fields are retained verbatim across `close`, so `worktree list` continues to see the slice's worktree as a closed-but-retained row until it is explicitly pruned post-merge.
+
+This split is deliberate. `close` runs *before* merge-back in the established workflow (see `[[executing-plans]]`, `[[finishing-a-development-branch]]`), so it cannot enforce a merged-branch guard without breaking that workflow. Destructive cleanup is a separate operation owned by `tasktool worktree prune`.
+
+#### `tasktool worktree prune <id> [--keep-branch | --force]`
+
+Removes the recorded worktree. Invoked post-merge (typically from `[[finishing-a-development-branch]]` after the slice's branch lands on the authoritative parent). Guards (three, all durably observable from filesystem and tasklist state):
+
+1. Slice status is `done` (i.e. `close` has already run and the review gates passed).
+2. Branch is merged into the slice's authoritative parent (e.g. `main`).
+3. Working tree is clean: no uncommitted, untracked, or stashed changes in the worktree.
+
+If any guard fails, prune is refused with a precise reason. **`--force` overrides prune guards only.** It does not affect `tasktool close`, slice status, review gates, dependency gates, or any other lifecycle concern — those keep their existing semantics. `--force` is the destructive escape hatch for the cleanup step alone.
+
+**In-flight subagent detection is explicitly out of scope for P5.** A robust check would require a tasktool-managed lease/lock file written on subagent dispatch and cleared on exit. That mechanism is deferred to a follow-up (tracked under §8). For P5, prune relies on the clean-tree guard plus operator discipline: subagents that exit cleanly leave a clean tree; subagents that are abandoned leave dirty/untracked state that the clean-tree guard catches. Prune emits a non-blocking informational note when it observes a worktree whose `HEAD` has moved within the last 60 seconds, but does not refuse on that basis.
+
+`--keep-branch` removes the worktree directory but leaves the branch in place (useful when the branch will be referenced by tags/releases).
+
+After a successful prune (or `--force` prune), tasktool nulls `worktree_path` and `worktree_branch` on the slice and records a `worktree_pruned_at` audit timestamp. `worktree_in_place: true` slices have no worktree to prune; `prune` is a no-op that records the audit timestamp.
+
+**Prune from inside the worktree being removed.** Detected via `git rev-parse --git-dir` vs `--git-common-dir`. Tasktool:
+1. Performs every non-destructive action (guards, audit log).
+2. Sets a `worktree_prune_pending: true` marker on the slice (and records `worktree_prune_pending_at: <timestamp>`), pinning the staged path so `--finalize` can verify it later. Worktree fields are **not** nulled at this step.
+3. Skips the `git worktree remove` call.
+4. Prints the exact follow-up command to chat: `cd <authoritative-root> && git worktree remove <path> && tasktool worktree prune <id> --finalize`.
+
+`--finalize` (run from outside the worktree) performs the field nulling and audit timestamp. It is guard-light (does not re-run the three destructive guards) but enforces three preconditions before mutating state:
+
+1. `worktree_prune_pending: true` is set on the slice. Without it, `--finalize` refuses with: "no pending prune to finalize; run `tasktool worktree prune <id>` first."
+2. The previously recorded `worktree_path` is no longer a registered git worktree (per `git worktree list --porcelain`).
+3. No directory exists at the previously recorded `worktree_path`.
+
+If preconditions 2 or 3 fail, `--finalize` refuses with the specific reason and does not null the fields — this prevents hiding a still-live or partially-removed worktree from `worktree list`. On success, `--finalize` clears `worktree_prune_pending`, nulls `worktree_path` and `worktree_branch`, and sets `worktree_pruned_at`.
+
+No chdir magic, no re-exec.
+
+#### `tasktool worktree <subcommand>`
+
+Slice-scoped, not a generic git-worktree wrapper. All subcommands except `list` take a slice ID.
+
+- `tasktool worktree list [--all]` — by default, lists every slice that currently has a non-null `worktree_path` (active + closed-but-not-yet-pruned). `--all` additionally includes `--in-place` slices and slices with a `worktree_pruned_at` audit timestamp but no surviving fields. Output columns: ID, status, path, branch, health (`live` / `missing-path` / `missing-branch` / `mismatched` / `in-place` / `pruned`).
+- `tasktool worktree status <id>` — detailed health for one slice's worktree: path, branch, ahead/behind parent, dirty state, last activity.
+- `tasktool worktree adopt <id> <path>` — record an existing linked worktree against a slice. Used when the harness or human created the worktree out-of-band, or when repairing state after a path rename.
+- `tasktool worktree prune <id> [--keep-branch | --force | --finalize]` — remove the recorded worktree. Applies the three guards described under `tasktool worktree prune` above (slice-done, branch-merged, clean-tree). `--force` overrides prune guards only; `--keep-branch` removes the directory but leaves the branch; `--finalize` records the post-prune field nulling without re-running guards when the directory was already removed externally (the prune-from-inside two-step).
+- `tasktool worktree repair <id>` — recreate a missing worktree from recorded `worktree_path` + `worktree_branch` fields. Refuses if the branch is also missing (use `adopt` after creating one manually, or restart the slice).
+
+### 5.3.1 Lifecycle state table
+
+Persisted field values for each command, assuming the slice was created normally (not `--in-place` or `--ad-hoc` unless noted).
+
+| Command | `worktree_path` | `worktree_branch` | `worktree_in_place` | `worktree_pruned_at` | Disk state |
+|---|---|---|---|---|---|
+| `start` (fresh) | recorded | recorded | absent | absent | linked worktree created |
+| `start` (idempotent reuse, consistent) | unchanged | unchanged | unchanged | unchanged | unchanged |
+| `start --in-place` | null | null | `true` | absent | nothing on disk |
+| `start --adopt <path>` | recorded (= path) | recorded (from path's branch) | absent | absent | linked worktree pre-existed |
+| `close` | unchanged | unchanged | unchanged | unchanged | unchanged |
+| `worktree prune` (success) | nulled | nulled | unchanged | set to now | worktree removed; branch removed unless `--keep-branch` |
+| `worktree prune` (prune-from-inside, before `--finalize`) | unchanged | unchanged | unchanged | absent | worktree still present; `worktree_prune_pending: true` set on slice |
+| `worktree prune --finalize` (preconditions met) | nulled | nulled | unchanged | set to now | (caller already removed the worktree); `worktree_prune_pending` cleared |
+| `worktree prune` on `--in-place` slice | unchanged (null) | unchanged (null) | unchanged (`true`) | set to now | no-op on disk |
+| `worktree repair` (success) | unchanged | unchanged | unchanged | unchanged | worktree recreated from recorded fields |
+| `worktree adopt` | recorded (= new path) | recorded (from path's branch) | unchanged | cleared if previously set | (caller-supplied worktree pre-existed) |
+| `start --ad-hoc <slug>` | recorded | recorded | absent | absent | new `X<n>` cross-cutting row + linked worktree created; `notes: "ad-hoc"` |
+| `close <ad-hoc-Xn> --no-archive` | unchanged | unchanged | unchanged | unchanged | unchanged; row status → `done`, stays in `cross_cutting` (default `close` auto-archives the row and is a foot-gun for ad-hoc) |
+| `worktree prune <ad-hoc-Xn>` | nulled | nulled | unchanged | set to now | worktree removed; row may later be archived via `archive-cross` |
+
+### 5.3.2 Workflow impact
+
+This spec affects three existing skills. Updates land in P5.S3 alongside the `using-git-worktrees` rewrite:
+
+- **`executing-plans`** — current text says "run `tasktool close <slice-id>` at slice boundary." Unchanged in semantics; `close` still runs there and still does not touch the worktree. No edit required beyond cross-references.
+- **`finishing-a-development-branch`** — gains an explicit step: after the slice/phase branch is merged into the authoritative parent, run `tasktool worktree prune <id>` for each merged slice. The skill already runs at the right moment in the workflow; this adds the cleanup call.
+- **`subagent-driven-development`** — gains a one-line reminder that subagents inherit cwd from the parent and must not call `tasktool start` (mirrors the `tasklist-discipline` update in §5.6).
+
+### 5.4 Installer / `project-setup` changes
+
+- Ensure `.gitignore` contains `.worktrees/`. Add if absent.
+- Detect legacy `.claude/worktrees/`, `.codex/worktrees/`, and the global `~/.config/superstar/worktrees/<project>` path. Warn with a one-line migration hint. Removal of the legacy paths is scheduled for the release after P5 ships.
+- No automatic migration of existing worktrees — surface the list and let the user decide.
+
+### 5.5 Skill rewrite — `using-git-worktrees`
+
+Target length: ~30 lines (down from 226). Structure:
+
+1. `<SUBAGENT-STOP>` block: if dispatched as a subagent and `git rev-parse --git-dir != --git-common-dir`, skip the skill entirely. Parent has handled lifecycle.
+2. One-line rule: implementation work runs in an isolated worktree.
+3. One-line instruction: run `tasktool start <id>`. It handles creation, adoption, and idempotent reuse. Follow the printed `cd` line.
+4. One-line opt-out pointer: planning/spec slices may use `tasktool start <id> --in-place`.
+5. One-line failure pointer: if `start` reports drift, run the suggested `tasktool worktree …` command. Do not improvise.
+
+Quick Reference table, Common Mistakes, parallel decision trees, Step 1a native-tool reasoning, submodule guard — all deleted. Submodule guidance moves to `references/submodules.md`, loaded only on conflict.
+
+### 5.6 `tasklist-discipline` update
+
+Add one paragraph explicit about the subagent rule: parents create or adopt worktrees via `tasktool start`; dispatched subagents inherit cwd and must never call `tasktool start`. Reference the tasktool guard and acknowledge it is detection-dependent, so the doc rule is the load-bearing one.
+
+## 6. Slices
+
+### P5.S1 — Tasktool worktree lifecycle core
+
+Schema fields (`worktree_path`, `worktree_branch`, `worktree_in_place` marker). `tasktool start` with default / `--in-place` / `--adopt` / `--ad-hoc` paths and the idempotent reuse table. `tasktool worktree list` and `worktree status <id>` and `worktree adopt <id> <path>`. Installer `.gitignore` check and legacy-dir detection warnings. Lazy backfill of `worktree_path` on first `start` for pre-existing slices.
+
+**Tests:**
+- Idempotent `start` returns no-op when state is consistent.
+- Each ambiguous-state row in the reuse table fails with the documented guidance.
+- `--adopt` records an externally-created linked worktree and refuses non-worktree paths.
+- Auto-adopt fires when cwd is already inside a linked worktree of the parent repo.
+- `--in-place` records the audit marker and leaves `worktree_path` null.
+- Schema round-trip: write new fields, re-read, validate.
+- Installer adds `.gitignore` entry exactly once and warns (does not delete) on legacy dirs.
+
+### P5.S2 — Prune + repair
+
+`tasktool worktree prune <id>` with all three guards (slice done, branch merged, clean tree). `--keep-branch` and `--force` (scoped to prune guards only). Prune-from-inside-worktree detection and the `--finalize` two-step. `tasktool worktree repair <id>`. Audit timestamp (`worktree_pruned_at`) on successful prune. Update `finishing-a-development-branch` to invoke `worktree prune` after merge-back.
+
+**Tests:**
+- Prune with dirty worktree refuses and reports which files.
+- Prune with untracked files refuses.
+- Prune with stash entries attributable to the worktree refuses.
+- Prune with unmerged branch refuses.
+- Prune with slice still `in_progress` refuses (slice-done guard).
+- Recent-`HEAD` informational note fires when the worktree's `HEAD` moved within the last 60 seconds, but prune still succeeds.
+- `--force` overrides each prune guard individually; verify it does **not** affect `tasktool close`, slice status, or review gates.
+- `--keep-branch` removes the directory but leaves the branch reachable.
+- Prune from inside the doomed worktree sets `worktree_prune_pending: true`, prints the exact `cd … && git worktree remove … && tasktool worktree prune <id> --finalize` line, and skips the destructive call.
+- `--finalize` refuses when `worktree_prune_pending` is not set ("no pending prune").
+- `--finalize` refuses when the recorded `worktree_path` is still a registered git worktree.
+- `--finalize` refuses when a directory still exists at the recorded `worktree_path`.
+- `--finalize` succeeds when all three preconditions hold: clears the pending marker, nulls path/branch, sets `worktree_pruned_at`.
+- Ad-hoc lifecycle end-to-end: `start --ad-hoc <slug>` creates an `X<n>` row, `close <Xn>` (without `--no-archive`) auto-archives and is blocked from being followed by prune (covers the foot-gun); `close <Xn> --no-archive` keeps the row active, `worktree prune <Xn>` succeeds, then `archive-cross <Xn>` archives the now-pruned row.
+- `worktree repair` recreates from recorded fields when the branch exists; refuses when it does not.
+- Schema round-trip for the new audit fields, including `worktree_prune_pending` and `worktree_prune_pending_at`.
+
+### P5.S3 — Skill rewrite + subagent guard + workflow updates
+
+Collapse `using-git-worktrees` to the structure in §5.5. Add the `tasklist-discipline` paragraph from §5.6. Apply the workflow updates from §5.3.2 to `executing-plans`, `finishing-a-development-branch`, and `subagent-driven-development`. Implement tasktool's three-signal subagent detection from §5.3 and the refusal message. Set `SUPERSTAR_SUBAGENT_ROLE` from the Claude shim and Codex shim when dispatching subagents. Move submodule guidance to `references/submodules.md`.
+
+**Tests:**
+- Skill file is ≤40 lines and contains the `<SUBAGENT-STOP>` block.
+- `tasktool start` refuses with the documented message when `SUPERSTAR_SUBAGENT_ROLE` is set.
+- `tasktool start` refuses when `CLAUDE_AGENT_ROLE` is set to anything other than `coordinator` / `main`.
+- `tasktool start` refuses when `SUPERSTAR_FORCE_SUBAGENT=1` (test-only override fixture).
+- `tasktool start` proceeds normally when all three signals are absent (no false positives in plain shells, including under `env -i bash`).
+- Signal precedence: `SUPERSTAR_SUBAGENT_ROLE` wins over the other two when multiple are set.
+- Claude shim and Codex shim integration tests confirm `SUPERSTAR_SUBAGENT_ROLE` is exported in dispatched subagents and absent in coordinator sessions.
+- Token-budget regression: a representative subagent transcript that previously loaded the full skill now loads only the early-exit block. Captured as a fixture for future drift detection.
+
+## 7. Risks & mitigations
+
+- **Destructive prune.** Mitigated by three independent durably-observable guards (slice-done, branch-merged, clean-tree), explicit `--force` scoping (prune guards only, never lifecycle / review gates / `close`), and the prune-from-inside two-step (`--finalize`) that keeps destruction out of the in-flight process. The in-flight-subagent risk is intentionally not addressed by a hard guard in P5; see §8 for the deferred lease mechanism.
+- **Schema migration.** New fields are optional and null-default. Existing tasklists work unchanged. Backfill is lazy (on next `start`) so no migration script is required.
+- **Subagent detection unreliability.** Acknowledged in the spec. Tasktool guards where it can; the `tasklist-discipline` doc is the load-bearing rule. We do not pretend the runtime guard is complete.
+- **Native-harness conflict.** Auto-adopt mode in `start` defuses the most likely collision (harness creates a worktree, then the agent calls `start`).
+- **Legacy worktree dirs.** Installer warns but does not delete. Removal scheduled one minor version after P5 ships, with a deprecation note in the release.
+
+## 8. Out of scope (deferred)
+
+- Removing the legacy `.claude/worktrees/` and `.codex/worktrees/` directories programmatically. Deferred to the post-P5 cleanup release.
+- A `tasktool worktree gc` that prunes all merged-and-clean worktrees in one shot. Useful but not load-bearing for the thesis.
+- Cross-project worktree visibility (e.g. a single `tasktool worktree list --global`). Per-project only for now.
+- **In-flight subagent lease/lock-file mechanism.** A robust guard against pruning a worktree that an abandoned subagent still holds would require a tasktool-managed lease (e.g. `.worktrees/<name>/.tasktool-lock` written on dispatch, removed on exit, with PID-liveness checks). Deferred to a follow-up cross-cutting item; P5 relies on the clean-tree guard plus operator discipline as documented in §5.3.
+
+## 9. Acceptance criteria
+
+1. `tasktool start <id>` is the only command an agent needs to enter implementation work. The skill says so in one sentence.
+2. A dispatched subagent already inside a linked worktree loads the early-exit block and nothing else from `using-git-worktrees`.
+3. `tasktool close <id>` is unchanged in semantics and never touches the worktree. Destructive cleanup happens only via `tasktool worktree prune <id>`.
+4. `tasktool worktree prune` cannot silently destroy uncommitted work. Each of the three guards (slice-done, branch-merged, clean-tree) is independently testable and `--force` is scoped to prune guards only — it never affects `close`, slice status, review gates, or dependency gates. The deferred in-flight-subagent concern is acknowledged in §8 and is not part of P5's safety claims.
+5. `docs/tasklist.json` round-trips the new fields (`worktree_path`, `worktree_branch`, `worktree_in_place`, `worktree_pruned_at`); existing tasklists continue to load without rewriting.
+6. The installer leaves the project with `.worktrees/` git-ignored and a warning printed for any legacy worktree dir found. No automatic migration runs.
+7. `using-git-worktrees` is ≤40 lines and contains no decision trees.
+8. The naming function in §5.1 produces stable, lowercase, collision-free paths and branches for every fixture in the worked-examples table.
+
+## 10. Verification before implementation planning
+
+Before writing the implementation plan, the following must pass against `main`:
+
+- `tools/tasktool/tasktool validate --strict-format`
+- `python -m pytest tools/tasktool/tests -q`
+
+The implementation plan must add:
+
+- Schema-generation and validation coverage for the new `worktree_*` fields.
+- CLI integration tests covering routed authoritative checkout plus invocation from inside a linked worktree (the prune-from-inside path).

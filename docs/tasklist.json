@@ -249,7 +249,22 @@
   ],
   "last_reviewed": "2026-05-18",
   "north_star": "",
-  "phases": [],
+  "phases": [
+    {
+      "closed": null,
+      "created": "2026-05-21",
+      "id": "P5",
+      "notes": "",
+      "phase_reviewer_chain": "docs/reviewer/p5-tasktool-worktree-lifecycle-design-spec",
+      "plan_path": null,
+      "planning_path": null,
+      "slices": [],
+      "spec_path": "docs/specs/2026-05-21-P5-tasktool-worktree-lifecycle-design.md",
+      "started": null,
+      "status": "ready",
+      "title": "Tasktool-owned worktree lifecycle & using-git-worktrees skill collapse"
+    }
+  ],
   "project": "superstar",
   "schema_version": 1
 }
