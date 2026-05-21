@@ -1366,6 +1366,18 @@ def cmd_show(*, repo_root: Path, id: str) -> str:
         lines.append(f"parallel_group: {item.parallel_group}")
     if getattr(item, "planning_path", None):
         lines.append(f"planning_path: {item.planning_path}")
+    if getattr(item, "worktree_path", None):
+        lines.append(f"worktree_path: {item.worktree_path}")
+    if getattr(item, "worktree_branch", None):
+        lines.append(f"worktree_branch: {item.worktree_branch}")
+    if getattr(item, "worktree_in_place", False):
+        lines.append("worktree_in_place: true")
+    if getattr(item, "worktree_pruned_at", None):
+        lines.append(f"worktree_pruned_at: {item.worktree_pruned_at}")
+    if getattr(item, "worktree_prune_pending", False):
+        lines.append("worktree_prune_pending: true")
+        if getattr(item, "worktree_prune_pending_at", None):
+            lines.append(f"worktree_prune_pending_at: {item.worktree_prune_pending_at}")
     if getattr(item, "refs", None):
         lines.append("refs:")
         for r in item.refs:
@@ -1968,3 +1980,179 @@ def cmd_worktree_check_legacy(*, repo_root: Path, project_name: str) -> tuple[st
     lines = ["legacy worktree directories detected (warn-only, not removed):"]
     lines.extend(f"  - {p}" for p in found)
     return ("\n".join(lines) + "\n", 1)
+
+
+def cmd_worktree_prune(
+    *, repo_root: Path, id: str,
+    keep_branch: bool = False, force: bool = False, finalize: bool = False,
+) -> None:
+    from tasktool import worktree as wt
+    with _write_context(repo_root) as write_root:
+        p = _load(write_root)
+        qid, _container, item = _find_item(p, id)
+
+        if finalize:
+            _worktree_finalize(write_root, item, qid)
+            _save(write_root, p)
+            return
+
+        # In-place slices: no worktree to prune; record timestamp and exit.
+        if getattr(item, "worktree_in_place", False):
+            item.worktree_pruned_at = _today()
+            _save(write_root, p)
+            print(f"{qid}: --in-place slice; no worktree to remove.")
+            return
+
+        # Already pruned (no path on file)?
+        path_str = getattr(item, "worktree_path", None)
+        branch = getattr(item, "worktree_branch", None)
+        if not path_str or not branch:
+            raise CommandError(
+                f"{qid}: no recorded worktree to prune "
+                f"(worktree_path={path_str!r}, worktree_branch={branch!r})"
+            )
+        wt_path = (write_root / path_str).resolve()
+
+        # Guard 1: slice status is done (unless --force).
+        if not force:
+            if getattr(item, "status", None) != Status.DONE:
+                raise CommandError(
+                    f"{qid}: slice status is {item.status.value!r}; prune requires "
+                    f"'done' (run `tasktool close {qid}` first, or pass --force)"
+                )
+
+            # Guard 2: branch merged into authoritative parent.
+            parent = _authoritative_parent_branch(write_root, qid)
+            if not wt.branch_is_merged(write_root, branch=branch, into=parent):
+                raise CommandError(
+                    f"{qid}: branch {branch!r} is not merged into {parent!r}; "
+                    f"merge first or pass --force"
+                )
+
+            # Guard 3: clean worktree.
+            if wt_path.exists():
+                dirty, items = wt.working_tree_dirty(wt_path)
+                if dirty:
+                    pretty = ", ".join(items[:5]) + (" ..." if len(items) > 5 else "")
+                    raise CommandError(
+                        f"{qid}: worktree at {wt_path} is not clean: {pretty}"
+                    )
+
+        # Recent-HEAD informational note (never refuses).
+        if wt_path.exists():
+            try:
+                age = wt.head_age_seconds(wt_path)
+                if age < 60:
+                    print(
+                        f"note: {qid} worktree HEAD moved {age:.0f}s ago; "
+                        f"proceeding with prune",
+                        file=sys.stderr,
+                    )
+            except Exception:
+                pass
+
+        # Prune-from-inside detection.
+        cwd = Path.cwd()
+        if wt.is_inside_worktree(cwd) and _path_under(cwd, wt_path):
+            item.worktree_prune_pending = True
+            item.worktree_prune_pending_at = _today()
+            _save(write_root, p)
+            authoritative = write_root
+            print(
+                f"{qid}: prune deferred (running inside the worktree being removed).\n"
+                f"Run this from outside:\n"
+                f"  cd {authoritative} && git worktree remove {wt_path} && "
+                f"tasktool worktree prune {qid} --finalize"
+            )
+            return
+
+        # Destructive step.
+        if wt_path.exists():
+            wt.git_worktree_remove(write_root, wt_path, force=force)
+        if not keep_branch and wt.branch_exists(write_root, branch):
+            wt.git_branch_delete(write_root, branch, force=force)
+
+        item.worktree_path = None
+        item.worktree_branch = None
+        item.worktree_pruned_at = _today()
+        # Clear any stale pending marker.
+        item.worktree_prune_pending = False
+        item.worktree_prune_pending_at = None
+        _save(write_root, p)
+        print(f"{qid}: worktree pruned (path={wt_path}, branch={branch})")
+
+
+def _worktree_finalize(write_root: Path, item, qid: str) -> None:
+    from tasktool import worktree as wt
+    if not getattr(item, "worktree_prune_pending", False):
+        raise CommandError(
+            f"{qid}: no pending prune to finalize; "
+            f"run `tasktool worktree prune {qid}` first."
+        )
+    path_str = getattr(item, "worktree_path", None)
+    if not path_str:
+        raise CommandError(f"{qid}: pending prune missing worktree_path; cannot finalize")
+    wt_path = (write_root / path_str).resolve()
+    if wt.path_is_registered_worktree(write_root, wt_path):
+        raise CommandError(
+            f"{qid}: worktree at {wt_path} is still registered in `git worktree list`; "
+            f"run `git worktree remove {wt_path}` before --finalize"
+        )
+    if wt_path.exists():
+        raise CommandError(
+            f"{qid}: directory still present at {wt_path}; "
+            f"remove it before --finalize"
+        )
+    item.worktree_path = None
+    item.worktree_branch = None
+    item.worktree_prune_pending = False
+    item.worktree_prune_pending_at = None
+    item.worktree_pruned_at = _today()
+    print(f"{qid}: finalize complete; audit fields recorded.")
+
+
+def _path_under(child: Path, parent: Path) -> bool:
+    try:
+        child.resolve().relative_to(parent.resolve())
+        return True
+    except ValueError:
+        return False
+
+
+def _authoritative_parent_branch(write_root: Path, qid: str) -> str:
+    """Return the merge-target branch for a slice's worktree.
+
+    Read from `.tasktool/config.json` (`tasklist.authoritative_branch`),
+    matching the existing `TasklistConfig` surface in `tools/tasktool/config.py`.
+    Falls back to "main" when no config file is present (matches
+    `TasklistConfig`'s default).
+    """
+    from tasktool.config import load_config
+    return load_config(write_root).tasklist.authoritative_branch
+
+
+def cmd_worktree_repair(*, repo_root: Path, id: str) -> None:
+    from tasktool import worktree as wt
+    with _write_context(repo_root) as write_root:
+        p = _load(write_root)
+        qid, _container, item = _find_item(p, id)
+        path_str = getattr(item, "worktree_path", None)
+        branch = getattr(item, "worktree_branch", None)
+        if not path_str or not branch:
+            raise CommandError(
+                f"{qid}: no recorded worktree fields to repair "
+                f"(worktree_path={path_str!r}, worktree_branch={branch!r}); "
+                f"use `tasktool worktree adopt {qid} <path>` after recreating manually"
+            )
+        wt_path = (write_root / path_str).resolve()
+        # Already live? No-op.
+        if wt.path_is_registered_worktree(write_root, wt_path) and wt_path.exists():
+            print(f"{qid}: worktree already live at {wt_path}; no action.")
+            return
+        if not wt.branch_exists(write_root, branch):
+            raise CommandError(
+                f"{qid}: branch {branch!r} missing; cannot repair. "
+                f"Recreate the branch or use `tasktool worktree adopt {qid} <path>`."
+            )
+        wt.git_worktree_add(write_root, wt_path, branch)
+        print(f"{qid}: worktree recreated at {wt_path} on branch {branch}.")

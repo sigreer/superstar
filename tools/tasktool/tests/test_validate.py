@@ -485,3 +485,59 @@ def test_validate_rejects_partial_worktree_fields():
             worktree_path=".worktrees/x", worktree_branch=None)])])
     with _pt.raises(ValidationError, match="both null or both set"):
         validate_project(p)
+
+
+def test_validate_rejects_pending_without_at_timestamp():
+    from tasktool.model import Project, Phase, Slice
+    from tasktool.validate import validate_project, ValidationError
+    p = Project(project="d")
+    ph = Phase(id="P1", title="t", created="2026-05-21")
+    s = Slice(id="S1", title="t", created="2026-05-21",
+              worktree_prune_pending=True,
+              worktree_prune_pending_at=None)
+    ph.slices.append(s)
+    p.phases.append(ph)
+    import pytest
+    with pytest.raises(ValidationError, match="worktree_prune_pending"):
+        validate_project(p)
+
+
+def test_validate_rejects_pending_at_without_pending_flag():
+    from tasktool.model import Project, Phase, Slice
+    from tasktool.validate import validate_project, ValidationError
+    p = Project(project="d")
+    ph = Phase(id="P1", title="t", created="2026-05-21")
+    s = Slice(id="S1", title="t", created="2026-05-21",
+              worktree_prune_pending=False,
+              worktree_prune_pending_at="2026-05-22")
+    ph.slices.append(s)
+    p.phases.append(ph)
+    import pytest
+    with pytest.raises(ValidationError, match="worktree_prune_pending_at"):
+        validate_project(p)
+
+
+def test_validate_accepts_worktree_pruned_at_alone():
+    from tasktool.model import Project, Phase, Slice
+    from tasktool.validate import validate_project
+    p = Project(project="d")
+    ph = Phase(id="P1", title="t", created="2026-05-21")
+    s = Slice(id="S1", title="t", created="2026-05-21",
+              worktree_pruned_at="2026-05-22")
+    ph.slices.append(s)
+    p.phases.append(ph)
+    validate_project(p)  # no raise
+
+
+def test_validate_rejects_bad_pruned_at_date():
+    from tasktool.model import Project, Phase, Slice
+    from tasktool.validate import validate_project, ValidationError
+    p = Project(project="d")
+    ph = Phase(id="P1", title="t", created="2026-05-21")
+    s = Slice(id="S1", title="t", created="2026-05-21",
+              worktree_pruned_at="not-a-date")
+    ph.slices.append(s)
+    p.phases.append(ph)
+    import pytest
+    with pytest.raises(ValidationError):
+        validate_project(p)

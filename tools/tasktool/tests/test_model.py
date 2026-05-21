@@ -85,3 +85,19 @@ class PublicAPITests(unittest.TestCase):
             "SCHEMA_VERSION",
         ]:
             self.assertTrue(hasattr(tasktool, name), f"tasktool.{name} missing")
+
+
+def test_slice_audit_fields_default_to_none_and_false():
+    from tasktool.model import Slice
+    s = Slice(id="S1", title="t", created="2026-05-21")
+    assert s.worktree_pruned_at is None
+    assert s.worktree_prune_pending is False
+    assert s.worktree_prune_pending_at is None
+
+
+def test_cross_audit_fields_default_to_none_and_false():
+    from tasktool.model import CrossCutting
+    c = CrossCutting(id="X1", title="t", created="2026-05-21")
+    assert c.worktree_pruned_at is None
+    assert c.worktree_prune_pending is False
+    assert c.worktree_prune_pending_at is None

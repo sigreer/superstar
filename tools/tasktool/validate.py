@@ -99,6 +99,14 @@ def _check_slice(s: Slice, scope: str) -> None:
     )
     _check_date(s.worktree_pruned_at, scope, "worktree_pruned_at")
     _check_date(s.worktree_prune_pending_at, scope, "worktree_prune_pending_at")
+    if s.worktree_prune_pending and s.worktree_prune_pending_at is None:
+        raise ValidationError(
+            f"{scope}: worktree_prune_pending=True requires worktree_prune_pending_at"
+        )
+    if (not s.worktree_prune_pending) and s.worktree_prune_pending_at is not None:
+        raise ValidationError(
+            f"{scope}: worktree_prune_pending_at requires worktree_prune_pending=True"
+        )
     seen: set[str] = set()
     for t in s.tasks:
         sub = f"{scope}.{t.id}"
@@ -137,6 +145,14 @@ def _check_cross(c: CrossCutting, scope: str) -> None:
     )
     _check_date(c.worktree_pruned_at, scope, "worktree_pruned_at")
     _check_date(c.worktree_prune_pending_at, scope, "worktree_prune_pending_at")
+    if c.worktree_prune_pending and c.worktree_prune_pending_at is None:
+        raise ValidationError(
+            f"{scope}: worktree_prune_pending=True requires worktree_prune_pending_at"
+        )
+    if (not c.worktree_prune_pending) and c.worktree_prune_pending_at is not None:
+        raise ValidationError(
+            f"{scope}: worktree_prune_pending_at requires worktree_prune_pending=True"
+        )
 
 def _check_archived_cross(c: ArchivedCrossCutting, scope: str) -> None:
     _check_id(c.id, _CROSS_RE, scope)

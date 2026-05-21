@@ -150,14 +150,25 @@ git merge --ff-only <feature-branch>  # use non-ff merge only when the project e
 # Restore unrelated dirty state if it was stashed
 git stash pop  # only if you stashed above
 
-# Only after merge and verification succeed: cleanup worktree (Step 6), then delete branch
+# Only after merge and verification succeed: cleanup worktree (Step 6)
 ```
 
-Then: Cleanup worktree (Step 6), then delete branch:
+Then run Cleanup workspace (Step 6).
 
-```bash
-git branch -d <feature-branch>
-```
+**Branch deletion depends on which cleanup path Step 6 used:**
+
+- **Default `tasktool worktree prune <slice-id>`** (tasktool path): the branch was already deleted by `prune`. Do **not** run `git branch -d` — it will fail with "branch not found." You are done.
+- **`tasktool worktree prune <slice-id> --keep-branch`** (tasktool path, branch retained): delete the branch manually:
+
+  ```bash
+  git branch -d <feature-branch>
+  ```
+
+- **Manual `git worktree remove` fallback** (no tasktool, superstar-owned worktree): delete the branch manually:
+
+  ```bash
+  git branch -d <feature-branch>
+  ```
 
 #### Option 2: Push and Create PR
 
@@ -204,10 +215,21 @@ MAIN_ROOT=$(git -C "$(git rev-parse --git-common-dir)/.." rev-parse --show-tople
 cd "$MAIN_ROOT"
 ```
 
-Then: Cleanup worktree (Step 6), then force-delete branch:
-```bash
-git branch -D <feature-branch>
-```
+Then cleanup. Discard is an unmerged path, so default `tasktool worktree prune` will refuse (slice not done / branch not merged). Use the appropriate path for the workspace:
+
+- **Tasktool-owned worktree** (the slice has a recorded worktree in `docs/tasklist.json`): use `--force`, which removes the worktree directory **and** force-deletes the branch in one step:
+
+  ```bash
+  tasktool worktree prune <slice-id> --force
+  ```
+
+  Do **not** follow this with `git branch -D` — the branch is already gone.
+
+- **Non-tasktool / manual cleanup** (no tasklist record, or fallback path from Step 6): cleanup the worktree per Step 6, then force-delete the branch:
+
+  ```bash
+  git branch -D <feature-branch>
+  ```
 
 ### Step 6: Cleanup Workspace
 
@@ -221,7 +243,23 @@ WORKTREE_PATH=$(git rev-parse --show-toplevel)
 
 **If `GIT_DIR == GIT_COMMON`:** Normal repo, no worktree to clean up. Done.
 
-**If worktree path is under `.worktrees/`, `worktrees/`, or `~/.config/superstar/worktrees/`:** Superstar created this worktree — we own cleanup.
+**If `docs/tasklist.json` exists and the slice has a recorded worktree:** Prefer the tasktool path. For each slice merged on this branch, run:
+
+```bash
+tasktool worktree prune <slice-id>
+```
+
+`prune` enforces three guards (slice-done, branch-merged, clean-tree) and removes the worktree directory and branch. If `prune` refuses, address the reported cause (close the slice, complete the merge, clean the tree). For an irrecoverable scratch worktree, `tasktool worktree prune <slice-id> --force` overrides the prune guards only; it does not affect close, slice status, or review gates.
+
+If you are currently inside the worktree being pruned, tasktool prints a two-step follow-up; run it from the authoritative checkout:
+
+```bash
+cd <authoritative-root>
+git worktree remove <path>
+tasktool worktree prune <slice-id> --finalize
+```
+
+**Otherwise — no tasktool, worktree path under `.worktrees/`, `worktrees/`, or `~/.config/superstar/worktrees/`:** Superstar created this worktree — we own cleanup.
 
 ```bash
 MAIN_ROOT=$(git -C "$(git rev-parse --git-common-dir)/.." rev-parse --show-toplevel)

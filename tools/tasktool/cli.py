@@ -115,6 +115,16 @@ def _build_parser() -> argparse.ArgumentParser:
     p_wt_legacy = wt_sub.add_parser("check-legacy")
     p_wt_legacy.add_argument("--project", required=True)
 
+    p_wt_prune = wt_sub.add_parser("prune")
+    p_wt_prune.add_argument("id")
+    prune_excl = p_wt_prune.add_mutually_exclusive_group()
+    prune_excl.add_argument("--keep-branch", action="store_true")
+    prune_excl.add_argument("--force", action="store_true")
+    prune_excl.add_argument("--finalize", action="store_true")
+
+    p_wt_repair = wt_sub.add_parser("repair")
+    p_wt_repair.add_argument("id")
+
     p_close = sub.add_parser("close")
     p_close.add_argument("id")
     p_close.add_argument(
@@ -353,6 +363,16 @@ def main(argv: list[str]) -> int:
                 sys.stdout.write(text)
                 if rc != 0:
                     return rc
+            elif args.wt_cmd == "prune":
+                commands.cmd_worktree_prune(
+                    repo_root=root,
+                    id=args.id,
+                    keep_branch=args.keep_branch,
+                    force=args.force,
+                    finalize=args.finalize,
+                )
+            elif args.wt_cmd == "repair":
+                commands.cmd_worktree_repair(repo_root=root, id=args.id)
         elif args.cmd == "close":
             refs = _comma_split(args.refs) or None
             commands.cmd_close(
