@@ -37,6 +37,8 @@ WORKFLOW_DIRS = {
     "docs/archived-tasks": ArtifactKind.ARCHIVE,
 }
 
+ARTIFACT_STATUS_BASELINE_REL = ".tasktool/artifact-status-baseline.json"
+
 ALLOWED_TRANSACTION_FILES = {"docs/tasklist.json", ".tasktool/config.json"}
 
 
@@ -297,6 +299,23 @@ def workflow_files(root: Path) -> set[str]:
             if child.is_file():
                 found.add(child.relative_to(root).as_posix())
     return found
+
+
+def artifact_status_baseline_paths(repo_root: Path) -> set[str]:
+    path = repo_root / ARTIFACT_STATUS_BASELINE_REL
+    if not path.exists():
+        return set()
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise ArtifactError(f"invalid artifact status baseline {ARTIFACT_STATUS_BASELINE_REL}: {exc}") from exc
+    paths = data.get("unreferenced-workflow-artifact") if isinstance(data, dict) else None
+    if not isinstance(paths, list) or not all(isinstance(item, str) for item in paths):
+        raise ArtifactError(
+            f"invalid artifact status baseline {ARTIFACT_STATUS_BASELINE_REL}: "
+            "expected object with string list key unreferenced-workflow-artifact"
+        )
+    return set(paths)
 
 
 def _path_is_allowed_by_transaction(rel: str, allowed_paths: set[str]) -> bool:

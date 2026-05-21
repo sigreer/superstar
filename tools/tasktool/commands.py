@@ -27,6 +27,7 @@ from tasktool.artifacts import (
     NormalizedArtifact,
     add_artifact_to_item,
     artifact_kind_for_path,
+    artifact_status_baseline_paths,
     disallowed_staged_paths,
     git_status_map,
     normalize_artifact_path,
@@ -782,7 +783,12 @@ def cmd_artifact_add(
         print(f"{qid}: {state} {artifact.relative_path}")
 
 
-def _artifact_status_problems(repo_root: Path, id: str | None) -> list[ArtifactProblem]:
+def _artifact_status_problems(
+    repo_root: Path,
+    id: str | None,
+    *,
+    baseline_root: Path | None = None,
+) -> list[ArtifactProblem]:
     p = _load(repo_root)
     status_map = git_status_map(repo_root)
     referenced: set[str] = set()
@@ -841,7 +847,10 @@ def _artifact_status_problems(repo_root: Path, id: str | None) -> list[ArtifactP
         )
 
     if id is None:
+        baseline = artifact_status_baseline_paths(baseline_root or repo_root)
         for rel in sorted(files - referenced):
+            if rel in baseline:
+                continue
             if rel.endswith(".md") or rel.startswith("docs/reviewer/"):
                 problems.append(
                     ArtifactProblem(
@@ -857,7 +866,10 @@ def _artifact_status_problems(repo_root: Path, id: str | None) -> list[ArtifactP
 
 def cmd_artifact_status(*, repo_root: Path, id: str | None, strict: bool, format: str) -> int:
     write_root, _routed, _mode, _authoritative_branch = _resolve_write_root(repo_root)
-    problems = _artifact_status_problems(write_root, id)
+    try:
+        problems = _artifact_status_problems(write_root, id, baseline_root=repo_root)
+    except ArtifactError as exc:
+        raise CommandError(str(exc)) from exc
     out = render_status_json(problems) if format == "json" else render_status_text(problems)
     sys.stdout.write(out)
     return 1 if strict and problems else 0

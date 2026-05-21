@@ -132,6 +132,158 @@ def test_artifact_status_reports_unreferenced_dated_spec(tmp_path: Path) -> None
     assert "docs/specs/2026-05-21-X99-orphan-design.md" in r.stdout
 
 
+def test_artifact_status_baseline_suppresses_only_listed_global_unreferenced_artifacts(tmp_path: Path) -> None:
+    root = _repo(tmp_path)
+    listed = root / "docs" / "specs" / "2026-05-21-X98-listed-legacy-design.md"
+    unlisted = root / "docs" / "specs" / "2026-05-21-X99-new-orphan-design.md"
+    listed.parent.mkdir(parents=True)
+    listed.write_text("# listed\n", encoding="utf-8")
+    unlisted.write_text("# unlisted\n", encoding="utf-8")
+    baseline = root / ".tasktool" / "artifact-status-baseline.json"
+    baseline.write_text(
+        json.dumps(
+            {
+                "unreferenced-workflow-artifact": [
+                    "docs/specs/2026-05-21-X98-listed-legacy-design.md",
+                ],
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    r = _tasktool(root, "artifact", "status", "--strict")
+
+    assert r.returncode == 1
+    assert "docs/specs/2026-05-21-X98-listed-legacy-design.md" not in r.stdout
+    assert "docs/specs/2026-05-21-X99-new-orphan-design.md" in r.stdout
+
+
+def test_artifact_status_baseline_does_not_suppress_referenced_artifact_problems(tmp_path: Path) -> None:
+    root = _repo(tmp_path)
+    assert _tasktool(
+        root,
+        "artifact",
+        "add",
+        "X1",
+        "--kind",
+        "spec",
+        "--path",
+        "docs/specs/missing.md",
+        "--allow-missing",
+    ).returncode == 0
+    baseline = root / ".tasktool" / "artifact-status-baseline.json"
+    baseline.write_text(
+        json.dumps(
+            {
+                "unreferenced-workflow-artifact": [
+                    "docs/specs/missing.md",
+                ],
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    r = _tasktool(root, "artifact", "status", "X1", "--strict")
+
+    assert r.returncode == 1
+    assert "missing-referenced-artifact" in r.stdout
+    assert "docs/specs/missing.md" in r.stdout
+
+
+def test_artifact_status_baseline_does_not_suppress_unstaged_referenced_artifacts(tmp_path: Path) -> None:
+    root = _repo(tmp_path)
+    assert _tasktool(root, "artifact", "add", "X1", "--kind", "spec", "--path", "docs/specs/future.md", "--allow-missing").returncode == 0
+    _git(root, "add", "docs/tasklist.json")
+    _git(root, "commit", "-m", "register future")
+    spec = root / "docs" / "specs" / "future.md"
+    spec.parent.mkdir(parents=True)
+    spec.write_text("# future\n", encoding="utf-8")
+    baseline = root / ".tasktool" / "artifact-status-baseline.json"
+    baseline.write_text(
+        json.dumps(
+            {
+                "unreferenced-workflow-artifact": [
+                    "docs/specs/future.md",
+                ],
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    r = _tasktool(root, "artifact", "status", "X1", "--strict")
+
+    assert r.returncode == 1
+    assert "referenced-artifact-unstaged" in r.stdout
+    assert "docs/specs/future.md" in r.stdout
+
+
+def test_artifact_status_baseline_does_not_suppress_dirty_tasklist(tmp_path: Path) -> None:
+    root = _repo(tmp_path)
+    spec = root / "docs" / "specs" / "2026-05-21-X99-orphan-design.md"
+    spec.parent.mkdir(parents=True)
+    spec.write_text("# orphan\n", encoding="utf-8")
+    data = json.loads((root / "docs/tasklist.json").read_text(encoding="utf-8"))
+    data["cross_cutting"][0]["notes"] = "manual edit"
+    (root / "docs/tasklist.json").write_text(json.dumps(data), encoding="utf-8")
+    baseline = root / ".tasktool" / "artifact-status-baseline.json"
+    baseline.write_text(
+        json.dumps(
+            {
+                "unreferenced-workflow-artifact": [
+                    "docs/specs/2026-05-21-X99-orphan-design.md",
+                ],
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    r = _tasktool(root, "artifact", "status", "--strict")
+
+    assert r.returncode == 1
+    assert "unstaged-tasklist-with-workflow-artifacts" in r.stdout
+
+
+def test_artifact_status_baseline_in_invocation_worktree_applies_to_authoritative_status(tmp_path: Path) -> None:
+    root = _repo(tmp_path)
+    legacy = root / "docs" / "specs" / "2026-05-21-X98-legacy-design.md"
+    legacy.parent.mkdir(parents=True)
+    legacy.write_text("# legacy\n", encoding="utf-8")
+    _git(root, "add", "docs/specs/2026-05-21-X98-legacy-design.md")
+    _git(root, "commit", "-m", "legacy artifact")
+    worker = tmp_path / "worker"
+    _git(root, "worktree", "add", "-b", "worker", str(worker))
+    baseline = worker / ".tasktool" / "artifact-status-baseline.json"
+    baseline.write_text(
+        json.dumps(
+            {
+                "unreferenced-workflow-artifact": [
+                    "docs/specs/2026-05-21-X98-legacy-design.md",
+                ],
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    r = _tasktool(worker, "artifact", "status", "--strict")
+
+    assert r.returncode == 0, r.stdout + r.stderr
+
+
 def test_artifact_status_reports_missing_referenced_file(tmp_path: Path) -> None:
     root = _repo(tmp_path)
     assert _tasktool(root, "artifact", "add", "X1", "--kind", "spec", "--path", "docs/specs/missing.md", "--allow-missing").returncode == 0
