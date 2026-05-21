@@ -290,16 +290,18 @@
           "notes": "",
           "parallel_group": null,
           "plan_path": "docs/plans/2026-05-21-P5-S2-prune-and-repair.md",
-          "planning_status": "proposed",
+          "planning_status": "ratified",
           "refs": [
             "docs/plans/2026-05-21-P5-S2-prune-and-repair.md",
             "docs/reviewer/p5-s2-prune-and-repair-plan"
           ],
           "reviewer_chain": "docs/reviewer/p5-s2-prune-and-repair-plan",
-          "started": null,
-          "status": "ready",
+          "started": "2026-05-21",
+          "status": "in_progress",
           "tasks": [],
-          "title": "Prune + repair"
+          "title": "Prune + repair",
+          "worktree_branch": "worktree-P5.S2-prune-and-repair",
+          "worktree_path": ".claude/worktrees/P5.S2-prune-and-repair"
         },
         {
           "blocked_on": null,
