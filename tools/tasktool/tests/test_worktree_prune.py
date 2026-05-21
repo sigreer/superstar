@@ -242,3 +242,88 @@ def test_prune_keep_branch_leaves_branch(project_with_worktree):
     assert not wt.exists()
     from tasktool.worktree import branch_exists
     assert branch_exists(repo, "worktree-p1-s1-first-slice") is True
+
+
+def _project_with_closed_unmerged(tmp_path):
+    repo = _init_repo(tmp_path / "p2")
+    (repo / "docs").mkdir()
+    _tasktool(repo, "config", "init-local")
+    _tasktool(repo, "init", "--project", "demo")
+    _tasktool(repo, "create", "phase", "--title", "Phase 1")
+    _tasktool(repo, "create", "slice", "P1", "--title", "First slice")
+    wt_path = repo / ".worktrees" / "worktree-p1-s1-first-slice"
+    _run(repo, "git", "worktree", "add", "-b",
+         "worktree-p1-s1-first-slice", str(wt_path))
+    _tasktool(repo, "start", "P1.S1", "--adopt", str(wt_path))
+    # Diverge so branch is unmerged.
+    (wt_path / "f").write_text("x")
+    _run(wt_path, "git", "add", "f")
+    _run(wt_path, "git", "commit", "-q", "-m", "work")
+    _tasktool(repo, "close", "P1.S1", "--skip-review-gate")
+    return repo, wt_path
+
+
+def test_force_overrides_in_progress_guard(project_with_worktree):
+    repo, wt = project_with_worktree
+    # Slice still in_progress, no merge.
+    res = _tasktool(repo, "worktree", "prune", "P1.S1", "--force")
+    assert res.returncode == 0
+    assert not wt.exists()
+
+
+def test_force_overrides_unmerged_branch_guard(tmp_path):
+    # Build separate project: slice closed but branch never merged.
+    repo, wt = _project_with_closed_unmerged(tmp_path)
+    res = _tasktool(repo, "worktree", "prune", "P1.S1", "--force")
+    assert res.returncode == 0
+
+
+def test_force_overrides_dirty_tree_guard(project_with_worktree):
+    repo, wt = project_with_worktree
+    (wt / "dirty.txt").write_text("x")
+    res = _tasktool(repo, "worktree", "prune", "P1.S1", "--force")
+    assert res.returncode == 0
+    assert not wt.exists()
+
+
+def test_force_does_not_affect_close_review_gate(project_with_worktree):
+    """--force on `prune` must NOT bypass the close review gate.
+
+    The close path is unchanged; --force is scoped to prune guards only.
+    """
+    repo, _wt = project_with_worktree
+    # Attempt to close without --skip-review-gate; --force is not even a
+    # close flag, but we re-confirm by checking close's behaviour.
+    res = _tasktool(repo, "close", "P1.S1", check=False)
+    assert res.returncode != 0
+    assert "review" in res.stderr.lower() or "reviewer" in res.stderr.lower()
+
+
+def test_force_does_not_flip_slice_status(project_with_worktree):
+    """After `prune --force` on an in_progress slice, the slice MUST remain
+    in_progress. --force is destructive only for the worktree, not for
+    lifecycle state."""
+    repo, _wt = project_with_worktree
+    _tasktool(repo, "worktree", "prune", "P1.S1", "--force")
+    show = _tasktool(repo, "show", "P1.S1").stdout
+    assert "in_progress" in show
+    assert "status: done" not in show.lower()
+
+
+def test_force_does_not_clear_depends_on(tmp_path):
+    """--force prune of one slice must not touch dependent slices' depends_on."""
+    repo = _init_repo(tmp_path / "p")
+    (repo / "docs").mkdir()
+    _tasktool(repo, "config", "init-local")
+    _tasktool(repo, "init", "--project", "demo")
+    _tasktool(repo, "create", "phase", "--title", "Phase 1")
+    _tasktool(repo, "create", "slice", "P1", "--title", "first")
+    _tasktool(repo, "create", "slice", "P1", "--title", "second")
+    _tasktool(repo, "deps", "P1.S2", "--add", "P1.S1")
+    # Build a worktree for S1 manually.
+    wt_path = repo / ".worktrees" / "w"
+    _run(repo, "git", "worktree", "add", "-b", "w", str(wt_path))
+    _tasktool(repo, "start", "P1.S1", "--adopt", str(wt_path))
+    _tasktool(repo, "worktree", "prune", "P1.S1", "--force")
+    show = _tasktool(repo, "show", "P1.S2").stdout
+    assert "P1.S1" in show  # dependency edge intact
