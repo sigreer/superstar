@@ -5,6 +5,12 @@
       "archived_path": "docs/archived-tasks/X15-archive-closed-cross-cutting-items.md",
       "id": "X15",
       "title": "Archive closed cross-cutting items"
+    },
+    {
+      "archived_date": "2026-05-21",
+      "archived_path": "docs/archived-tasks/X16-stamp-installed-shims-and-enforce-versio.md",
+      "id": "X16",
+      "title": "Stamp installed shims and enforce version drift refusal"
     }
   ],
   "archived_phases": [
@@ -222,18 +228,6 @@
       "started": "2026-05-20",
       "status": "done",
       "title": "Stabilize local Claude/Codex plugin current entrypoints"
-    },
-    {
-      "closed": null,
-      "created": "2026-05-21",
-      "id": "X16",
-      "notes": "",
-      "refs": [
-        "docs/specs/2026-05-21-X16-shim-version-stamping-design.md"
-      ],
-      "started": null,
-      "status": "ready",
-      "title": "Stamp installed shims and enforce version drift refusal"
     },
     {
       "closed": "2026-05-21",
