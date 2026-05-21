@@ -122,6 +122,9 @@ def _build_parser() -> argparse.ArgumentParser:
     prune_excl.add_argument("--force", action="store_true")
     prune_excl.add_argument("--finalize", action="store_true")
 
+    p_wt_repair = wt_sub.add_parser("repair")
+    p_wt_repair.add_argument("id")
+
     p_close = sub.add_parser("close")
     p_close.add_argument("id")
     p_close.add_argument(
@@ -368,6 +371,8 @@ def main(argv: list[str]) -> int:
                     force=args.force,
                     finalize=args.finalize,
                 )
+            elif args.wt_cmd == "repair":
+                commands.cmd_worktree_repair(repo_root=root, id=args.id)
         elif args.cmd == "close":
             refs = _comma_split(args.refs) or None
             commands.cmd_close(

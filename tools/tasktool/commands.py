@@ -2129,3 +2129,30 @@ def _authoritative_parent_branch(write_root: Path, qid: str) -> str:
     """
     from tasktool.config import load_config
     return load_config(write_root).tasklist.authoritative_branch
+
+
+def cmd_worktree_repair(*, repo_root: Path, id: str) -> None:
+    from tasktool import worktree as wt
+    with _write_context(repo_root) as write_root:
+        p = _load(write_root)
+        qid, _container, item = _find_item(p, id)
+        path_str = getattr(item, "worktree_path", None)
+        branch = getattr(item, "worktree_branch", None)
+        if not path_str or not branch:
+            raise CommandError(
+                f"{qid}: no recorded worktree fields to repair "
+                f"(worktree_path={path_str!r}, worktree_branch={branch!r}); "
+                f"use `tasktool worktree adopt {qid} <path>` after recreating manually"
+            )
+        wt_path = (write_root / path_str).resolve()
+        # Already live? No-op.
+        if wt.path_is_registered_worktree(write_root, wt_path) and wt_path.exists():
+            print(f"{qid}: worktree already live at {wt_path}; no action.")
+            return
+        if not wt.branch_exists(write_root, branch):
+            raise CommandError(
+                f"{qid}: branch {branch!r} missing; cannot repair. "
+                f"Recreate the branch or use `tasktool worktree adopt {qid} <path>`."
+            )
+        wt.git_worktree_add(write_root, wt_path, branch)
+        print(f"{qid}: worktree recreated at {wt_path} on branch {branch}.")
