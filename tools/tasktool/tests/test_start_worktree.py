@@ -180,6 +180,23 @@ def test_start_adopt_records_external_worktree(tmp_path):
     assert sl["worktree_path"].endswith("external")
 
 
+def test_start_adopt_refuses_main_checkout(tmp_path):
+    """S1.F1 (post-slice r2): --adopt must refuse the main checkout. The spec
+    reserves --adopt for externally-created linked worktrees; the primary
+    checkout is reported by `git worktree list --porcelain` alongside linked
+    ones, so without an explicit guard `tasktool start <id> --adopt <root>`
+    would record `worktree_path: "."` and `worktree_branch: "main"`."""
+    root = seed_repo(tmp_path)
+    r = run(root, "start", "P1.S1", "--adopt", str(root))
+    assert r.returncode != 0, r.stdout + r.stderr
+    out = r.stdout + r.stderr
+    assert "main checkout" in out
+    # And nothing was recorded.
+    sl = tasklist(root)["phases"][0]["slices"][0]
+    assert sl.get("worktree_path") is None
+    assert sl.get("worktree_branch") is None
+
+
 def test_start_adopt_refuses_non_worktree_path(tmp_path):
     root = seed_repo(tmp_path)
     plain = tmp_path / "plain"

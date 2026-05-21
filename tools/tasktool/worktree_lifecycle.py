@@ -97,6 +97,29 @@ def linked_worktree_branch(authoritative_root: Path, candidate: Path) -> str | N
     return None
 
 
+def is_authoritative_checkout(authoritative_root: Path, candidate: Path) -> bool:
+    """True when `candidate` resolves to the primary (main) checkout reported by
+    `git worktree list --porcelain` for `authoritative_root`.
+
+    `linked_worktree_branch()` happily returns the branch for the main checkout
+    because git lists it alongside linked worktrees. Callers that mean "is this
+    an externally-created linked worktree" must filter the primary out using
+    this helper. Spec §4 reserves `--adopt`/`worktree adopt` for linked
+    worktrees only; the main checkout is not adoptable.
+    """
+    if not candidate.exists():
+        return False
+    candidate_resolved = candidate.resolve()
+    result = _git(authoritative_root, "worktree", "list", "--porcelain")
+    # Per `git worktree list --porcelain`, the first `worktree ` entry is the
+    # primary (main) checkout; subsequent entries are linked worktrees.
+    for line in result.stdout.splitlines():
+        if line.startswith("worktree "):
+            primary = Path(line.removeprefix("worktree ")).resolve()
+            return primary == candidate_resolved
+    return False
+
+
 def _branch_exists(root: Path, branch: str) -> bool:
     res = _git(root, "show-ref", "--verify", "--quiet", f"refs/heads/{branch}", check=False)
     return res.returncode == 0

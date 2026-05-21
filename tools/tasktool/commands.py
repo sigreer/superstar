@@ -863,7 +863,15 @@ def _apply_start_in_place(qid: str, item) -> None:
 
 
 def _apply_start_adopt(write_root: Path, qid: str, item, adopt_path: Path) -> None:
-    from tasktool.worktree_lifecycle import linked_worktree_branch
+    from tasktool.worktree_lifecycle import (
+        is_authoritative_checkout, linked_worktree_branch,
+    )
+    if is_authoritative_checkout(write_root, adopt_path):
+        raise CommandError(
+            f"{qid}: --adopt refused; {adopt_path} is the main checkout, not a linked "
+            f"worktree. Create a linked worktree first with `git worktree add` then "
+            f"adopt that path."
+        )
     branch = linked_worktree_branch(write_root, adopt_path)
     if branch is None:
         raise CommandError(
@@ -1902,7 +1910,8 @@ def cmd_worktree_status(*, repo_root: Path, id: str) -> str:
 
 def cmd_worktree_adopt(*, repo_root: Path, id: str, path: Path) -> None:
     from tasktool.worktree_lifecycle import (
-        RecordedState, classify_recorded_state, linked_worktree_branch,
+        RecordedState, classify_recorded_state, is_authoritative_checkout,
+        linked_worktree_branch,
     )
     path = path.expanduser().resolve()
     with _write_context(repo_root) as write_root:
@@ -1910,6 +1919,12 @@ def cmd_worktree_adopt(*, repo_root: Path, id: str, path: Path) -> None:
         qid, _container, item = _find_item(p, id)
         if item.worktree_in_place:
             raise CommandError(f"{qid}: cannot adopt; slice is marked --in-place")
+        if is_authoritative_checkout(write_root, path):
+            raise CommandError(
+                f"{qid}: adopt refused; {path} is the main checkout, not a linked "
+                f"worktree. Create a linked worktree first with `git worktree add` "
+                f"then adopt that path."
+            )
         branch = linked_worktree_branch(write_root, path)
         if branch is None:
             raise CommandError(f"{qid}: {path} is not a linked worktree of this repository.")

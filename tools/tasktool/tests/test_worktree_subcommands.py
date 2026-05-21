@@ -152,6 +152,15 @@ def test_worktree_adopt_records_external_worktree(tmp_path):
     assert sl["worktree_path"].endswith("external")
 
 
+def test_worktree_adopt_refuses_main_checkout(tmp_path):
+    """S1.F1 (post-slice r2): `worktree adopt` must refuse the main checkout.
+    Symmetric to the --adopt guard in `start`."""
+    root = seed_with_started_slice(tmp_path)
+    r = run(root, "worktree", "adopt", "P1.S1", str(root))
+    assert r.returncode != 0, r.stdout + r.stderr
+    assert "main checkout" in (r.stdout + r.stderr)
+
+
 def test_worktree_adopt_refuses_non_worktree(tmp_path):
     root = seed_with_started_slice(tmp_path)
     plain = tmp_path / "plain"
