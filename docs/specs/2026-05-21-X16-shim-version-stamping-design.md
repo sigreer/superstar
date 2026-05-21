@@ -198,9 +198,9 @@ The Python `tasktool` entrypoint adds a startup check:
 
 1. `git rev-parse --show-toplevel` — if not in a git repo, skip silently.
 2. `<repo>/.git/hooks/pre-commit` exists? If not, skip silently.
-3. Read first 16 lines, look for `superstar-hook-name: tasktool-pre-commit`. If not present, skip silently — the file is some other hook the user maintains.
-4. Extract `superstar-hook-version` and `superstar-hook-source-root`.
-5. Read `$source_root/VERSION`. If unreadable, skip silently.
+3. Read first 16 lines, look for `superstar-hook-name: tasktool-pre-commit`. If not present, skip silently — the file is some other hook the user maintains (including legacy tasktool hooks that only carry the older `tasktool-pre-commit-hook` magic comment; see §6a for the migration policy).
+4. Extract `superstar-hook-version` and `superstar-hook-source-root`. The extracted source-root must be passed through the header parser (§6b) so literal `$HOME/` or `~/` prefixes are expanded before any filesystem operation.
+5. Read `$source_root/VERSION` (expanded). If unreadable, skip silently.
 6. Compare. If they differ, hard-exit before doing any tasktool work:
 
 ```
@@ -217,6 +217,36 @@ Cost budget: a couple of `subprocess.run("git rev-parse", check=False)`, two `Pa
 
 The check runs on **every** tasktool invocation (silent unless drift is real). Discovering stale hook state when the user is already thinking about tasktool beats discovering it later during a commit. If a future subcommand needs to operate explicitly outside a repo, the check is already a no-op there because step 1 short-circuits.
 
+### 6a. Hook installer marker migration
+
+The current `tools/tasktool/install.sh --hook` recognizes existing hooks by grepping for the magic comment `tasktool-pre-commit-hook` before allowing a non-force reinstall (`tools/tasktool/install.sh:17-23`). This work introduces a new stamped header that uses `superstar-hook-name: tasktool-pre-commit` instead. Without an explicit migration policy, the second install of a newly-stamped hook could be refused as "not a tasktool hook," or already-installed legacy hooks would need an unnecessary `--force`.
+
+**Installer behaviour:** `install.sh --hook` accepts an existing hook as "ours" if **either** of these markers is present in the file:
+
+- Legacy: `tasktool-pre-commit-hook` anywhere in the file.
+- New: `superstar-hook-name: tasktool-pre-commit` in the header block.
+
+The installer always writes the new header on (re)install; legacy magic-comment files are overwritten in place by a normal (non-`--force`) install once recognized. `--force` is reserved for hooks that match **neither** marker.
+
+`tools/tasktool/tests/test_pre_commit_hook.py` is updated to:
+
+- Add a case asserting that a legacy hook (file containing `tasktool-pre-commit-hook` only) is accepted by a non-force reinstall and is replaced with the new stamped header.
+- Keep the existing idempotency case: two consecutive non-force installs of an already-stamped new-style hook succeed without `--force`.
+- Add: a non-tasktool hook (no marker) still requires `--force` to overwrite.
+
+### 6b. Header parser (shared spec)
+
+Every consumer that reads a stamped value from a shim or hook header — `deploy.sh --check`, the Python tasktool startup check, and any future diagnostic — must use the same parser rules:
+
+1. **Comment extraction.** Read up to the first 32 lines. Match lines of the form `# superstar-<scope>-<key>: <value>` (with `<scope>` ∈ `{shim, hook}`). Anything else is ignored.
+2. **Path expansion.** Before any filesystem operation or copy-pastable diagnostic output that uses a stamped path value, the parser MUST:
+   - Substitute a leading literal `$HOME/` with the current `$HOME`.
+   - Substitute a leading literal `~/` with the current `$HOME`.
+   - Leave all other content untouched.
+   The bash shim runtime check works automatically because the stamped value is interpolated into a double-quoted bash string at install time, so `$HOME` is expanded naturally on dereference. The Python tasktool check, the `deploy.sh --check` shell logic, and any other consumer must call the equivalent expansion explicitly (`os.path.expandvars` then `os.path.expanduser` in Python; `eval echo` is **not** acceptable in bash — use parameter substitution `${value/#\$HOME/$HOME}` then `${value/#\~/$HOME}` to avoid command-injection surface).
+3. **Missing or malformed stamps.** If a required key is absent or the value is empty after trimming, the consumer treats the file as **MALFORMED**, not as DRIFT. Diagnostics print a distinct row (e.g. `MALFORMED (missing superstar-shim-version)`); the bash shim runtime check treats a missing stamped version as "cannot compare" and execs normally per §4.
+4. **Raw value retention.** When displaying paths for human eyes (e.g. the `--check` table), show the **expanded** absolute path so users can copy-paste it. The raw `$HOME/...` form is not surfaced in diagnostics; it exists only to keep the on-disk shim file portable across user accounts.
+
 ### 7. `bump-version.sh` changes
 
 Purely a source-state tagger. No install side-effects. Specific changes:
@@ -229,7 +259,11 @@ Purely a source-state tagger. No install side-effects. Specific changes:
 
 `.version-bump.json` gets one new entry. No new flags, no new commands.
 
-### 8. `scripts/lib/publish-common.sh` and `scripts/deploy.sh`
+### 8. Publish vs deploy: source-root policy
+
+**Plugin payload must carry `VERSION`.** Add `plugins/superstar/VERSION` as a relative symlink to `../../VERSION` (the repo-root file). `rsync -aL --delete` (the existing publish flag) flattens the symlink into a real file at `<cache>/<version>/VERSION` and `<cache>/current/VERSION`. `bump-version.sh` still writes only the repo-root file; the symlink reflects it. This makes `$SOURCE_ROOT/VERSION` readable for **any** shim source root — repo checkout, codex `current/`, or claude `current/` — eliminating the silent-skip class F2 flagged.
+
+**External-reviewer shim continues to be re-stamped by the publish scripts** against the freshly-materialised `current/`, preserving X14's "external-reviewer survives dev-checkout moves" property. The other two global shims (`reviewer-agent`, `tasktool`) only get re-stamped by `deploy.sh` and always source-root at the dev checkout — they have no plugin-cache complication to solve.
 
 Refactor — no removal of operational entry points:
 
@@ -237,29 +271,44 @@ Refactor — no removal of operational entry points:
   - VERSION resolution from manifest.
   - `rsync -aL --delete` of plugin source into `<cache>/<version>/` and `<cache>/current/`.
   - hooks.json command-path rewriting.
-  - manifest verification.
-- `scripts/publish-to-local-codex.sh` — kept as the documented entry point. Becomes a thin wrapper: source `publish-common.sh`, set codex-specific paths, call the shared functions.
-- `scripts/publish-to-local-claude.sh` — same treatment.
+  - manifest verification — **extended to assert `<cache>/<version>/VERSION` and `<cache>/current/VERSION` exist and equal the manifest version.** Added to the existing payload verification block alongside `skills/...`, `hooks/...`, `tools/...`.
+  - At the end: re-run `skills/external-review/install.sh` with `EXTERNAL_REVIEWER_SOURCE_ROOT=$CURRENT_DIR` (the just-materialised cache `current/`), matching today's behaviour at `scripts/publish-to-local-codex.sh:164-165` and `scripts/publish-to-local-claude.sh:188-189`.
+- `scripts/publish-to-local-codex.sh` — kept as documented entry point. Thin wrapper around `publish-common.sh`. Restamps `external-reviewer` against codex `current/`. Does **not** touch `reviewer-agent` or `tasktool` shims.
+- `scripts/publish-to-local-claude.sh` — same treatment, restamps against claude `current/`.
 - `scripts/deploy.sh` (new) — top-level "do everything for this machine":
 
 ```
-deploy.sh           Run full deploy: codex publish + claude publish + re-run all installers
-deploy.sh --check   Read-only diagnostics; print the drift table; exit non-zero if drift found
-deploy.sh --codex-only    Skip Claude publish + skip claude-specific install steps
-deploy.sh --claude-only   Skip Codex publish
+deploy.sh           Full: codex publish + claude publish + re-run all installers + print check
+deploy.sh --check   Read-only diagnostics; non-zero exit on DRIFT
+deploy.sh --codex-only    Skip Claude publish; still re-run all installers
+deploy.sh --claude-only   Skip Codex publish; still re-run all installers
 ```
 
 Deploy sequence (when not `--check`):
 
-1. Call into `publish-common.sh` for codex (unless `--claude-only`).
-2. Call into `publish-common.sh` for claude (unless `--codex-only`).
-3. `bash skills/external-review/install.sh --force`.
-4. `bash skills/project-setup/install-reviewer-agent.sh --force`.
-5. `bash tools/tasktool/install.sh --force`.
-6. If invoked inside a git repo: `tools/tasktool/install.sh --hook --force`.
-7. Print the diagnostic summary (same output as `--check`).
+1. Call `publish-common.sh` for codex (unless `--claude-only`). This restamps `external-reviewer` against codex `current/` as a side effect.
+2. Call `publish-common.sh` for claude (unless `--codex-only`). This restamps `external-reviewer` against claude `current/`.
+3. `bash skills/project-setup/install-reviewer-agent.sh --force` against the dev checkout.
+4. `bash tools/tasktool/install.sh --force` against the dev checkout.
+5. If invoked inside a git repo: `bash tools/tasktool/install.sh --hook --force`.
+6. Print the diagnostic summary (same output as `--check`).
 
-`SOURCE_ROOT` defaults to whatever the publish wrote into — i.e. the materialized `current/` if you want shims to track the published cache, or the dev checkout if you set `EXTERNAL_REVIEWER_SOURCE_ROOT` explicitly. Default policy: deploy points shims at the dev checkout (today's behaviour), since that's what `current/` resolves to via the existing `*/plugins/cache/*/*/*` detection.
+`deploy.sh --check` always inspects both Codex and Claude cache `current/` trees regardless of `--codex-only` / `--claude-only`; those flags filter publish/restamp steps, not diagnostic visibility.
+
+**Source-root policy table.** What source root each scenario stamps into installed shims:
+
+| Trigger | external-reviewer | reviewer-agent | tasktool | pre-commit hook |
+|---|---|---|---|---|
+| `publish-to-local-codex.sh` (direct) | codex `current/` (re-stamped) | unchanged | unchanged | unchanged |
+| `publish-to-local-claude.sh` (direct) | claude `current/` (re-stamped) | unchanged | unchanged | unchanged |
+| `deploy.sh` (full, default order) | claude `current/` (final stamp wins) | dev checkout | dev checkout | dev checkout, if in repo |
+| `deploy.sh --codex-only` | codex `current/` | dev checkout | dev checkout | dev checkout, if in repo |
+| `deploy.sh --claude-only` | claude `current/` | dev checkout | dev checkout | dev checkout, if in repo |
+| `EXTERNAL_REVIEWER_SOURCE_ROOT=…` env set on install | env value | (env var only affects external-reviewer installer) | unchanged | unchanged |
+
+"Dev checkout" = the working tree containing `.version-bump.json` and the canonical `VERSION` file at its root. `EXTERNAL_REVIEWER_SOURCE_ROOT` is an escape hatch for the `external-reviewer` shim only (existing behaviour preserved); it does not influence the other shims.
+
+Because `external-reviewer` may be stamped against a cache `current/` while `reviewer-agent` and `tasktool` are stamped against the dev checkout, `deploy.sh --check` may legitimately report different `source-root` values across the three rows even though all show OK. That asymmetry is intentional and not flagged as drift.
 
 ### 9. `deploy.sh --check` diagnostics output
 
@@ -297,7 +346,19 @@ Pre-commit hook (current repo):
 3 of 4 installed files in sync. 1 drift.
 ```
 
-`--check` exits 0 if everything is OK, non-zero if any DRIFT is reported. Source root drift between shims (same version, different source roots) is shown but does not flip the exit code on its own — it's a diagnostic, not an enforced invariant.
+**Status lattice and exit behaviour.** `deploy.sh --check` classifies each inspected row into one of these statuses and exits non-zero if any row is in a failing state:
+
+| Row status | Meaning | Exit-impact |
+|---|---|---|
+| `OK` | Stamped version matches `$SOURCE_ROOT/VERSION`; all required stamp keys present; source-root path exists. | None. |
+| `DRIFT` | Stamped version differs from `$SOURCE_ROOT/VERSION`. | **Fails** (exit non-zero). |
+| `MALFORMED` | Required stamp key missing/empty, or header unparseable per §6b. | **Fails.** |
+| `MISSING_TARGET` | The installed shim/hook file does not exist where deploy expects it (e.g. `~/.local/bin/reviewer-agent` absent after a `deploy.sh` that should have created it). | **Fails.** |
+| `MISSING_SOURCE` | The stamped `source-root` path does not exist on disk (e.g. cache `current/` never materialised, dev checkout moved). | **Fails.** |
+| `MISSING_CACHE_VERSION` | A plugin cache row has no readable `current/VERSION` (publish skipped or symlink not flattened). | **Fails.** |
+| `SOURCE_ROOT_INFO` | Same stamped version across shims but different `source-root` values. Expected by design — `external-reviewer` may point at a cache `current/` while the others point at the dev checkout. | None. Surfaced for diagnostic clarity only. |
+
+Each fail-class status flips the exit code to non-zero; `OK` and `SOURCE_ROOT_INFO` alone leave it at zero. `--check` prints all rows even when one or more fail so the operator sees the full picture in one pass. The failure summary at the bottom of the table is human-readable (e.g. `5 of 6 rows OK; 1 DRIFT, 0 MALFORMED`) and the exit code communicates pass/fail to scripts.
 
 ## Testing
 
@@ -313,10 +374,22 @@ New test file `scripts/tests/test_shim_stamping.sh` (bash + simple assertions; o
 8. **Pre-commit hook absent.** No hook installed. Run tasktool. Assert no spurious error.
 9. **Pre-commit hook is some other hook (no `superstar-hook-name` marker).** Run tasktool. Assert no spurious error; tasktool proceeds.
 10. **`bump-version.sh --check` includes VERSION.** Assert VERSION appears as its own row in the output and participates in the in-sync detection.
+11. **`$HOME` literalisation round-trip.** Generate a shim whose stamped `source-root` is `$HOME/...`. Invoke the shim — assert it execs (bash expansion path). Then run `deploy.sh --check` — assert the displayed path is the expanded absolute form, not the literal `$HOME/...` string.
+12. **Python hook handshake expands `$HOME`.** Stamp a hook with a `$HOME/...` source-root. Run tasktool — assert it reads `<expanded>/VERSION` and either succeeds or fails with the expanded path in the error message.
+13. **Malformed stamp.** Hand-edit a shim to remove the `superstar-shim-version` line. Run the shim — assert it execs (cannot compare). Run `deploy.sh --check` — assert a `MALFORMED` row appears, distinct from `DRIFT`, **and `--check` exits non-zero**. Repeat for `MISSING_TARGET` (delete the shim file) and `MISSING_SOURCE` (rename the stamped source-root directory) — both must exit non-zero. Assert `SOURCE_ROOT_INFO` rows alone do **not** flip the exit code.
+14. **Legacy hook accepted on reinstall.** Pre-place a hook file containing only the legacy `tasktool-pre-commit-hook` magic comment. Run `tools/tasktool/install.sh --hook` (no `--force`). Assert the install succeeds and the resulting file carries the new `superstar-hook-name: tasktool-pre-commit` header. Run it again. Assert idempotent success without `--force`.
+15. **Non-tasktool hook still requires `--force`.** Pre-place a hook file that contains neither marker. Run `tools/tasktool/install.sh --hook` without `--force`. Assert refusal with the existing error.
+16. **Plugin payload carries VERSION.** Run `publish-to-local-codex.sh` (and again for claude). Assert `<cache>/<version>/VERSION` and `<cache>/current/VERSION` exist, are real files (not symlinks after rsync), and equal the manifest version. Assert `publish-common.sh`'s manifest verification fails if VERSION is missing or mismatched.
+17. **Direct publish restamps external-reviewer.** Run `publish-to-local-codex.sh`. Assert `~/.local/bin/external-reviewer` is regenerated and its `superstar-shim-source-root` points at the codex `current/`. Repeat for claude. Both must continue to work — this is the X14 regression guard.
+18. **Direct publish does NOT touch reviewer-agent or tasktool shims.** Capture the pre-publish content of both shims. Run a direct publish. Assert both shim files are byte-identical to their pre-publish state.
 
 Existing `skills/external-review/tests/test_external_reviewer_installer.py` updated:
 - Assert the generated shim contains the new stamp header keys.
 - Assert the embedded `__superstar_check_version` function is present.
+
+Existing `tests/codex-plugin-sync/test-publish-to-local-codex.sh` and `tests/claude-code/test-publish-to-local-claude.sh` updated:
+- Assert `current/VERSION` is materialised as a real file with the right contents.
+- Keep the assertion that the generated shim points at `current/skills/external-review/scripts/external-reviewer.py`.
 
 `skills/external-review/tests/test_external_reviewer_compat_shim.py` — deleted.
 
@@ -330,12 +403,13 @@ Existing `skills/external-review/tests/test_external_reviewer_installer.py` upda
 
 ## Acceptance criteria
 
-1. `VERSION` exists at repo root and is the only file consulted by shims at runtime.
+1. `VERSION` exists at repo root as a single-line plain-text file. `plugins/superstar/VERSION` exists as a relative symlink to `../../VERSION` so the publish flow materialises a real `VERSION` file in both Codex and Claude plugin caches.
 2. `.version-bump.json` declares `VERSION` with `"format": "plain"`. `bump-version.sh --check` shows it in the table; `--audit` includes it; `bump-version.sh X.Y.Z` writes it.
-3. All three global shims under `~/.local/bin/` carry the five stamp keys after `deploy.sh`. The five keys match across all three for `version` and `source-root`.
-4. Running a global shim while `VERSION` and the stamp differ causes the shim to hard-exit with the documented error and **not** invoke the source. Tested.
-5. Running tasktool inside a repo whose `.git/hooks/pre-commit` carries the `superstar-hook-name: tasktool-pre-commit` marker with a mismatched version causes tasktool to hard-exit with the hook path and the reconstructed `bash <source-root>/tools/tasktool/install.sh --hook --force` instruction in the message. Tested.
-6. `scripts/publish-to-local-codex.sh` and `scripts/publish-to-local-claude.sh` still exist as entry points, share their implementation via `scripts/lib/publish-common.sh`, and produce identical output to today (modulo the new shim-restamping step if invoked through `deploy.sh`).
-7. `scripts/deploy.sh --check` produces the diagnostic table in §9 and exits non-zero if any DRIFT row appears.
-8. `skills/project-setup/scripts/external-reviewer-shim.py` is removed, along with its test and the project-setup row that recommends it.
-9. The full Superstar test suite passes after these changes.
+3. All three global shims under `~/.local/bin/` carry the five stamp keys after `deploy.sh`. Their stamped `version` values are identical (= current `VERSION`). Their stamped `source-root` values may differ by design: `external-reviewer` may point at a plugin-cache `current/`, while `reviewer-agent` and `tasktool` point at the dev checkout.
+4. Running a global shim while `$SOURCE_ROOT/VERSION` and the stamped version differ causes the shim to hard-exit with the documented error and **not** invoke the source. Tested. Works for both dev-checkout-stamped and cache-`current/`-stamped shims because the plugin payload now carries `VERSION`.
+5. Running tasktool inside a repo whose `.git/hooks/pre-commit` carries the `superstar-hook-name: tasktool-pre-commit` marker with a mismatched version causes tasktool to hard-exit with the hook path and the reconstructed `bash <source-root>/tools/tasktool/install.sh --hook --force` instruction in the message, with `<source-root>` expanded from any literal `$HOME/` or `~/` prefix. Tested.
+6. `scripts/publish-to-local-codex.sh` and `scripts/publish-to-local-claude.sh` still exist as entry points, share their implementation via `scripts/lib/publish-common.sh`, and continue to re-stamp the `external-reviewer` shim against the just-materialised `current/`. Other global shims and the pre-commit hook are not touched by direct publish.
+7. `scripts/deploy.sh --check` parses shim/hook headers using the §6b parser rules, surfaces expanded absolute paths in the table, applies the §9 status lattice, and exits non-zero on any `DRIFT`, `MALFORMED`, `MISSING_TARGET`, `MISSING_SOURCE`, or `MISSING_CACHE_VERSION` row (and zero when only `OK` and `SOURCE_ROOT_INFO` rows appear).
+8. `tools/tasktool/install.sh --hook` accepts a legacy hook carrying only `tasktool-pre-commit-hook` and replaces it with the new stamped header without `--force`. Hooks with neither marker still require `--force`. Idempotent reinstall of an already-new-stamped hook succeeds.
+9. `skills/project-setup/scripts/external-reviewer-shim.py`, the corresponding test, and the project-setup row 7b that recommends it are removed.
+10. The full Superstar test suite passes, including the new shim-stamping tests and the updated publish-script regression tests.
