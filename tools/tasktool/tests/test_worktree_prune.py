@@ -427,3 +427,65 @@ def test_prune_emits_recent_head_note_but_succeeds(project_with_worktree):
                     check=False)
     assert res.returncode == 0
     assert "HEAD moved" in res.stderr
+
+
+def test_ad_hoc_lifecycle_close_without_no_archive_breaks_prune(tmp_path):
+    """Spec §5.3: default `close` on a cross-cutting row auto-archives, which
+    destroys worktree fields before prune can find them. This is the foot-gun
+    `start --ad-hoc` requires `--no-archive` to avoid.
+    """
+    repo = _init_repo(tmp_path / "p")
+    (repo / "docs").mkdir()
+    _tasktool(repo, "config", "init-local")
+    _tasktool(repo, "init", "--project", "demo")
+    _tasktool(repo, "start", "--ad-hoc", "explore")
+    # Discover the allocated ID by reading tasktool list.
+    # Ad-hoc cross rows are hidden by default; use --all to list them.
+    listing = _tasktool(repo, "list", "--kind", "cross", "--all").stdout
+    xid = _extract_xid(listing, title_contains="Ad-hoc: explore")
+    assert xid is not None
+    # Foot-gun: close without --no-archive auto-archives.
+    _tasktool(repo, "close", xid)
+    # Now prune cannot find the row.
+    res = _tasktool(repo, "worktree", "prune", xid, check=False)
+    assert res.returncode != 0
+
+
+def test_ad_hoc_lifecycle_full_flow_with_no_archive(tmp_path):
+    repo = _init_repo(tmp_path / "p")
+    (repo / "docs").mkdir()
+    _tasktool(repo, "config", "init-local")
+    _tasktool(repo, "init", "--project", "demo")
+    _tasktool(repo, "start", "--ad-hoc", "hotfix")
+    # Ad-hoc cross rows are hidden by default; use --all to list them.
+    listing = _tasktool(repo, "list", "--kind", "cross", "--all").stdout
+    xid = _extract_xid(listing, title_contains="Ad-hoc: hotfix")
+    assert xid is not None
+    # Recorded worktree path.
+    show = _tasktool(repo, "show", xid).stdout
+    assert "worktree_path" in show
+    # Step 1: close with --no-archive.
+    _tasktool(repo, "close", xid, "--no-archive")
+    # Step 2: prune (no merge required for ad-hoc by spec? — spec defers to
+    # standard three-guard prune. For this test we force-prune because the
+    # ad-hoc branch is not merged into main).
+    _tasktool(repo, "worktree", "prune", xid, "--force")
+    # Step 3: archive-cross.
+    _tasktool(repo, "archive-cross", xid)
+    # archive-cross moves the row from `cross_cutting` to `archived_cross_cutting`.
+    # `tasktool list --kind cross` lists active cross rows; the archived row will
+    # NOT appear there. Verify the archive by reading tasklist.json directly.
+    import json
+    data = json.loads((repo / "docs" / "tasklist.json").read_text())
+    archived_ids = [a["id"] for a in data.get("archived_cross_cutting", [])]
+    assert xid in archived_ids
+
+
+def _extract_xid(listing: str, *, title_contains: str) -> str | None:
+    import re
+    for line in listing.splitlines():
+        if title_contains in line:
+            m = re.search(r"\b(X\d+)\b", line)
+            if m:
+                return m.group(1)
+    return None
