@@ -267,10 +267,13 @@
           "id": "S1",
           "notes": "",
           "parallel_group": null,
-          "plan_path": null,
+          "plan_path": "docs/plans/2026-05-21-P5-S1-tasktool-worktree-lifecycle-core.md",
           "planning_status": "proposed",
-          "refs": [],
-          "reviewer_chain": null,
+          "refs": [
+            "docs/plans/2026-05-21-P5-S1-tasktool-worktree-lifecycle-core.md",
+            "docs/reviewer/p5-s1-tasktool-worktree-lifecycle-core-plan"
+          ],
+          "reviewer_chain": "docs/reviewer/p5-s1-tasktool-worktree-lifecycle-core-plan",
           "started": null,
           "status": "ready",
           "tasks": [],
@@ -286,9 +289,11 @@
           "id": "S2",
           "notes": "",
           "parallel_group": null,
-          "plan_path": null,
+          "plan_path": "docs/plans/2026-05-21-P5-S2-prune-and-repair.md",
           "planning_status": "proposed",
-          "refs": [],
+          "refs": [
+            "docs/plans/2026-05-21-P5-S2-prune-and-repair.md"
+          ],
           "reviewer_chain": null,
           "started": null,
           "status": "ready",
@@ -306,9 +311,11 @@
           "id": "S3",
           "notes": "",
           "parallel_group": null,
-          "plan_path": null,
+          "plan_path": "docs/plans/2026-05-21-P5-S3-skill-rewrite-and-subagent-guard.md",
           "planning_status": "proposed",
-          "refs": [],
+          "refs": [
+            "docs/plans/2026-05-21-P5-S3-skill-rewrite-and-subagent-guard.md"
+          ],
           "reviewer_chain": null,
           "started": null,
           "status": "ready",
