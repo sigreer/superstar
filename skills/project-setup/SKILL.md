@@ -35,7 +35,6 @@ For each check the skill must report **status** (`present` / `missing` / `partia
 | 5 | `docs/reviewer/` directory                               | Directory exists (chain folders land here).                            | `mkdir -p docs/reviewer` and add a `.gitkeep`.                               |
 | 6 | `docs/archived-tasks/` directory                         | Directory exists (phase-close target).                                 | `mkdir -p docs/archived-tasks` and add a `.gitkeep`.                         |
 | 7 | Global `external-reviewer` bridge available | `command -v external-reviewer` succeeds and `external-reviewer --help` exits 0. | Run or print `bash <active-superstar-checkout>/skills/external-review/install.sh` after confirmation. |
-| 7b | Repo-local `scripts/external-reviewer.py` legacy drift | Pass: absent. Compatibility-pass: present and contains `Compatibility shim for old Superstar handoffs` plus an `external-reviewer` delegation. Partial: present but any other content. | Offer to replace Partial files with `skills/project-setup/scripts/external-reviewer-shim.py`; do not copy the full bridge. |
 | 8 | Reviewer command available                               | `AGENT_REVIEWER_CMD` (env) is set, or the default `reviewer-agent` is on `PATH`. | Print the exact command to install `skills/project-setup/scripts/reviewer-agent` to a user-chosen bin dir, or the exact `AGENT_REVIEWER_CMD` override. Do **not** install third-party tools or edit shell config without confirmation. The wrapper must not use provider bypass/no-sandbox flags. |
 | 9 | CLAUDE.md mentions superstar planning discipline | The repo's CLAUDE.md (or AGENTS.md / GEMINI.md) references the skill set. | Append a small "Planning & implementation discipline" block referencing `brainstorming`, `writing-plans`, `subagent-driven-development`, `external-review`, `tasklist-discipline`. |
 
@@ -59,7 +58,7 @@ Setup is its own change. Do not continue into `[[brainstorming]]`, `[[writing-pl
 After any accepted scaffold or legacy migration:
 
 1. Run `git status --short` and classify every dirty path as one of:
-   - setup/migration (`docs/tasklist.json`, `.gitignore` worktree-ignore entries, `docs/specs/`, `docs/plans/`, `docs/handoffs/`, `docs/reviewer/`, `docs/archived-tasks/`, global `external-reviewer` shim installation, repo-local `scripts/external-reviewer.py` compatibility shim replacement, `.git/hooks/pre-commit`, `CLAUDE.md` / `AGENTS.md` / `GEMINI.md`, legacy `docs/superpowers/` moves);
+   - setup/migration (`docs/tasklist.json`, `.gitignore` worktree-ignore entries, `docs/specs/`, `docs/plans/`, `docs/handoffs/`, `docs/reviewer/`, `docs/archived-tasks/`, global `external-reviewer` shim installation, `.git/hooks/pre-commit`, `CLAUDE.md` / `AGENTS.md` / `GEMINI.md`, legacy `docs/superpowers/` moves);
    - feature implementation;
    - local noise or user-owned changes.
 2. Confirm `.tasktool/config.json` exists and names `authoritative-checkout` routing for the repo's main branch. If it is missing or lacks `tasklist.mutation_mode`, run `tools/tasktool/tasktool config init-authority --branch <main-branch>` from the authoritative checkout before any `tasktool init` or other mutating command.

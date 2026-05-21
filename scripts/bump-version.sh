@@ -40,10 +40,22 @@ write_json_field() {
   jq "$jq_path = \"$value\"" "$file" > "$tmp" && mv "$tmp" "$file"
 }
 
+# Read a plain single-line VERSION-style file.
+read_plain_field() {
+  local file="$1"
+  head -n1 "$file" | tr -d '[:space:]'
+}
+
+# Write a plain single-line VERSION-style file (single trailing newline).
+write_plain_field() {
+  local file="$1" value="$2"
+  printf '%s\n' "$value" > "$file"
+}
+
 # Read the list of declared files from config.
-# Outputs lines of "path<TAB>field"
+# Outputs lines of "path<TAB>field<TAB>format"
 declared_files() {
-  jq -r '.files[] | "\(.path)\t\(.field)"' "$CONFIG"
+  jq -r '.files[] | "\(.path)\t\(.field // "-")\t\(.format // "json")"' "$CONFIG"
 }
 
 # Read the audit exclude patterns from config.
@@ -60,16 +72,22 @@ cmd_check() {
   echo "Version check:"
   echo ""
 
-  while IFS=$'\t' read -r path field; do
+  while IFS=$'\t' read -r path field format; do
     local fullpath="$REPO_ROOT/$path"
     if [[ ! -f "$fullpath" ]]; then
-      printf "  %-45s  MISSING\n" "$path ($field)"
+      printf "  %-45s  MISSING\n" "$path"
       has_drift=1
       continue
     fi
-    local ver
-    ver=$(read_json_field "$fullpath" "$field")
-    printf "  %-45s  %s\n" "$path ($field)" "$ver"
+    local ver label
+    if [[ "$format" == "plain" ]]; then
+      ver=$(read_plain_field "$fullpath")
+      label="$path (plain)"
+    else
+      ver=$(read_json_field "$fullpath" "$field")
+      label="$path ($field)"
+    fi
+    printf "  %-45s  %s\n" "$label" "$ver"
     versions+=("$ver")
   done < <(declared_files)
 
@@ -99,9 +117,14 @@ cmd_audit() {
   # Determine the current version (most common across declared files)
   local current_version
   current_version=$(
-    while IFS=$'\t' read -r path field; do
+    while IFS=$'\t' read -r path field format; do
       local fullpath="$REPO_ROOT/$path"
-      [[ -f "$fullpath" ]] && read_json_field "$fullpath" "$field"
+      if [[ ! -f "$fullpath" ]]; then continue; fi
+      if [[ "$format" == "plain" ]]; then
+        read_plain_field "$fullpath"
+      else
+        read_json_field "$fullpath" "$field"
+      fi
     done < <(declared_files) | sort | uniq -c | sort -rn | head -1 | awk '{print $2}'
   )
 
@@ -124,7 +147,7 @@ cmd_audit() {
 
   # Get list of declared paths for comparison
   local -a declared_paths=()
-  while IFS=$'\t' read -r path _field; do
+  while IFS=$'\t' read -r path _field _format; do
     declared_paths+=("$path")
   done < <(declared_files)
 
@@ -175,16 +198,23 @@ cmd_bump() {
   echo "Bumping all declared files to $new_version..."
   echo ""
 
-  while IFS=$'\t' read -r path field; do
+  while IFS=$'\t' read -r path field format; do
     local fullpath="$REPO_ROOT/$path"
     if [[ ! -f "$fullpath" ]]; then
       echo "  SKIP (missing): $path"
       continue
     fi
-    local old_ver
-    old_ver=$(read_json_field "$fullpath" "$field")
-    write_json_field "$fullpath" "$field" "$new_version"
-    printf "  %-45s  %s -> %s\n" "$path ($field)" "$old_ver" "$new_version"
+    local old_ver label
+    if [[ "$format" == "plain" ]]; then
+      old_ver=$(read_plain_field "$fullpath")
+      write_plain_field "$fullpath" "$new_version"
+      label="$path (plain)"
+    else
+      old_ver=$(read_json_field "$fullpath" "$field")
+      write_json_field "$fullpath" "$field" "$new_version"
+      label="$path ($field)"
+    fi
+    printf "  %-45s  %s -> %s\n" "$label" "$old_ver" "$new_version"
   done < <(declared_files)
 
   echo ""

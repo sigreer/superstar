@@ -1,0 +1,32 @@
+1. Findings
+
+F1 — Severity: blocking — X16 is not closed in the canonical tracker. `docs/tasklist.json` still has `X16` as `"status": "ready"`, with `"started": null`, `"closed": null`, empty notes, and only the spec ref registered at `docs/tasklist.json:226`. This contradicts the plan’s closeout requirement to run `tasktool close X16` at `docs/plans/2026-05-21-X16-shim-version-stamping.md:2359` and leaves the post-slice gate unsatisfied.
+
+F2 — Severity: blocking — `deploy.sh --check` does not inspect the pre-commit hook, despite the spec requiring shim/hook header parsing and hook status in the diagnostic. The acceptance criterion says `deploy.sh --check` must parse shim/hook headers and apply the status lattice at `docs/specs/2026-05-21-X16-shim-version-stamping-design.md:412`, and the expected output includes “Pre-commit hook (current repo)” at `docs/specs/2026-05-21-X16-shim-version-stamping-design.md:341`. The implementation only checks three global shims and plugin caches at `scripts/deploy.sh:177` and `scripts/deploy.sh:199`, so a stale hook can be missed while `--check` exits 0.
+
+F3 — Severity: important — The tasktool hook handshake misses linked worktrees. `check_pre_commit_hook()` locates the hook as `repo_top / ".git" / "hooks" / "pre-commit"` at `tools/tasktool/hook_handshake.py:56`, but in a linked worktree `.git` is a file and the actual hook path must come from `git rev-parse --git-path hooks/pre-commit`. I reproduced this in `/tmp`: a stale stamped hook in the real `git-path` hook location returned `message=None`. The existing tests only write hooks under `repo/.git/hooks` (`tools/tasktool/tests/test_hook_handshake.py:19`), so this common Superstar workflow is uncovered.
+
+2. Open questions / assumptions
+
+I assume X16 is being reviewed as a completion gate, not as a WIP checkpoint. If that is wrong, the task tracker still needs to say so explicitly because the current tracker state presents the work as not started.
+
+3. Suggested document edits
+
+Add a resolution note or closeout evidence that includes the post-slice reviewer chain, `tasktool close X16`, and the final verification commands. If `deploy.sh --check` intentionally excludes the hook, the spec and acceptance criteria must be changed; otherwise implement the hook row.
+
+4. Verification gaps / commands that should be run
+
+Run or add coverage for:
+
+```bash
+python3 -m pytest tools/tasktool/tests/test_hook_handshake.py -v
+python3 -m pytest scripts/tests/test_deploy_check.py -v
+bash scripts/deploy.sh --check
+tools/tasktool/tasktool show X16
+tools/tasktool/tasktool close X16 --reviewer-chain docs/reviewer/x16-shim-version-stamping-X16-post-slice
+```
+
+Fresh checks I ran: `tasktool validate --strict-format` passed, `tasktool artifact status X16 --strict` passed, and `bash scripts/deploy.sh --check` exited 0 but showed no pre-commit hook section.
+
+Overall verdict: revise
+

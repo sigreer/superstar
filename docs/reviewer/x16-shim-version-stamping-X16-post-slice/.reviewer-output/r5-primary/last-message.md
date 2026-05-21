@@ -1,0 +1,39 @@
+1. Findings
+
+S1.F4 — RESOLVED — The exact documented Step 11 gate now passes as written. `skills/external-review/tests/conftest.py:12` adds an autouse fixture that sets `AGENT_REVIEWER_STATE_FILE` to a per-test `tmp_path` value, so subprocesses inheriting `os.environ` no longer try to create `/home/simon/.config/superstar/reviewer-state.json.lock` in restricted reviewer sandboxes. I reran `python3 -m pytest scripts/tests/ tools/tasktool/tests/ skills/external-review/tests/ -v`; it collected 666 tests and finished with `666 passed`.
+
+F1 — RESOLVED — X16 remains `ready`, and this is still consistent with the established closeout sequencing after a passing post-slice verdict.
+
+F2 — RESOLVED — `bash scripts/deploy.sh --check` exits 0 and reports the pre-commit hook as `OK v6.5.0`.
+
+F3 — RESOLVED — The linked-worktree hook handshake remains covered in the aggregate pytest run; `tools/tasktool/tests/test_hook_handshake.py::test_drift_returns_error_in_worktree` passed.
+
+2. Open questions / assumptions
+
+No new questions.
+
+3. Suggested document edits
+
+None.
+
+4. Verification gaps / commands that should be run
+
+Fresh verification I ran:
+
+```bash
+python3 -m pytest scripts/tests/ tools/tasktool/tests/ skills/external-review/tests/ -v
+# 666 passed, 3 warnings
+
+bash scripts/deploy.sh --check
+# exit 0; pre-commit OK v6.5.0
+
+bash scripts/bump-version.sh --check
+# exit 0; all declared files in sync at 6.5.0
+
+tools/tasktool/tasktool show X16
+# status: ready
+```
+
+The pytest warnings were non-blocking: one deprecation warning and two pytest cache-write warnings caused by the read-only reviewer filesystem.
+
+Overall verdict: ready

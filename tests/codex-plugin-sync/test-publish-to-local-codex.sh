@@ -46,6 +46,24 @@ test ! -L "$CURRENT_DIR"
 test -f "$CURRENT_DIR/hooks/run-hook.cmd"
 test ! -L "$CURRENT_DIR/hooks/run-hook.cmd"
 
+test -f "$CACHE_DIR/VERSION" || { echo "FAIL: cache <version>/VERSION missing"; exit 1; }
+test -f "$CURRENT_DIR/VERSION" || { echo "FAIL: cache current/VERSION missing"; exit 1; }
+test ! -L "$CACHE_DIR/VERSION" || { echo "FAIL: cache <version>/VERSION is a symlink"; exit 1; }
+test ! -L "$CURRENT_DIR/VERSION" || { echo "FAIL: cache current/VERSION is a symlink"; exit 1; }
+diff <(cat "$ROOT/VERSION") "$CURRENT_DIR/VERSION" \
+  || { echo "FAIL: cache current/VERSION differs from repo-root VERSION"; exit 1; }
+
+test -f "$CACHE_DIR/scripts/lib/shim-version-check.sh" \
+  || { echo "FAIL: cache <version>/scripts/lib/shim-version-check.sh missing"; exit 1; }
+test -f "$CURRENT_DIR/scripts/lib/shim-version-check.sh" \
+  || { echo "FAIL: cache current/scripts/lib/shim-version-check.sh missing"; exit 1; }
+test ! -L "$CACHE_DIR/scripts/lib/shim-version-check.sh" \
+  || { echo "FAIL: cache <version>/scripts/lib/shim-version-check.sh is a symlink"; exit 1; }
+test ! -L "$CURRENT_DIR/scripts/lib/shim-version-check.sh" \
+  || { echo "FAIL: cache current/scripts/lib/shim-version-check.sh is a symlink"; exit 1; }
+diff "$ROOT/scripts/lib/shim-version-check.sh" "$CURRENT_DIR/scripts/lib/shim-version-check.sh" \
+  || { echo "FAIL: cache current/scripts/lib/shim-version-check.sh differs from repo-root"; exit 1; }
+
 stop_command="$(
   python3 - "$CACHE_DIR/hooks/hooks.json" <<'PY'
 import json

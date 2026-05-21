@@ -47,6 +47,13 @@ test ! -L "$CURRENT_DIR"
 test -f "$CURRENT_DIR/hooks/run-hook.cmd"
 test ! -L "$CURRENT_DIR/hooks/run-hook.cmd"
 
+test -f "$CACHE_DIR/VERSION" || { echo "FAIL: cache <version>/VERSION missing"; exit 1; }
+test -f "$CURRENT_DIR/VERSION" || { echo "FAIL: cache current/VERSION missing"; exit 1; }
+test ! -L "$CACHE_DIR/VERSION" || { echo "FAIL: cache <version>/VERSION is a symlink"; exit 1; }
+test ! -L "$CURRENT_DIR/VERSION" || { echo "FAIL: cache current/VERSION is a symlink"; exit 1; }
+diff <(cat "$ROOT/VERSION") "$CURRENT_DIR/VERSION" \
+  || { echo "FAIL: cache current/VERSION differs from repo-root VERSION"; exit 1; }
+
 stop_command="$(
   python3 - "$CACHE_DIR/hooks/hooks.json" <<'PY'
 import json

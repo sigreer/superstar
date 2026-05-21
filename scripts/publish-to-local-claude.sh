@@ -12,6 +12,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
+# shellcheck source=scripts/lib/publish-common.sh
+. "$REPO_ROOT/scripts/lib/publish-common.sh"
+
 MARKETPLACE="superstar-dev"
 PLUGIN="superstar"
 SCOPE="user"
@@ -58,14 +61,7 @@ MANIFEST="$REPO_ROOT/.claude-plugin/plugin.json"
 
 [[ -f "$MANIFEST" ]] || { echo "ERROR: source manifest not found: $MANIFEST" >&2; exit 1; }
 
-VERSION="$(
-  python3 - "$MANIFEST" <<'PY'
-import json
-import sys
-with open(sys.argv[1], encoding="utf-8") as f:
-    print(json.load(f)["version"])
-PY
-)"
+VERSION="$(ss_publish_resolve_version "$MANIFEST")"
 
 PLUGIN_CACHE_ROOT="$CACHE_ROOT/$MARKETPLACE/$PLUGIN"
 CACHE_DIR="$PLUGIN_CACHE_ROOT/$VERSION"
@@ -93,97 +89,21 @@ if [[ "$SKIP_CLAUDE_UPDATE" -eq 0 ]]; then
 fi
 
 command -v rsync >/dev/null || { echo "ERROR: rsync not found" >&2; exit 1; }
-run mkdir -p "$CACHE_DIR"
-run rsync -aL --delete \
-  --exclude ".git/" \
-  --exclude ".worktrees/" \
-  --exclude ".agents/" \
-  --exclude ".pytest_cache/" \
-  --exclude "__pycache__/" \
-  --exclude "docs/reviewer/" \
-  "$REPO_ROOT/" "$CACHE_DIR/"
-run mkdir -p "$CURRENT_DIR"
-run rsync -aL --delete \
-  --exclude ".git/" \
-  --exclude ".worktrees/" \
-  --exclude ".agents/" \
-  --exclude ".pytest_cache/" \
-  --exclude "__pycache__/" \
-  --exclude "docs/reviewer/" \
-  "$REPO_ROOT/" "$CURRENT_DIR/"
+
+REQUIRED_PATHS="skills/using-superstar/SKILL.md:skills/project-setup/SKILL.md:skills/using-git-worktrees/SKILL.md:skills/external-review/scripts/external-reviewer.py:hooks/run-hook.cmd:hooks/agent-finished:tools/tasktool/notify.py:assets:VERSION"
+
+export EXTRA_RSYNC_ARGS="--exclude .git/ --exclude .worktrees/ --exclude .agents/ --exclude .pytest_cache/ --exclude __pycache__/ --exclude docs/reviewer/"
+
+DRY_RUN="$DRY_RUN" ss_publish_rsync_payload "$REPO_ROOT" "$CACHE_DIR"
+DRY_RUN="$DRY_RUN" ss_publish_rsync_payload "$REPO_ROOT" "$CURRENT_DIR"
 
 if [[ "$DRY_RUN" -eq 1 ]]; then
   echo "Dry run complete."
   exit 0
 fi
 
-python3 - "$CACHE_DIR" "$CURRENT_DIR" <<'PY'
-import json
-import shlex
-import sys
-from pathlib import Path
-
-cache = Path(sys.argv[1]).resolve()
-current = Path(sys.argv[2]).resolve()
-hook_runner = shlex.quote(str(current / "hooks" / "run-hook.cmd"))
-
-for root in (cache, current):
-    hooks_json = root / "hooks" / "hooks.json"
-    config = json.loads(hooks_json.read_text(encoding="utf-8"))
-    for event_entries in config.get("hooks", {}).values():
-        for entry in event_entries:
-            for hook in entry.get("hooks", []):
-                command = hook.get("command")
-                if isinstance(command, str):
-                    command = command.replace(
-                        '"${CLAUDE_PLUGIN_ROOT:-.}/hooks/run-hook.cmd"',
-                        hook_runner,
-                    )
-                    command = command.replace(
-                        '"${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd"',
-                        hook_runner,
-                    )
-                    hook["command"] = command
-
-    hooks_json.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
-PY
-
-python3 - "$CACHE_DIR" "$CURRENT_DIR" "$PLUGIN" "$VERSION" <<'PY'
-import json
-import sys
-from pathlib import Path
-
-cache = Path(sys.argv[1])
-current = Path(sys.argv[2])
-plugin = sys.argv[3]
-expected = sys.argv[4]
-
-for root in (cache, current):
-    manifest = root / ".claude-plugin" / "plugin.json"
-    data = json.loads(manifest.read_text(encoding="utf-8"))
-    if data.get("name") != plugin:
-        raise SystemExit(f"{root} manifest name mismatch: {data.get('name')!r} != {plugin!r}")
-    if data.get("version") != expected:
-        raise SystemExit(f"{root} manifest version mismatch: {data.get('version')!r} != {expected!r}")
-    for rel in (
-        "skills/using-superstar/SKILL.md",
-        "skills/project-setup/SKILL.md",
-        "skills/using-git-worktrees/SKILL.md",
-        "skills/external-review/scripts/external-reviewer.py",
-        "hooks/run-hook.cmd",
-        "hooks/agent-finished",
-        "tools/tasktool/notify.py",
-        "assets",
-    ):
-        if not (root / rel).exists():
-            raise SystemExit(f"{root} missing required payload: {rel}")
-    for rel in ("skills", "hooks", "tools", "assets"):
-        if (root / rel).is_symlink():
-            raise SystemExit(f"{root} {rel} payload is still a symlink; expected materialized path")
-
-print(f"PASS: {plugin} cache is materialized at {cache}")
-print(f"PASS: {plugin} current entrypoint is materialized at {current}")
-PY
-
-EXTERNAL_REVIEWER_SOURCE_ROOT="$CURRENT_DIR" \
-  "$CURRENT_DIR/skills/external-review/install.sh"
+ss_publish_rewrite_hooks "$CACHE_DIR" "$CURRENT_DIR"
+ss_publish_verify_payload "$CACHE_DIR" "$CURRENT_DIR" "$PLUGIN" "$VERSION" \
+    ".claude-plugin/plugin.json" "$REQUIRED_PATHS"
+ss_publish_verify_version_file "$CACHE_DIR" "$CURRENT_DIR" "$VERSION"
+ss_publish_restamp_external_reviewer "$CURRENT_DIR"
