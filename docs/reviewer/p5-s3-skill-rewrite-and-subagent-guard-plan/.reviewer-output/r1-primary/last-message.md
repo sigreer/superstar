@@ -1,0 +1,31 @@
+1. Findings
+
+F1 — Severity: blocking — The “shim” work is only a prompt-presence rule, not an actual Claude/Codex dispatch integration or an integration test. The spec says `SUPERSTAR_SUBAGENT_ROLE` is added to the Claude/Codex shim and that integration tests confirm it is exported in dispatched subagents and absent in coordinator sessions (`docs/specs/2026-05-21-P5-tasktool-worktree-lifecycle-design.md:137`, `:286`). The plan explicitly substitutes static prompt-template instructions because there is “no native env-injection point” (`docs/plans/2026-05-21-P5-S3-skill-rewrite-and-subagent-guard.md:607`) and tests only grep markdown templates (`:647-705`). That does not prove the guard fires in real use, especially for Codex `spawn_agent` mapping or for shells opened before/without the export. Revise the plan to either implement the actual dispatch/mapping layer where subagents are launched, or explicitly amend the acceptance claim and add a real harness-level transcript/integration test showing a dispatched subagent invoking `tasktool start` gets refused.
+
+F2 — Severity: important — The token-budget regression does not test the spec’s required behavior. The spec calls for “a representative subagent transcript that previously loaded the full skill now loads only the early-exit block” (`docs/specs/2026-05-21-P5-tasktool-worktree-lifecycle-design.md:287`). The plan instead freezes the rewritten `SKILL.md` byte-for-byte (`docs/plans/2026-05-21-P5-S3-skill-rewrite-and-subagent-guard.md:288-317`). That prevents silent skill growth, but it does not verify subagent early-exit behavior or transcript/token drift. Add a concrete fixture/test for the subagent-load path, or change the plan’s self-review claim at `:868` so it does not pretend the spec’s transcript regression is covered.
+
+F3 — Severity: important — The refusal message is claimed as verbatim but is not tested verbatim and is not actually verbatim. The spec’s message ends with a period after `<worktree_path>` (`docs/specs/2026-05-21-P5-tasktool-worktree-lifecycle-design.md:133`). The plan’s `_SUBAGENT_REFUSAL` omits that period (`docs/plans/2026-05-21-P5-S3-skill-rewrite-and-subagent-guard.md:507-510`) and appends `[signal: ...]` (`:556-559`). The tests only assert the prefix marker (`:349`, `:377-379`), so this can drift while the plan still passes. Add an exact-message assertion, or explicitly update the spec/plan language to allow a structured suffix after the exact sentence.
+
+F4 — Severity: minor — The plan’s scope around `finishing-a-development-branch` is internally defensible but not reconciled with the spec’s P5.S3 slice text. The plan excludes it as P5.S2-owned (`docs/plans/2026-05-21-P5-S3-skill-rewrite-and-subagent-guard.md:19`, `:792-798`), while the spec’s P5.S3 paragraph says P5.S3 applies workflow updates to `executing-plans`, `finishing-a-development-branch`, and `subagent-driven-development` (`docs/specs/2026-05-21-P5-tasktool-worktree-lifecycle-design.md:275-277`). Because §5.3.2 assigns the prune step to P5.S2 (`:212-214`) this is probably a spec wording inconsistency, but the plan should call that out and require verifying P5.S2 already covered the finishing skill before P5.S3 starts.
+
+2. Open questions / assumptions
+
+- I assume P5.S1/P5.S2 will land before execution. Live `tasktool schedule P5` shows P5.S3 is still waiting on both dependencies, even though its row status is `ready`.
+- I assume the “Claude shim / Codex shim” phrase means more than markdown prompt text, because the spec calls out integration tests and “so the guard fires in real use.”
+
+3. Suggested document edits
+
+- Replace Task 8 with either real dispatch-layer changes, including Codex tool mapping updates, or explicitly mark prompt-template export as a best-effort prose guard and downgrade the acceptance claim.
+- Add a transcript/behavior fixture for the `<SUBAGENT-STOP>` early-exit path, separate from the byte-for-byte skill-body fixture.
+- Make the refusal message constant match the spec sentence exactly, then append optional diagnostics after the period if needed.
+- Add a short “P5.S2 dependency verification” step confirming `finishing-a-development-branch` already has the prune update before this slice proceeds.
+
+4. Verification gaps / commands that should be run
+
+- `tools/tasktool/tasktool show P5.S3`
+- `tools/tasktool/tasktool schedule P5`
+- `tools/tasktool/tasktool validate --strict-format`
+- `python -m pytest tools/tasktool/tests -q`
+- A real or simulated harness dispatch test proving `SUPERSTAR_SUBAGENT_ROLE` is present in a dispatched subagent and absent in the coordinator session.
+
+Overall verdict: revise

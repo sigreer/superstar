@@ -315,9 +315,10 @@
           "plan_path": "docs/plans/2026-05-21-P5-S3-skill-rewrite-and-subagent-guard.md",
           "planning_status": "proposed",
           "refs": [
-            "docs/plans/2026-05-21-P5-S3-skill-rewrite-and-subagent-guard.md"
+            "docs/plans/2026-05-21-P5-S3-skill-rewrite-and-subagent-guard.md",
+            "docs/reviewer/p5-s3-skill-rewrite-and-subagent-guard-plan"
           ],
-          "reviewer_chain": null,
+          "reviewer_chain": "docs/reviewer/p5-s3-skill-rewrite-and-subagent-guard-plan",
           "started": null,
           "status": "ready",
           "tasks": [],

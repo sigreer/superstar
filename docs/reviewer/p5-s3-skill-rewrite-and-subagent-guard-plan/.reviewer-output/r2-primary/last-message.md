@@ -1,0 +1,37 @@
+1. Findings
+
+F1 — Severity: blocking — RESOLVED. The revised plan now explicitly scopes the shim as a best-effort prompt-template directive rather than a real Claude/Codex env injection layer, and adds a simulated dispatch test that exercises the real `tasktool` binary after `export SUPERSTAR_SUBAGENT_ROLE=implementer` in an `env -i` shell (`docs/plans/2026-05-21-P5-S3-skill-rewrite-and-subagent-guard.md:22`, `:836-943`). Small edit: soften the goal/architecture wording at `:5` and `:11` so it does not still imply guaranteed real-harness env propagation.
+
+F2 — Severity: important — RESOLVED. The plan now adds a separate subagent early-exit transcript fixture/test for the `<SUBAGENT-STOP>` span, distinct from the whole-skill byte-for-byte fixture (`docs/plans/2026-05-21-P5-S3-skill-rewrite-and-subagent-guard.md:350-431`).
+
+F3 — Severity: important — RESOLVED. The refusal constant now includes the spec sentence’s trailing period, and the test asserts that sentence verbatim while allowing diagnostics after it (`docs/plans/2026-05-21-P5-S3-skill-rewrite-and-subagent-guard.md:449-454`, `:570-591`, `:636-639`, `:701`).
+
+F4 — Severity: minor — RESOLVED. The plan now reconciles the `finishing-a-development-branch` ownership conflict by treating spec §5.3.2 as authoritative, excluding the edit from P5.S3, and adding a pre-start check that P5.S2 actually shipped the prune step (`docs/plans/2026-05-21-P5-S3-skill-rewrite-and-subagent-guard.md:19`, `:92-101`, `:1121`).
+
+2. Open questions / assumptions
+
+- P5.S3 must not start until P5.S1 and P5.S2 are done. Current `tasktool schedule P5` still shows P5.S3 waiting on both dependencies, and `tasktool show P5.S2` shows `status: ready`, not done. The plan’s Task 1.4 correctly blocks execution in that state.
+- I assume the team accepts the documented downgrade from real harness integration to prompt-template directive plus simulated shell transcript, since the plan is explicit that real Claude/Codex harness instrumentation is outside this repo’s current reach.
+
+3. Suggested document edits
+
+- Update the Goal / Architecture wording at lines 5 and 11 to say the prompt templates “instruct dispatched subagents to export” the variable, instead of saying the harness dispatch templates make the guard fire “in real use.” The detailed shim-scope section is already honest; the top summary should match it.
+
+4. Verification gaps / commands that should be run
+
+I ran:
+
+```sh
+tools/tasktool/tasktool show P5.S2
+tools/tasktool/tasktool show P5.S3
+tools/tasktool/tasktool schedule P5
+tools/tasktool/tasktool validate --strict-format
+```
+
+`validate --strict-format` passed. Full pytest is still an execution-time gate after the implementation lands:
+
+```sh
+python -m pytest tools/tasktool/tests -q
+```
+
+Overall verdict: ready with small edits
