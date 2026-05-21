@@ -128,3 +128,96 @@ def tasktool_lock(repo_root: Path, timeout_seconds: float = 30.0):
             os.close(fd)
         with contextlib.suppress(FileNotFoundError):
             lock_path.unlink()
+
+
+def is_inside_worktree(path: Path) -> bool:
+    """True iff `path` lies inside a linked (non-primary) git worktree.
+
+    Implementation: `git rev-parse --absolute-git-dir` vs `--git-common-dir`.
+    """
+    try:
+        gd = subprocess.run(
+            ["git", "rev-parse", "--absolute-git-dir"],
+            cwd=path, text=True, capture_output=True, check=True,
+        ).stdout.strip()
+        gcd = subprocess.run(
+            ["git", "rev-parse", "--git-common-dir"],
+            cwd=path, text=True, capture_output=True, check=True,
+        ).stdout.strip()
+        gcd_abs = gcd if Path(gcd).is_absolute() else str((path / gcd).resolve())
+        return Path(gd).resolve() != Path(gcd_abs).resolve()
+    except subprocess.CalledProcessError:
+        return False
+
+
+def working_tree_dirty(root: Path) -> tuple[bool, list[str]]:
+    """Return (dirty, offending_items).
+
+    Spec §5.3 guard: "no uncommitted, untracked, or stashed changes in the
+    worktree". Sources of dirtiness:
+      1. `git status --porcelain` on the worktree (tracked + untracked).
+      2. `git stash list` entries whose recorded branch matches the worktree's
+         current branch. Stash entries are repo-global but each row's message
+         records "WIP on <branch>:" or "On <branch>:"; we attribute by branch.
+         Stashes recorded on an UNRELATED branch are not the worktree's problem
+         and are NOT flagged.
+    """
+    items: list[str] = []
+    status = _git(root, "status", "--porcelain", check=False).stdout.splitlines()
+    items.extend(line[3:] for line in status if line.strip())
+
+    branch = git_current_branch(root)
+    if branch:
+        stash = _git(root, "stash", "list", check=False).stdout.splitlines()
+        # Each line looks like: "stash@{0}: WIP on feat: 1234abcd msg"
+        # or "stash@{0}: On feat: msg".
+        marker_wip = f"WIP on {branch}:"
+        marker_on = f"On {branch}:"
+        for line in stash:
+            if marker_wip in line or marker_on in line:
+                items.append(f"stash: {line}")
+    return (bool(items), items)
+
+
+def branch_is_merged(root: Path, *, branch: str, into: str) -> bool:
+    """True iff `branch` is reachable from `into` (a strict ancestor or equal)."""
+    res = _git(root, "merge-base", "--is-ancestor", branch, into, check=False)
+    return res.returncode == 0
+
+
+def head_age_seconds(root: Path) -> float:
+    """Seconds since the worktree HEAD commit's committer date."""
+    out = _git(root, "log", "-1", "--format=%ct", "HEAD").stdout.strip()
+    return max(0.0, time.time() - float(out))
+
+
+def path_is_registered_worktree(root: Path, path: Path) -> bool:
+    """True iff `path` (resolved) is in `git worktree list --porcelain` output."""
+    target = path.resolve()
+    for wt_path, _branch in worktree_roots(root):
+        if wt_path == target:
+            return True
+    return False
+
+
+def branch_exists(root: Path, branch: str) -> bool:
+    res = _git(root, "show-ref", "--verify", "--quiet", f"refs/heads/{branch}", check=False)
+    return res.returncode == 0
+
+
+def git_worktree_remove(root: Path, path: Path, *, force: bool = False) -> None:
+    args = ["worktree", "remove"]
+    if force:
+        args.append("--force")
+    args.append(str(path))
+    _git(root, *args)
+
+
+def git_branch_delete(root: Path, branch: str, *, force: bool = False) -> None:
+    flag = "-D" if force else "-d"
+    _git(root, "branch", flag, branch)
+
+
+def git_worktree_add(root: Path, path: Path, branch: str) -> None:
+    """Create a linked worktree at `path` checking out existing `branch`."""
+    _git(root, "worktree", "add", str(path), branch)
