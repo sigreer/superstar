@@ -15,7 +15,18 @@ if [[ "${1:-}" == "--hook" ]]; then
   SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
   SOURCE_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"   # → superstar repo root
   HOOK_SRC="$SCRIPT_DIR/templates/pre-commit-tasktool"
-  HOOK_DEST="$REPO_ROOT/.git/hooks/pre-commit"
+  HOOK_DEST="$(git -C "$REPO_ROOT" rev-parse --git-path hooks/pre-commit 2>/dev/null)"
+  if [[ -z "$HOOK_DEST" ]]; then
+    echo "install.sh --hook: failed to resolve git hooks path" >&2
+    exit 1
+  fi
+  # git rev-parse may emit a relative path; resolve to absolute so subsequent
+  # `install -m 0755 "$TMP" "$HOOK_DEST"` works regardless of cwd.
+  case "$HOOK_DEST" in
+    /*) ;;
+    *) HOOK_DEST="$REPO_ROOT/$HOOK_DEST" ;;
+  esac
+  mkdir -p "$(dirname "$HOOK_DEST")"
   if [[ -f "$HOOK_DEST" && "$FORCE_HOOK" -ne 1 ]]; then
     if grep -q 'tasktool-pre-commit-hook' "$HOOK_DEST" 2>/dev/null \
        || grep -q 'superstar-hook-name: tasktool-pre-commit' "$HOOK_DEST" 2>/dev/null; then
