@@ -344,3 +344,56 @@ def test_routed_archive_phase_writes_authority_archive_artifact(tmp_path):
     assert (worker / "docs/tasklist.json").read_text() == before
     assert list((root / "docs" / "archived-tasks").glob("P1-*.md"))
     assert not (worker / "docs" / "archived-tasks").exists()
+
+
+def test_worker_artifact_add_updates_authority_not_worker(tmp_path):
+    root, worker = _authority_with_worker(tmp_path)
+    r = _tasktool(root, "create", "cross", "--title", "Artifact")
+    assert r.returncode == 0, r.stdout + r.stderr
+    (root / "docs" / "specs").mkdir(parents=True, exist_ok=True)
+    (root / "docs" / "specs" / "x1.md").write_text("# spec\n")
+    before_worker = (worker / "docs/tasklist.json").read_text()
+
+    r = _tasktool(worker, "artifact", "add", "X1", "--kind", "spec", "--path", "docs/specs/x1.md")
+
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert (worker / "docs/tasklist.json").read_text() == before_worker
+    data = json.loads((root / "docs/tasklist.json").read_text())
+    assert "docs/specs/x1.md" in data["cross_cutting"][0]["refs"]
+
+
+def test_worker_artifact_add_refuses_invocation_only_file(tmp_path):
+    root, worker = _authority_with_worker(tmp_path)
+    r = _tasktool(root, "create", "cross", "--title", "Artifact")
+    assert r.returncode == 0, r.stdout + r.stderr
+    (worker / "docs" / "specs").mkdir(parents=True, exist_ok=True)
+    (worker / "docs" / "specs" / "worker-only.md").write_text("# spec\n")
+
+    r = _tasktool(worker, "artifact", "add", "X1", "--kind", "spec", "--path", "docs/specs/worker-only.md")
+
+    assert r.returncode == 1
+    assert "artifact exists in invocation checkout but not authoritative checkout" in r.stderr
+
+
+def test_worker_artifact_status_reads_authoritative_tasklist_and_status(tmp_path):
+    root, worker = _authority_with_worker(tmp_path)
+    before_worker = (worker / "docs/tasklist.json").read_text()
+    r = _tasktool(
+        root,
+        "artifact",
+        "add",
+        "P1.S1",
+        "--kind",
+        "plan",
+        "--path",
+        "docs/plans/p1-s1.md",
+        "--allow-missing",
+    )
+    assert r.returncode == 0, r.stdout + r.stderr
+
+    r = _tasktool(worker, "artifact", "status", "P1.S1", "--strict")
+
+    assert r.returncode == 1
+    assert "missing-referenced-artifact" in r.stdout
+    assert "docs/plans/p1-s1.md" in r.stdout
+    assert (worker / "docs/tasklist.json").read_text() == before_worker

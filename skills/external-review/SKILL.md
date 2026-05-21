@@ -109,6 +109,12 @@ external-reviewer review \
 - Each round emits `r{N}-{timestamp}-request.md` and `r{N}-{timestamp}-response.md`. When `--review-depth thorough` or `exhaustive` runs sweep reviewers, filenames become `r{N}-{ts}-primary-*.md` and `r{N}-{ts}-sweep{K}-*.md`, plus a `r{N}-merged-findings.md`.
 - `--emit json` returns the structured payload described in "Reading the response". Always use `--emit json` from this skill — agents consume the JSON, not paths or human prose.
 
+When `docs/tasklist.json` exists and the reviewed target maps to a tasktool row, register the chain directory after a passing spec or plan review:
+
+```bash
+tasktool artifact add <id> --kind reviewer --path docs/reviewer/<chain>/
+```
+
 The command **blocks** until the reviewer exits (default `--timeout 900`). Run it in the **foreground**. Do not background it, do not poll the chain folder, do not retry in a loop.
 
 **Prompt transport.** The script defaults to `stdin` for every bare reviewer command. This matches the bundled `reviewer-agent` wrapper and avoids `ARG_MAX` failures when prompts grow large. Override with `--prompt-transport {stdin|arg|file}` or `AGENT_REVIEWER_TRANSPORT` only when a custom reviewer backend cannot accept stdin.

@@ -19,6 +19,8 @@ Assume they are a skilled developer, but know almost nothing about our toolset o
 
 **tasktool integration:** If `docs/tasklist.json` exists, this plan must correspond to a row in it. See [[tasklist-discipline]] for the ID scheme. **Before writing the plan file, verify the row for `<id>` exists** — run `tasktool show <id>` and confirm exit 0. If it doesn't (e.g. a spec was committed without a row, though the pre-commit hook should have caught that), stop and create the row via `tasktool create …` per [[tasklist-discipline]]. Never let the plan be the artifact that mints an ID.
 
+**Artifact transaction:** Before writing the plan and handoff, register future paths with `tasktool prepare existing <id> --plan <plan-path> --handoff <handoff-path>`. After writing each file, run `tasktool artifact add <id> --kind plan --path <plan-path>` and `tasktool artifact add <id> --kind handoff --path <handoff-path>`. After plan review passes, register the reviewer chain, run `tasktool artifact status <id> --strict`, and use `tasktool artifact commit <id> --message "<id>: add <slug> plan"` unless the user explicitly asked not to commit.
+
 **Lifecycle start step:** When docs/tasklist.json exists and the plan executes a slice, the first execution step must be `tasktool start <slice-id>` before dispatching or editing implementation files. Use the concrete slice ID in generated plans, not the placeholder. This is separate from TodoWrite and from prose status updates.
 
 **Scheduling ratification:** For slice plans, inspect `tasktool show <slice-id>` and `tasktool schedule <phase-id>` before drafting. The plan must explicitly confirm or update `depends_on`, `parallel_group`, and whether the slice remains independently plannable/executable. If the spec/plan work discovers a dependency change, update it with `tasktool deps`; when the plan settles, run `tasktool ratify <slice-id>` so coordinators can rely on `tasktool ready-slices <phase-id>`.
@@ -134,7 +136,7 @@ After writing the complete plan, look at the spec with fresh eyes and check the 
 
 **3. Type consistency:** Do the types, method signatures, and property names you used in later tasks match what you defined in earlier tasks? A function called `clearLayers()` in Task 3 but `clearFullLayers()` in Task 7 is a bug.
 
-**4. Handoff artifact:** After the plan-review gate passes, confirm `docs/handoffs/<plan-stem>-prompt.md` exists on disk (run `ls`), was filled in (no `{{placeholder}}` strings remain), and was echoed to chat in a fenced block. If any of those three are missing, you skipped the Execution Handoff and must complete it before offering the execution choice.
+**4. Handoff artifact:** After the plan-review gate passes, confirm `docs/handoffs/<plan-stem>-prompt.md` exists on disk (run `ls`), was filled in (no `{{placeholder}}` strings remain), was registered with `tasktool artifact add`, and was echoed to chat in a fenced block. If any of those are missing, you skipped the Execution Handoff and must complete it before offering the execution choice.
 
 **5. Scheduling check:** For slice plans, confirm the tasktool row is ratified and that the dependencies named in the plan match `tasktool schedule <phase-id>`. If the plan changed the dependency graph, update tasktool before external plan review so the reviewer sees the real scheduling contract.
 
@@ -170,7 +172,7 @@ After both reviews are passed, write a **handoff prompt** for the next session a
 
 ### Step A — Write the handoff prompt
 
-Copy `handoff-prompt.template.md` (next to this SKILL) to `docs/handoffs/<plan-stem>-prompt.md` and fill in the placeholders: phase/slice ID, project name, absolute repo path, spec path, plan path, reviewer chain folder name. Commit it alongside the plan.
+Copy `handoff-prompt.template.md` (next to this SKILL) to `docs/handoffs/<plan-stem>-prompt.md` and fill in the placeholders: phase/slice ID, project name, absolute repo path, spec path, plan path, reviewer chain folder name. Register it with `tasktool artifact add <id> --kind handoff --path docs/handoffs/<plan-stem>-prompt.md`.
 
 **Template resolution.** The template ships at `skills/writing-plans/handoff-prompt.template.md` inside this plugin. If that relative path doesn't resolve from your working directory, fall back to `$CLAUDE_PLUGIN_DIR/skills/writing-plans/handoff-prompt.template.md` (when running inside a Claude Code plugin context).
 

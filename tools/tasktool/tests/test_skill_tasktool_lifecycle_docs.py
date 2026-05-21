@@ -58,3 +58,17 @@ def test_writing_plans_requires_start_as_first_execution_step() -> None:
     assert "tasktool start <slice-id>" in text
     assert "first execution step" in text
     assert "before dispatching or editing implementation files" in text
+
+
+def test_planning_skills_reference_artifact_transactions() -> None:
+    brainstorming = skill_text("brainstorming")
+    writing = skill_text("writing-plans")
+    discipline = skill_text("tasklist-discipline")
+    review = skill_text("external-review")
+
+    assert "tasktool prepare" in brainstorming
+    assert "tasktool artifact add" in brainstorming
+    assert "tasktool artifact commit" in brainstorming
+    assert "tasktool artifact status" in writing
+    assert "workflow artifacts" in discipline
+    assert "tasktool artifact add" in review

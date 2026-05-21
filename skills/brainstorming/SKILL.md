@@ -26,7 +26,7 @@ You MUST create a task for each of these items and complete them in order:
 3. **Ask clarifying questions** — one at a time, understand purpose/constraints/success criteria
 4. **Propose 2-3 approaches** — with trade-offs and your recommendation
 5. **Present design** — in sections scaled to their complexity, get user approval after each section
-6. **Write design doc** — save to `docs/specs/YYYY-MM-DD-<id>-<topic>-design.md` (where `<id>` is the tasktool ID per [[tasklist-discipline]], omitted if the project has no `docs/tasklist.json`) and commit. **If no row exists for `<id>` in `docs/tasklist.json` yet, create it first** via `tasktool create phase|slice|cross …` (see [[tasklist-discipline]]) — the spec must not be the first artifact carrying the ID. The pre-commit hook rejects orphan filenames.
+6. **Write design doc** — save to `docs/specs/YYYY-MM-DD-<id>-<topic>-design.md` (where `<id>` is the tasktool ID per [[tasklist-discipline]], omitted if the project has no `docs/tasklist.json`) and commit through the artifact transaction. Before writing the spec file, reserve the row and future spec path with `tasktool prepare cross --title "<title>" --spec docs/specs/YYYY-MM-DD-XNN-slug-design.md`, or for an existing row, `tasktool prepare existing XNN --spec docs/specs/YYYY-MM-DD-XNN-slug-design.md`. After writing the spec file, run `tasktool artifact add XNN --kind spec --path <spec-path>` so the now-existing artifact is staged. After the spec review passes, register the reviewer chain with `tasktool artifact add XNN --kind reviewer --path docs/reviewer/<chain>/`, run `tasktool artifact status XNN --strict`, and close the spec transaction with `tasktool artifact commit XNN --message "XNN: add <slug> spec"` unless the user explicitly asked not to commit.
 7. **Spec self-review** — quick inline check for placeholders, contradictions, ambiguity, scope (see below)
 8. **External spec review** — invoke [[external-review]] with `--kind spec` against the written spec; iterate until the verdict is `ready` or `ready with small edits`
 9. **Transition to implementation planning** — invoke writing-plans skill immediately to create the implementation plan. Do not ask the user before implementation planning unless review findings require a product decision or you are genuinely blocked.
@@ -108,10 +108,10 @@ digraph brainstorming {
 
 **Documentation:**
 
-- Write the validated design (spec) to `docs/superstar/specs/YYYY-MM-DD-<topic>-design.md`
+- Write the validated design (spec) to `docs/specs/YYYY-MM-DD-<id>-<topic>-design.md`
   - (User preferences for spec location override this default)
 - Use elements-of-style:writing-clearly-and-concisely skill if available
-- Commit the design document to git
+- In projects with `docs/tasklist.json`, use `tasktool prepare`, `tasktool artifact add`, `tasktool artifact status`, and `tasktool artifact commit` for the spec and reviewer-chain artifacts.
 
 **Spec Self-Review:**
 After writing the spec document, look at it with fresh eyes:

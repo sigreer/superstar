@@ -48,6 +48,10 @@ tools/tasktool/tasktool brief <id>            # start-of-work primer for slice o
 tools/tasktool/tasktool show <id>             # full detail
 tools/tasktool/tasktool list --open           # everything ready / in_progress / blocked
 tools/tasktool/tasktool create slice <phase-id> --title "…"
+tools/tasktool/tasktool prepare existing <id> --plan path/to/plan.md
+tools/tasktool/tasktool artifact add <id> --kind spec --path path/to/spec.md
+tools/tasktool/tasktool artifact status <id> --strict
+tools/tasktool/tasktool artifact commit <id> --message "…"
 tools/tasktool/tasktool start <slice-id>      # lifecycle start + in_progress
 tools/tasktool/tasktool set <id> --status in_progress  # compatibility alias
 tools/tasktool/tasktool note <id> --append "…"
@@ -101,6 +105,10 @@ Creating a new slice or X-item is allocation/tracking only. It does not authoriz
 - Plan and spec filenames embed the ID: `YYYY-MM-DD-<id>-<slug>(-design).md`. The pre-commit hook rejects filenames whose ID has no `tasklist.json` row.
 - Phase planning docs should be registered through `planning_path` once supported. During bootstrap or migration, either attach the document to `spec_path` for the phase ID or keep unregistered drafts outside orphan-checked paths such as `docs/_drafts/`.
 - Commit messages may use either form; prefer fully-qualified for cross-phase commits.
+
+## Workflow artifacts
+
+Spec, plan, handoff, reviewer-chain, and archived-task paths are workflow artifacts. Register them through `tasktool artifact add` or `tasktool prepare`; do not hand-edit `docs/tasklist.json` refs for these paths. Use `tasktool artifact status <id> --strict` before handing work to another agent.
 
 ## Red flags
 

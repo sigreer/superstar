@@ -146,6 +146,44 @@ def _build_parser() -> argparse.ArgumentParser:
     g.add_argument("--add")
     g.add_argument("--remove")
 
+    p_artifact = sub.add_parser("artifact")
+    artifact_sub = p_artifact.add_subparsers(dest="artifact_cmd", required=True)
+    p_artifact_add = artifact_sub.add_parser("add")
+    p_artifact_add.add_argument("id")
+    p_artifact_add.add_argument("--kind", required=True, choices=["spec", "plan", "handoff", "reviewer", "archive"])
+    p_artifact_add.add_argument("--path", required=True, type=Path)
+    p_artifact_add.add_argument("--allow-missing", action="store_true")
+    p_artifact_status = artifact_sub.add_parser("status")
+    p_artifact_status.add_argument("id", nargs="?")
+    p_artifact_status.add_argument("--format", choices=["text", "json"], default="text")
+    p_artifact_status.add_argument("--strict", action="store_true")
+    p_artifact_commit = artifact_sub.add_parser("commit")
+    p_artifact_commit.add_argument("id")
+    p_artifact_commit.add_argument("--message", required=True)
+
+    p_prepare = sub.add_parser("prepare")
+    prepare_sub = p_prepare.add_subparsers(dest="prepare_mode", required=True)
+    p_prepare_cross = prepare_sub.add_parser("cross")
+    p_prepare_cross.add_argument("--title", required=True)
+    p_prepare_cross.add_argument("--spec")
+    p_prepare_cross.add_argument("--plan")
+    p_prepare_cross.add_argument("--handoff")
+    p_prepare_phase = prepare_sub.add_parser("phase")
+    p_prepare_phase.add_argument("--title", required=True)
+    p_prepare_phase.add_argument("--spec")
+    p_prepare_phase.add_argument("--plan")
+    p_prepare_phase.add_argument("--handoff")
+    p_prepare_slice = prepare_sub.add_parser("slice")
+    p_prepare_slice.add_argument("phase_id")
+    p_prepare_slice.add_argument("--title", required=True)
+    p_prepare_slice.add_argument("--plan")
+    p_prepare_slice.add_argument("--handoff")
+    p_prepare_existing = prepare_sub.add_parser("existing")
+    p_prepare_existing.add_argument("id")
+    p_prepare_existing.add_argument("--spec")
+    p_prepare_existing.add_argument("--plan")
+    p_prepare_existing.add_argument("--handoff")
+
     p_title = sub.add_parser("title")
     p_title.add_argument("id")
     p_title.add_argument("--set", dest="new", required=True)
@@ -291,6 +329,39 @@ def main(argv: list[str]) -> int:
             commands.cmd_note(repo_root=root, id=args.id, append=args.append, replace=args.replace)
         elif args.cmd == "ref":
             commands.cmd_ref(repo_root=root, id=args.id, add=args.add, remove=args.remove)
+        elif args.cmd == "artifact":
+            if args.artifact_cmd == "add":
+                commands.cmd_artifact_add(
+                    repo_root=root,
+                    id=args.id,
+                    kind=args.kind,
+                    path=args.path,
+                    allow_missing=args.allow_missing,
+                )
+            elif args.artifact_cmd == "status":
+                return commands.cmd_artifact_status(
+                    repo_root=root,
+                    id=args.id,
+                    strict=args.strict,
+                    format=args.format,
+                )
+            elif args.artifact_cmd == "commit":
+                commands.cmd_artifact_commit(
+                    repo_root=root,
+                    id=args.id,
+                    message=args.message,
+                )
+        elif args.cmd == "prepare":
+            commands.cmd_prepare(
+                repo_root=root,
+                mode=args.prepare_mode,
+                id=getattr(args, "id", None),
+                phase_id=getattr(args, "phase_id", None),
+                title=getattr(args, "title", None),
+                spec=getattr(args, "spec", None),
+                plan=getattr(args, "plan", None),
+                handoff=getattr(args, "handoff", None),
+            )
         elif args.cmd == "title":
             commands.cmd_title(repo_root=root, id=args.id, new=args.new)
         elif args.cmd == "show":

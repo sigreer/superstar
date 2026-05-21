@@ -20,6 +20,23 @@ from tasktool.validate import validate_project
 from tasktool.allocate import (
     next_phase_id, next_slice_id, next_task_id, next_cross_id, next_followup_letter,
 )
+from tasktool.artifacts import (
+    ArtifactError,
+    ArtifactKind,
+    ArtifactProblem,
+    NormalizedArtifact,
+    add_artifact_to_item,
+    artifact_kind_for_path,
+    disallowed_staged_paths,
+    git_status_map,
+    normalize_artifact_path,
+    referenced_path_is_unstaged,
+    referenced_paths_for_item,
+    render_status_json,
+    render_status_text,
+    same_slug_orphans,
+    workflow_files,
+)
 from tasktool.ids import split_qualified, kind_of, is_slice_id, parse_id
 from tasktool.migrate import apply_deltas, compute_deltas, render_diff
 from tasktool.reviewer_gate import check_gate, GateError, GatePass
@@ -61,6 +78,20 @@ def _git_stage(repo_root: Path, path: Path) -> None:
             stdout=_subprocess.DEVNULL, stderr=_subprocess.DEVNULL,
         )
     except (OSError, ValueError):
+        pass
+
+def _git_stage_rel(repo_root: Path, rel: str) -> None:
+    if not STAGE_AFTER_WRITE:
+        return
+    try:
+        _subprocess.run(
+            ["git", "add", "--", rel],
+            cwd=repo_root,
+            check=False,
+            stdout=_subprocess.DEVNULL,
+            stderr=_subprocess.DEVNULL,
+        )
+    except OSError:
         pass
 
 def _today() -> str:
@@ -718,6 +749,251 @@ def cmd_ref(
         elif remove is not None and remove in item.refs:
             item.refs.remove(remove)
         _save(write_root, p)
+
+# ───── workflow artifacts ─────
+
+def cmd_artifact_add(
+    *,
+    repo_root: Path,
+    id: str,
+    kind: str,
+    path: Path,
+    allow_missing: bool = False,
+) -> None:
+    with _write_context(repo_root) as write_root:
+        p = _load(write_root)
+        qid, _container, item = _find_item(p, id)
+        try:
+            artifact = normalize_artifact_path(
+                invocation_root=repo_root,
+                write_root=write_root,
+                raw_path=path,
+                kind=ArtifactKind(kind),
+                allow_missing=allow_missing,
+            )
+            added = add_artifact_to_item(item, artifact)
+        except (ArtifactError, ValueError) as exc:
+            raise CommandError(str(exc)) from exc
+        _save(write_root, p)
+        if artifact.exists_in_write_root:
+            _git_stage_rel(write_root, artifact.relative_path)
+        state = "added" if added else "already present"
+        print(f"{qid}: {state} {artifact.relative_path}")
+
+
+def _artifact_status_problems(repo_root: Path, id: str | None) -> list[ArtifactProblem]:
+    p = _load(repo_root)
+    status_map = git_status_map(repo_root)
+    referenced: set[str] = set()
+    problems: list[ArtifactProblem] = []
+    if id:
+        qid, _container, item = _find_item(p, id)
+        scoped = [(qid, item)]
+    else:
+        scoped = [
+            (qid, item)
+            for qid, _kind, _title, item in _iter_project_rows(p)
+            if qid != "<project>"
+        ]
+
+    for qid, item in scoped:
+        for rel in sorted(referenced_paths_for_item(item)):
+            referenced.add(rel)
+            if not (repo_root / rel).exists():
+                problems.append(
+                    ArtifactProblem(
+                        "error",
+                        "missing-referenced-artifact",
+                        qid,
+                        rel,
+                        "referenced artifact path does not exist",
+                    )
+                )
+            elif referenced_path_is_unstaged(rel, status_map):
+                kind = artifact_kind_for_path(rel)
+                kind_text = kind.value if kind else "<kind>"
+                problems.append(
+                    ArtifactProblem(
+                        "error",
+                        "referenced-artifact-unstaged",
+                        qid,
+                        rel,
+                        "referenced artifact exists but is not staged: "
+                        f"{rel}; run tasktool artifact add {qid} --kind {kind_text} --path {rel} "
+                        f"or tasktool artifact commit {qid} --message ...",
+                    )
+                )
+
+    files = workflow_files(repo_root)
+    tasklist_status = status_map.get("docs/tasklist.json")
+    if files and tasklist_status and tasklist_status.has_unstaged_worktree_change:
+        problems.append(
+            ArtifactProblem(
+                "error",
+                "unstaged-tasklist-with-workflow-artifacts",
+                None,
+                "docs/tasklist.json",
+                "docs/tasklist.json has unstaged changes while workflow artifacts are present",
+            )
+        )
+
+    if id is None:
+        for rel in sorted(files - referenced):
+            if rel.endswith(".md") or rel.startswith("docs/reviewer/"):
+                problems.append(
+                    ArtifactProblem(
+                        "warning",
+                        "unreferenced-workflow-artifact",
+                        None,
+                        rel,
+                        "unreferenced workflow artifact",
+                    )
+                )
+    return problems
+
+
+def cmd_artifact_status(*, repo_root: Path, id: str | None, strict: bool, format: str) -> int:
+    write_root, _routed, _mode, _authoritative_branch = _resolve_write_root(repo_root)
+    problems = _artifact_status_problems(write_root, id)
+    out = render_status_json(problems) if format == "json" else render_status_text(problems)
+    sys.stdout.write(out)
+    return 1 if strict and problems else 0
+
+
+def cmd_artifact_commit(*, repo_root: Path, id: str, message: str) -> None:
+    with _write_context(repo_root) as write_root:
+        p = _load(write_root)
+        qid, _container, item = _find_item(p, id)
+        paths = sorted(referenced_paths_for_item(item))
+        missing = [rel for rel in paths if not (write_root / rel).exists()]
+        if missing:
+            raise CommandError("missing referenced artifacts: " + ", ".join(missing))
+        _git_stage_rel(write_root, "docs/tasklist.json")
+        for rel in paths:
+            _git_stage_rel(write_root, rel)
+        status_code = cmd_artifact_status(repo_root=write_root, id=qid, strict=True, format="text")
+        if status_code != 0:
+            raise CommandError("artifact status is not clean")
+        orphans = same_slug_orphans(write_root, row_id=qid, referenced=set(paths))
+        if orphans:
+            raise CommandError("unreferenced same-slug workflow artifacts: " + ", ".join(orphans))
+        bad = disallowed_staged_paths(write_root, paths)
+        if bad:
+            raise CommandError("unrelated staged paths: " + ", ".join(bad))
+        result = _subprocess.run(
+            ["git", "commit", "-m", message],
+            cwd=write_root,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            raise CommandError(result.stderr.strip() or result.stdout.strip() or "git commit failed")
+        print(result.stdout.strip())
+
+
+def _artifact_specs_from_args(spec: str | None, plan: str | None, handoff: str | None) -> list[tuple[str, Path]]:
+    pairs: list[tuple[str, Path]] = []
+    if spec:
+        pairs.append(("spec", Path(spec)))
+    if plan:
+        pairs.append(("plan", Path(plan)))
+    if handoff:
+        pairs.append(("handoff", Path(handoff)))
+    return pairs
+
+
+def _normalized_artifacts_from_args(
+    *,
+    invocation_root: Path,
+    write_root: Path,
+    spec: str | None,
+    plan: str | None,
+    handoff: str | None,
+) -> list[NormalizedArtifact]:
+    artifacts = []
+    for artifact_kind, artifact_path in _artifact_specs_from_args(spec, plan, handoff):
+        try:
+            artifacts.append(
+                normalize_artifact_path(
+                    invocation_root=invocation_root,
+                    write_root=write_root,
+                    raw_path=artifact_path,
+                    kind=ArtifactKind(artifact_kind),
+                    allow_missing=True,
+                )
+            )
+        except (ArtifactError, ValueError) as exc:
+            raise CommandError(str(exc)) from exc
+    return artifacts
+
+
+def cmd_prepare(
+    *,
+    repo_root: Path,
+    mode: str,
+    id: str | None = None,
+    phase_id: str | None = None,
+    title: str | None = None,
+    spec: str | None = None,
+    plan: str | None = None,
+    handoff: str | None = None,
+) -> None:
+    if mode == "existing" and id is None:
+        raise CommandError("prepare existing requires an id")
+    if mode in {"cross", "phase"} and not title:
+        raise CommandError(f"prepare {mode} requires --title")
+    if mode == "slice" and (not title or not phase_id):
+        raise CommandError("prepare slice requires <phase-id> and --title")
+    if mode not in {"existing", "cross", "phase", "slice"}:
+        raise CommandError(f"unknown prepare mode: {mode}")
+
+    with _write_context(repo_root) as write_root:
+        artifacts = _normalized_artifacts_from_args(
+            invocation_root=repo_root,
+            write_root=write_root,
+            spec=spec,
+            plan=plan,
+            handoff=handoff,
+        )
+        p = _load(write_root)
+        created_kind: str | None = None
+        if mode == "existing":
+            target_id = id or ""
+            qid, _container, item = _find_item(p, target_id)
+            target_id = qid
+        elif mode == "cross":
+            target_id = next_cross_id(p, write_root)
+            item = CrossCutting(id=target_id, title=title or "", created=_today())
+            p.cross_cutting.append(item)
+            created_kind = "cross"
+        elif mode == "phase":
+            target_id = next_phase_id(p, write_root)
+            item = Phase(id=target_id, title=title or "", created=_today())
+            p.phases.append(item)
+            created_kind = "phase"
+        else:
+            phase = next((ph for ph in p.phases if ph.id == phase_id), None)
+            if phase is None:
+                raise CommandError(f"phase {phase_id} not found")
+            new_id = next_slice_id(p, phase_id or "", write_root)
+            item = Slice(id=new_id, title=title or "", created=_today())
+            phase.slices.append(item)
+            target_id = f"{phase_id}.{new_id}"
+            created_kind = "slice"
+
+        for artifact in artifacts:
+            try:
+                add_artifact_to_item(item, artifact)
+            except ArtifactError as exc:
+                raise CommandError(str(exc)) from exc
+        _save(write_root, p)
+        for artifact in artifacts:
+            if artifact.exists_in_write_root:
+                _git_stage_rel(write_root, artifact.relative_path)
+        if created_kind is not None:
+            _notify_status(qid=target_id, kind=created_kind, status=item.status, title=item.title)
+    print(target_id)
 
 def cmd_title(*, repo_root: Path, id: str, new: str) -> None:
     with _write_context(repo_root) as write_root:
