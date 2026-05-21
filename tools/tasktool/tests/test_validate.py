@@ -408,3 +408,80 @@ class StrictFormatTests(unittest.TestCase):
             path.write_text(dumps_canonical(p).replace("  ", "    "), encoding="utf-8")
             normalise_file(path)
             strict_format_check(path)  # now passes
+
+
+def test_validate_rejects_in_place_with_recorded_path():
+    from tasktool.model import Project, Phase, Slice, Status
+    from tasktool.validate import validate_project, ValidationError
+    import pytest as _pt
+    p = Project(project="d", phases=[Phase(id="P1", title="t", created="2026-05-21",
+        slices=[Slice(id="S1", title="t", created="2026-05-21",
+            worktree_in_place=True, worktree_path=".worktrees/x", worktree_branch="x")])])
+    with _pt.raises(ValidationError, match="worktree_in_place"):
+        validate_project(p)
+
+
+def test_loads_project_rejects_string_for_worktree_in_place():
+    from tasktool.serialize import loads_project
+    from tasktool.validate import ValidationError
+    import pytest as _pt
+    text = (
+        '{"project":"d","schema_version":1,'
+        '"phases":[{"id":"P1","title":"t","created":"2026-05-21","status":"ready",'
+        '"slices":[{"id":"S1","title":"t","created":"2026-05-21","status":"ready",'
+        '"worktree_in_place":"false"}]}],'
+        '"cross_cutting":[],"archived_phases":[],"archived_cross_cutting":[]}'
+    )
+    with _pt.raises(ValidationError, match="worktree_in_place"):
+        loads_project(text)
+
+
+def test_loads_project_rejects_int_for_worktree_path():
+    from tasktool.serialize import loads_project
+    from tasktool.validate import ValidationError
+    import pytest as _pt
+    text = (
+        '{"project":"d","schema_version":1,'
+        '"phases":[{"id":"P1","title":"t","created":"2026-05-21","status":"ready",'
+        '"slices":[{"id":"S1","title":"t","created":"2026-05-21","status":"ready",'
+        '"worktree_path":7,"worktree_branch":"x"}]}],'
+        '"cross_cutting":[],"archived_phases":[],"archived_cross_cutting":[]}'
+    )
+    with _pt.raises(ValidationError, match="worktree_path"):
+        loads_project(text)
+
+
+def test_loads_project_rejects_non_date_for_pruned_at():
+    from tasktool.serialize import loads_project, from_dict
+    from tasktool.validate import ValidationError, validate_project
+    import pytest as _pt
+    text = (
+        '{"project":"d","schema_version":1,'
+        '"phases":[{"id":"P1","title":"t","created":"2026-05-21","status":"ready",'
+        '"slices":[{"id":"S1","title":"t","created":"2026-05-21","status":"ready",'
+        '"worktree_pruned_at":42}]}],'
+        '"cross_cutting":[],"archived_phases":[],"archived_cross_cutting":[]}'
+    )
+    with _pt.raises(ValidationError, match="worktree_pruned_at"):
+        loads_project(text)
+    raw = {
+        "project": "d", "schema_version": 1,
+        "phases": [{"id": "P1", "title": "t", "created": "2026-05-21", "status": "ready",
+            "slices": [{"id": "S1", "title": "t", "created": "2026-05-21", "status": "ready",
+                "worktree_pruned_at": "not-a-date"}]}],
+        "cross_cutting": [], "archived_phases": [], "archived_cross_cutting": [],
+    }
+    p = from_dict(raw)
+    with _pt.raises(ValidationError):
+        validate_project(p)
+
+
+def test_validate_rejects_partial_worktree_fields():
+    from tasktool.model import Project, Phase, Slice
+    from tasktool.validate import validate_project, ValidationError
+    import pytest as _pt
+    p = Project(project="d", phases=[Phase(id="P1", title="t", created="2026-05-21",
+        slices=[Slice(id="S1", title="t", created="2026-05-21",
+            worktree_path=".worktrees/x", worktree_branch=None)])])
+    with _pt.raises(ValidationError, match="both null or both set"):
+        validate_project(p)

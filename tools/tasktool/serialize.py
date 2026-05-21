@@ -22,6 +22,24 @@ def to_dict(p: Project) -> dict:
         return _coerce(node)
     return walk(raw)
 
+def _strict_bool(value, *, scope: str, field: str, default: bool = False) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    from tasktool.validate import ValidationError
+    raise ValidationError(f"{scope}.{field}: expected bool, got {type(value).__name__} ({value!r})")
+
+
+def _strict_opt_str(value, *, scope: str, field: str) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value
+    from tasktool.validate import ValidationError
+    raise ValidationError(f"{scope}.{field}: expected string or null, got {type(value).__name__} ({value!r})")
+
+
 def from_dict(d: dict) -> Project:
     def _status(v):
         return Status(v) if isinstance(v, str) else v
@@ -39,6 +57,7 @@ def from_dict(d: dict) -> Project:
     def _blocked(b):
         return None if b is None else BlockedOn(kind=b["kind"], value=b["value"])
     def _slice(sd):
+        scope = f"phases[].slices[id={sd.get('id')}]"
         return Slice(
             id=sd["id"], title=sd["title"], created=sd["created"],
             started=sd.get("started"),
@@ -53,6 +72,12 @@ def from_dict(d: dict) -> Project:
             notes=sd.get("notes", ""),
             reviewer_chain=sd.get("reviewer_chain"),
             tasks=[_task(t) for t in sd.get("tasks", [])],
+            worktree_path=_strict_opt_str(sd.get("worktree_path"), scope=scope, field="worktree_path"),
+            worktree_branch=_strict_opt_str(sd.get("worktree_branch"), scope=scope, field="worktree_branch"),
+            worktree_in_place=_strict_bool(sd.get("worktree_in_place"), scope=scope, field="worktree_in_place"),
+            worktree_pruned_at=_strict_opt_str(sd.get("worktree_pruned_at"), scope=scope, field="worktree_pruned_at"),
+            worktree_prune_pending=_strict_bool(sd.get("worktree_prune_pending"), scope=scope, field="worktree_prune_pending"),
+            worktree_prune_pending_at=_strict_opt_str(sd.get("worktree_prune_pending_at"), scope=scope, field="worktree_prune_pending_at"),
         )
     def _phase(pd):
         return Phase(
@@ -68,6 +93,7 @@ def from_dict(d: dict) -> Project:
             slices=[_slice(s) for s in pd.get("slices", [])],
         )
     def _cross(xd):
+        scope = f"cross_cutting[id={xd.get('id')}]"
         return CrossCutting(
             id=xd["id"], title=xd["title"], created=xd["created"],
             started=xd.get("started"),
@@ -75,6 +101,12 @@ def from_dict(d: dict) -> Project:
             closed=xd.get("closed"),
             refs=list(xd.get("refs", [])),
             notes=xd.get("notes", ""),
+            worktree_path=_strict_opt_str(xd.get("worktree_path"), scope=scope, field="worktree_path"),
+            worktree_branch=_strict_opt_str(xd.get("worktree_branch"), scope=scope, field="worktree_branch"),
+            worktree_in_place=_strict_bool(xd.get("worktree_in_place"), scope=scope, field="worktree_in_place"),
+            worktree_pruned_at=_strict_opt_str(xd.get("worktree_pruned_at"), scope=scope, field="worktree_pruned_at"),
+            worktree_prune_pending=_strict_bool(xd.get("worktree_prune_pending"), scope=scope, field="worktree_prune_pending"),
+            worktree_prune_pending_at=_strict_opt_str(xd.get("worktree_prune_pending_at"), scope=scope, field="worktree_prune_pending_at"),
         )
     def _arch(ad):
         return ArchivedPhase(

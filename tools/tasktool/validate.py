@@ -87,6 +87,18 @@ def _check_slice(s: Slice, scope: str) -> None:
     if s.status == Status.DONE:
         _require(s.closed is not None, f"{scope}: status=done requires closed date")
     _check_dates(s.created, s.started, s.closed, scope)
+    # worktree fields (P5.S1)
+    if s.worktree_in_place:
+        _require(
+            s.worktree_path is None and s.worktree_branch is None,
+            f"{scope}: worktree_in_place=true requires worktree_path/branch null",
+        )
+    _require(
+        (s.worktree_path is None) == (s.worktree_branch is None),
+        f"{scope}: worktree_path and worktree_branch must be both null or both set",
+    )
+    _check_date(s.worktree_pruned_at, scope, "worktree_pruned_at")
+    _check_date(s.worktree_prune_pending_at, scope, "worktree_prune_pending_at")
     seen: set[str] = set()
     for t in s.tasks:
         sub = f"{scope}.{t.id}"
@@ -113,6 +125,18 @@ def _check_cross(c: CrossCutting, scope: str) -> None:
     if c.status == Status.DONE:
         _require(c.closed is not None, f"{scope}: status=done requires closed date")
     _check_dates(c.created, c.started, c.closed, scope)
+    # worktree fields (P5.S1)
+    if c.worktree_in_place:
+        _require(
+            c.worktree_path is None and c.worktree_branch is None,
+            f"{scope}: worktree_in_place=true requires worktree_path/branch null",
+        )
+    _require(
+        (c.worktree_path is None) == (c.worktree_branch is None),
+        f"{scope}: worktree_path and worktree_branch must be both null or both set",
+    )
+    _check_date(c.worktree_pruned_at, scope, "worktree_pruned_at")
+    _check_date(c.worktree_prune_pending_at, scope, "worktree_prune_pending_at")
 
 def _check_archived_cross(c: ArchivedCrossCutting, scope: str) -> None:
     _check_id(c.id, _CROSS_RE, scope)

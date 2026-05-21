@@ -109,3 +109,73 @@ def test_legacy_tasklist_without_archived_cross_cutting_loads():
     )
 
     assert project.archived_cross_cutting == []
+
+
+def test_slice_worktree_fields_round_trip():
+    from tasktool.serialize import from_dict, to_dict
+    raw = {
+        "project": "demo",
+        "schema_version": 1,
+        "phases": [{
+            "id": "P1", "title": "P", "created": "2026-05-21", "status": "ready",
+            "slices": [{
+                "id": "S1", "title": "S", "created": "2026-05-21", "status": "ready",
+                "worktree_path": ".worktrees/worktree-p1-s1-s",
+                "worktree_branch": "worktree-p1-s1-s",
+                "worktree_in_place": False,
+                "worktree_pruned_at": None,
+                "worktree_prune_pending": False,
+                "worktree_prune_pending_at": None,
+            }],
+        }],
+        "cross_cutting": [],
+        "archived_phases": [],
+        "archived_cross_cutting": [],
+    }
+    p = from_dict(raw)
+    out = to_dict(p)
+    s = out["phases"][0]["slices"][0]
+    assert s["worktree_path"] == ".worktrees/worktree-p1-s1-s"
+    assert s["worktree_branch"] == "worktree-p1-s1-s"
+    assert s["worktree_in_place"] is False
+
+
+def test_slice_worktree_fields_default_null_when_absent():
+    from tasktool.serialize import from_dict, to_dict
+    raw = {
+        "project": "demo", "schema_version": 1,
+        "phases": [{
+            "id": "P1", "title": "P", "created": "2026-05-21", "status": "ready",
+            "slices": [{"id": "S1", "title": "S", "created": "2026-05-21", "status": "ready"}],
+        }],
+        "cross_cutting": [], "archived_phases": [], "archived_cross_cutting": [],
+    }
+    p = from_dict(raw)
+    s = p.phases[0].slices[0]
+    assert s.worktree_path is None
+    assert s.worktree_branch is None
+    assert s.worktree_in_place is False
+    assert s.worktree_pruned_at is None
+    assert s.worktree_prune_pending is False
+    assert s.worktree_prune_pending_at is None
+
+
+def test_cross_worktree_fields_round_trip():
+    from tasktool.serialize import from_dict, to_dict
+    raw = {
+        "project": "demo", "schema_version": 1,
+        "phases": [],
+        "cross_cutting": [{
+            "id": "X9", "title": "x", "created": "2026-05-21", "status": "ready",
+            "worktree_path": ".worktrees/worktree-x9-x",
+            "worktree_branch": "worktree-x9-x",
+            "worktree_in_place": False,
+            "worktree_pruned_at": None,
+            "worktree_prune_pending": False,
+            "worktree_prune_pending_at": None,
+        }],
+        "archived_phases": [], "archived_cross_cutting": [],
+    }
+    p = from_dict(raw)
+    out = to_dict(p)
+    assert out["cross_cutting"][0]["worktree_path"] == ".worktrees/worktree-x9-x"

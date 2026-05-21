@@ -49,6 +49,12 @@ class Slice:
     notes: str = ""
     reviewer_chain: str | None = None
     tasks: list[Task] = field(default_factory=list)
+    worktree_path: str | None = None
+    worktree_branch: str | None = None
+    worktree_in_place: bool = False
+    worktree_pruned_at: str | None = None
+    worktree_prune_pending: bool = False
+    worktree_prune_pending_at: str | None = None
 
 @dataclass(slots=True)
 class Phase:
@@ -75,6 +81,12 @@ class CrossCutting:
     closed: str | None = None
     refs: list[str] = field(default_factory=list)
     notes: str = ""
+    worktree_path: str | None = None
+    worktree_branch: str | None = None
+    worktree_in_place: bool = False
+    worktree_pruned_at: str | None = None
+    worktree_prune_pending: bool = False
+    worktree_prune_pending_at: str | None = None
 
 @dataclass(slots=True)
 class ArchivedPhase:

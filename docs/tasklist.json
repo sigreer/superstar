@@ -48,7 +48,13 @@
       "refs": [],
       "started": null,
       "status": "done",
-      "title": "Default external-review prompt transport to stdin"
+      "title": "Default external-review prompt transport to stdin",
+      "worktree_branch": null,
+      "worktree_in_place": false,
+      "worktree_path": null,
+      "worktree_prune_pending": false,
+      "worktree_prune_pending_at": null,
+      "worktree_pruned_at": null
     },
     {
       "closed": "2026-05-18",
@@ -58,7 +64,13 @@
       "refs": [],
       "started": null,
       "status": "done",
-      "title": "Add repo-local tasktool launcher"
+      "title": "Add repo-local tasktool launcher",
+      "worktree_branch": null,
+      "worktree_in_place": false,
+      "worktree_path": null,
+      "worktree_prune_pending": false,
+      "worktree_prune_pending_at": null,
+      "worktree_pruned_at": null
     },
     {
       "closed": "2026-05-19",
@@ -71,7 +83,13 @@
       ],
       "started": null,
       "status": "done",
-      "title": "Spot fix: parse bold external-review verdict headings"
+      "title": "Spot fix: parse bold external-review verdict headings",
+      "worktree_branch": null,
+      "worktree_in_place": false,
+      "worktree_path": null,
+      "worktree_prune_pending": false,
+      "worktree_prune_pending_at": null,
+      "worktree_pruned_at": null
     },
     {
       "closed": "2026-05-19",
@@ -83,7 +101,13 @@
       ],
       "started": null,
       "status": "done",
-      "title": "Spot fix: broaden legacy tasklist importer compatibility"
+      "title": "Spot fix: broaden legacy tasklist importer compatibility",
+      "worktree_branch": null,
+      "worktree_in_place": false,
+      "worktree_path": null,
+      "worktree_prune_pending": false,
+      "worktree_prune_pending_at": null,
+      "worktree_pruned_at": null
     },
     {
       "closed": "2026-05-19",
@@ -98,7 +122,13 @@
       ],
       "started": null,
       "status": "done",
-      "title": "Add finished-agent notification hook"
+      "title": "Add finished-agent notification hook",
+      "worktree_branch": null,
+      "worktree_in_place": false,
+      "worktree_path": null,
+      "worktree_prune_pending": false,
+      "worktree_prune_pending_at": null,
+      "worktree_pruned_at": null
     },
     {
       "closed": "2026-05-19",
@@ -113,7 +143,13 @@
       ],
       "started": null,
       "status": "done",
-      "title": "Fix Codex finished-agent hook compatibility"
+      "title": "Fix Codex finished-agent hook compatibility",
+      "worktree_branch": null,
+      "worktree_in_place": false,
+      "worktree_path": null,
+      "worktree_prune_pending": false,
+      "worktree_prune_pending_at": null,
+      "worktree_pruned_at": null
     },
     {
       "closed": "2026-05-19",
@@ -129,7 +165,13 @@
       ],
       "started": null,
       "status": "done",
-      "title": "Fix Superstar Codex plugin payload version drift"
+      "title": "Fix Superstar Codex plugin payload version drift",
+      "worktree_branch": null,
+      "worktree_in_place": false,
+      "worktree_path": null,
+      "worktree_prune_pending": false,
+      "worktree_prune_pending_at": null,
+      "worktree_pruned_at": null
     },
     {
       "closed": "2026-05-19",
@@ -147,7 +189,13 @@
       ],
       "started": null,
       "status": "done",
-      "title": "Move semantic notifications from agent hooks to tasktool status changes"
+      "title": "Move semantic notifications from agent hooks to tasktool status changes",
+      "worktree_branch": null,
+      "worktree_in_place": false,
+      "worktree_path": null,
+      "worktree_prune_pending": false,
+      "worktree_prune_pending_at": null,
+      "worktree_pruned_at": null
     },
     {
       "closed": "2026-05-19",
@@ -160,7 +208,13 @@
       ],
       "started": null,
       "status": "done",
-      "title": "Coalesce bursty tasktool audio notifications"
+      "title": "Coalesce bursty tasktool audio notifications",
+      "worktree_branch": null,
+      "worktree_in_place": false,
+      "worktree_path": null,
+      "worktree_prune_pending": false,
+      "worktree_prune_pending_at": null,
+      "worktree_pruned_at": null
     },
     {
       "closed": "2026-05-20",
@@ -174,7 +228,13 @@
       ],
       "started": null,
       "status": "done",
-      "title": "Harden external-review verdict parser and prompt against Claude formatting variants"
+      "title": "Harden external-review verdict parser and prompt against Claude formatting variants",
+      "worktree_branch": null,
+      "worktree_in_place": false,
+      "worktree_path": null,
+      "worktree_prune_pending": false,
+      "worktree_prune_pending_at": null,
+      "worktree_pruned_at": null
     },
     {
       "closed": "2026-05-20",
@@ -190,7 +250,13 @@
       ],
       "started": "2026-05-20",
       "status": "done",
-      "title": "Make external-review bridge global"
+      "title": "Make external-review bridge global",
+      "worktree_branch": null,
+      "worktree_in_place": false,
+      "worktree_path": null,
+      "worktree_prune_pending": false,
+      "worktree_prune_pending_at": null,
+      "worktree_pruned_at": null
     },
     {
       "closed": "2026-05-20",
@@ -203,7 +269,13 @@
       ],
       "started": "2026-05-20",
       "status": "done",
-      "title": "tasktool: require authoritative-checkout routing for mutations"
+      "title": "tasktool: require authoritative-checkout routing for mutations",
+      "worktree_branch": null,
+      "worktree_in_place": false,
+      "worktree_path": null,
+      "worktree_prune_pending": false,
+      "worktree_prune_pending_at": null,
+      "worktree_pruned_at": null
     },
     {
       "closed": "2026-05-20",
@@ -217,7 +289,13 @@
       ],
       "started": "2026-05-20",
       "status": "done",
-      "title": "Fix tasktool close repeated refs parsing"
+      "title": "Fix tasktool close repeated refs parsing",
+      "worktree_branch": null,
+      "worktree_in_place": false,
+      "worktree_path": null,
+      "worktree_prune_pending": false,
+      "worktree_prune_pending_at": null,
+      "worktree_pruned_at": null
     },
     {
       "closed": "2026-05-20",
@@ -227,7 +305,13 @@
       "refs": [],
       "started": "2026-05-20",
       "status": "done",
-      "title": "Stabilize local Claude/Codex plugin current entrypoints"
+      "title": "Stabilize local Claude/Codex plugin current entrypoints",
+      "worktree_branch": null,
+      "worktree_in_place": false,
+      "worktree_path": null,
+      "worktree_prune_pending": false,
+      "worktree_prune_pending_at": null,
+      "worktree_pruned_at": null
     },
     {
       "closed": "2026-05-21",
@@ -244,7 +328,13 @@
       ],
       "started": "2026-05-21",
       "status": "done",
-      "title": "Make spec and plan artifact handling transactional"
+      "title": "Make spec and plan artifact handling transactional",
+      "worktree_branch": null,
+      "worktree_in_place": false,
+      "worktree_path": null,
+      "worktree_prune_pending": false,
+      "worktree_prune_pending_at": null,
+      "worktree_pruned_at": null
     }
   ],
   "last_reviewed": "2026-05-18",
@@ -277,7 +367,13 @@
           "started": null,
           "status": "ready",
           "tasks": [],
-          "title": "Tasktool worktree lifecycle core"
+          "title": "Tasktool worktree lifecycle core",
+          "worktree_branch": null,
+          "worktree_in_place": false,
+          "worktree_path": null,
+          "worktree_prune_pending": false,
+          "worktree_prune_pending_at": null,
+          "worktree_pruned_at": null
         },
         {
           "blocked_on": null,
@@ -299,7 +395,13 @@
           "started": null,
           "status": "ready",
           "tasks": [],
-          "title": "Prune + repair"
+          "title": "Prune + repair",
+          "worktree_branch": null,
+          "worktree_in_place": false,
+          "worktree_path": null,
+          "worktree_prune_pending": false,
+          "worktree_prune_pending_at": null,
+          "worktree_pruned_at": null
         },
         {
           "blocked_on": null,
@@ -322,7 +424,13 @@
           "started": null,
           "status": "ready",
           "tasks": [],
-          "title": "Skill rewrite + subagent guard + workflow updates"
+          "title": "Skill rewrite + subagent guard + workflow updates",
+          "worktree_branch": null,
+          "worktree_in_place": false,
+          "worktree_path": null,
+          "worktree_prune_pending": false,
+          "worktree_prune_pending_at": null,
+          "worktree_pruned_at": null
         }
       ],
       "spec_path": "docs/specs/2026-05-21-P5-tasktool-worktree-lifecycle-design.md",
