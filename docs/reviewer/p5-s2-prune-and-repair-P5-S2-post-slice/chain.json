@@ -114,10 +114,119 @@
       "base_ref": null,
       "base_ref_source": null,
       "diff_included": false
+    },
+    {
+      "round": 2,
+      "reviewers": [
+        {
+          "role": "primary",
+          "sweep_group": null,
+          "parent_round": 2,
+          "request": "r2-2026-05-21T1806-primary-request.md",
+          "response": "r2-2026-05-21T1806-primary-response.md",
+          "verdict": "ready with small edits",
+          "verdict_valid": true,
+          "returncode": 0,
+          "status": "ok",
+          "provider": "codex",
+          "caller_provider": "claude",
+          "model": null,
+          "sandbox": {
+            "repo_root": "/home/simon/Dev/sigreer/skills/superstar/.claude/worktrees/P5.S2-prune-and-repair",
+            "scratch_dir": "/tmp/superstar-reviewer-p5-s2-prune-and-repair-P5-S2-post-slice-r2-primary-xxjjs9fu",
+            "response_dir": "docs/reviewer/p5-s2-prune-and-repair-P5-S2-post-slice/.reviewer-output/r2-primary",
+            "mode": "workspace-write-with-read-access"
+          },
+          "started_at": "2026-05-21T17:06:30.691Z",
+          "finished_at": "2026-05-21T17:08:11.702Z",
+          "duration_ms": 101011,
+          "estimated_usage": {
+            "formula": "ceil(chars / 4)",
+            "prompt_chars": 128441,
+            "response_chars": 2957,
+            "estimated_input_tokens": 32111,
+            "estimated_output_tokens": 740,
+            "estimated_total_tokens": 32851
+          },
+          "exact_usage": null,
+          "usage_capture_status": "estimated_only",
+          "usage_capture_error": null
+        },
+        {
+          "role": "sweep",
+          "sweep_group": 1,
+          "parent_round": 2,
+          "request": "r2-2026-05-21T1806-sweep1-request.md",
+          "response": "r2-2026-05-21T1806-sweep1-response.md",
+          "verdict": "revise",
+          "verdict_valid": true,
+          "returncode": 0,
+          "status": "ok",
+          "provider": "codex",
+          "caller_provider": "claude",
+          "model": null,
+          "sandbox": {
+            "repo_root": "/home/simon/Dev/sigreer/skills/superstar/.claude/worktrees/P5.S2-prune-and-repair",
+            "scratch_dir": "/tmp/superstar-reviewer-p5-s2-prune-and-repair-P5-S2-post-slice-r2-sweep1-2ntn8feu",
+            "response_dir": "docs/reviewer/p5-s2-prune-and-repair-P5-S2-post-slice/.reviewer-output/r2-sweep1",
+            "mode": "workspace-write-with-read-access"
+          },
+          "started_at": "2026-05-21T17:08:11.705Z",
+          "finished_at": "2026-05-21T17:10:51.736Z",
+          "duration_ms": 160031,
+          "estimated_usage": {
+            "formula": "ceil(chars / 4)",
+            "prompt_chars": 60681,
+            "response_chars": 2405,
+            "estimated_input_tokens": 15171,
+            "estimated_output_tokens": 602,
+            "estimated_total_tokens": 15773
+          },
+          "exact_usage": null,
+          "usage_capture_status": "estimated_only",
+          "usage_capture_error": null
+        }
+      ],
+      "status": "ok",
+      "returncode": 0,
+      "started_at": "2026-05-21T17:06:30.691Z",
+      "finished_at": "2026-05-21T17:08:11.702Z",
+      "duration_ms": 101011,
+      "provider": "codex",
+      "caller_provider": "claude",
+      "model": null,
+      "estimated_usage": {
+        "formula": "ceil(chars / 4)",
+        "prompt_chars": 128441,
+        "response_chars": 2957,
+        "estimated_input_tokens": 32111,
+        "estimated_output_tokens": 740,
+        "estimated_total_tokens": 32851
+      },
+      "exact_usage": null,
+      "usage_capture_status": "estimated_only",
+      "usage_capture_error": null,
+      "merged_verdict": "revise",
+      "merged_findings": "r2-merged-findings.md",
+      "request": "r2-2026-05-21T1806-primary-request.md",
+      "response": "r2-2026-05-21T1806-primary-response.md",
+      "resolution": "r1-resolution.md",
+      "resolution_parse_status": "ok",
+      "resolution_waiver": false,
+      "head_sha_at_request": "48782a6a5451052e6a0d96df4294b5c3233624e4",
+      "head_sha_after_round": "48782a6a5451052e6a0d96df4294b5c3233624e4",
+      "worktree_dirty_at_request": true,
+      "verdict": "ready with small edits",
+      "verdict_valid": true,
+      "findings_count": 2,
+      "blocking_findings_count": 1,
+      "base_ref": "accdaa6ac64728678da76f8caa8bb52c49d0f745",
+      "base_ref_source": "auto",
+      "diff_included": true
     }
   ],
   "sweep_checkpoints": {
     "first-round": "completed",
-    "final-ready": "pending"
+    "final-ready": "completed"
   }
 }

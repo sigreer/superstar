@@ -20,7 +20,7 @@ Same rationale as F1.
 ## F2
 Status: fixed
 Evidence:
-- Commit: d68912e6d700eb4ad642b04036f7a50c1ceac561 (see git log; this commit also contains this resolution file — amend chain referencing previous SHA)
+- Commit: f00a97c (see git log; this commit also contains this resolution file — amend chain referencing previous SHA)
 - Files: skills/finishing-a-development-branch/SKILL.md
 - Verification: grep -n "tasktool worktree prune" skills/finishing-a-development-branch/SKILL.md; manual read of options 1 and 4
 
