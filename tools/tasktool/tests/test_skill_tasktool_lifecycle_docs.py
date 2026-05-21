@@ -105,3 +105,47 @@ def test_using_git_worktrees_references_submodules_doc() -> None:
     from pathlib import Path
     submod = Path(__file__).resolve().parents[3] / "skills" / "using-git-worktrees" / "references" / "submodules.md"
     assert submod.is_file(), f"references/submodules.md must exist at {submod}"
+
+
+def test_using_git_worktrees_matches_token_budget_fixture() -> None:
+    """Token-budget regression. If you must edit the skill, update the fixture
+    in the same commit so the diff is visible in review. Spec P5.S3 §6."""
+    from pathlib import Path
+    live = (Path(__file__).resolve().parents[3]
+            / "skills" / "using-git-worktrees" / "SKILL.md").read_text()
+    fixture = (Path(__file__).resolve().parent / "fixtures"
+               / "p5_s3_skill_body.txt").read_text()
+    def norm(s: str) -> str:
+        return "\n".join(line.rstrip() for line in s.splitlines())
+    assert norm(live) == norm(fixture), (
+        "using-git-worktrees SKILL.md drifted from the P5.S3 token-budget "
+        "fixture. If this is intentional, update "
+        "tools/tasktool/tests/fixtures/p5_s3_skill_body.txt in the same commit."
+    )
+
+
+def test_subagent_early_exit_load_matches_fixture() -> None:
+    """Spec §6 P5.S3 transcript regression. A compliant subagent loads only
+    the bytes inside the <SUBAGENT-STOP> ... </SUBAGENT-STOP> block."""
+    from pathlib import Path
+    live = (Path(__file__).resolve().parents[3]
+            / "skills" / "using-git-worktrees" / "SKILL.md").read_text()
+    start_tag = "<SUBAGENT-STOP>"
+    end_tag = "</SUBAGENT-STOP>"
+    assert start_tag in live and end_tag in live, "early-exit tags missing"
+    start = live.index(start_tag)
+    end = live.index(end_tag) + len(end_tag)
+    span = live[start:end]
+
+    fixture = (Path(__file__).resolve().parent / "fixtures"
+               / "p5_s3_subagent_load.txt").read_text()
+    assert span == fixture, (
+        "subagent early-exit span drifted from the P5.S3 transcript fixture. "
+        "Update tools/tasktool/tests/fixtures/p5_s3_subagent_load.txt in the "
+        "same commit and explain the behavior change in the commit message."
+    )
+
+    assert len(span) < len(live), "early-exit span must be a proper subset"
+    assert "tasktool start" in span and (
+        "do not call" in span.lower() or "do not" in span.lower()
+    ), "early-exit block must forbid `tasktool start` from a subagent"
