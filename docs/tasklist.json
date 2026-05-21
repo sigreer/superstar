@@ -322,10 +322,12 @@
             "docs/reviewer/p5-s3-skill-rewrite-and-subagent-guard-plan"
           ],
           "reviewer_chain": "docs/reviewer/p5-s3-skill-rewrite-and-subagent-guard-plan",
-          "started": null,
-          "status": "ready",
+          "started": "2026-05-21",
+          "status": "in_progress",
           "tasks": [],
-          "title": "Skill rewrite + subagent guard + workflow updates"
+          "title": "Skill rewrite + subagent guard + workflow updates",
+          "worktree_branch": "worktree-p5-s3-skill-rewrite-subagent-guard-workflow",
+          "worktree_path": ".worktrees/worktree-p5-s3-skill-rewrite-subagent-guard-workflow"
         }
       ],
       "spec_path": "docs/specs/2026-05-21-P5-tasktool-worktree-lifecycle-design.md",
