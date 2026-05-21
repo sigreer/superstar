@@ -301,8 +301,7 @@
           "status": "done",
           "tasks": [],
           "title": "Prune + repair",
-          "worktree_branch": "worktree-P5.S2-prune-and-repair",
-          "worktree_path": ".claude/worktrees/P5.S2-prune-and-repair"
+          "worktree_pruned_at": "2026-05-21"
         },
         {
           "blocked_on": null,
@@ -327,8 +326,7 @@
           "status": "done",
           "tasks": [],
           "title": "Skill rewrite + subagent guard + workflow updates",
-          "worktree_branch": "worktree-p5-s3-skill-rewrite-subagent-guard-workflow",
-          "worktree_path": ".worktrees/worktree-p5-s3-skill-rewrite-subagent-guard-workflow"
+          "worktree_pruned_at": "2026-05-21"
         }
       ],
       "spec_path": "docs/specs/2026-05-21-P5-tasktool-worktree-lifecycle-design.md",
