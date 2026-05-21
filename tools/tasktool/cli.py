@@ -95,8 +95,12 @@ def _build_parser() -> argparse.ArgumentParser:
     p_set.add_argument("--reason")
 
     p_start = sub.add_parser("start")
-    p_start.add_argument("id")
+    p_start.add_argument("id", nargs="?")
     p_start.add_argument("--resume", action="store_true")
+    p_start_mode = p_start.add_mutually_exclusive_group()
+    p_start_mode.add_argument("--in-place", action="store_true")
+    p_start_mode.add_argument("--adopt", metavar="PATH")
+    p_start_mode.add_argument("--ad-hoc", metavar="SLUG")
 
     p_close = sub.add_parser("close")
     p_close.add_argument("id")
@@ -312,7 +316,12 @@ def main(argv: list[str]) -> int:
                 allow_ready_close=args.allow_ready_close, reason=args.reason,
             )
         elif args.cmd == "start":
-            commands.cmd_start(repo_root=root, id=args.id, resume=args.resume)
+            if args.ad_hoc is None and not args.id:
+                parser.error("start requires <id> unless --ad-hoc <slug> is given")
+            commands.cmd_start(
+                repo_root=root, id=args.id, resume=args.resume,
+                in_place=args.in_place, adopt=args.adopt, ad_hoc=args.ad_hoc,
+            )
         elif args.cmd == "close":
             refs = _comma_split(args.refs) or None
             commands.cmd_close(

@@ -656,14 +656,165 @@ def _archive_cross_at_root(
     archive_path.write_text("\n".join(summary_lines), encoding="utf-8")
     return archive_path, archive_rel
 
-def cmd_start(*, repo_root: Path, id: str, resume: bool = False) -> None:
+def cmd_start(
+    *,
+    repo_root: Path,
+    id: str,
+    resume: bool = False,
+    in_place: bool = False,
+    adopt: str | None = None,
+    ad_hoc: str | None = None,
+) -> None:
+    if ad_hoc is not None:
+        # Reject a positional id alongside --ad-hoc at the command layer too,
+        # so the rejection holds even when callers reach cmd_start without going
+        # through the CLI dispatcher (e.g. direct Python imports in tests).
+        if id is not None:
+            raise CommandError("--ad-hoc does not accept a positional id")
+        if in_place or adopt is not None:
+            raise CommandError("--ad-hoc is mutually exclusive with --in-place and --adopt")
+        # Allocate a fresh X<n> cross-cutting row and create its worktree.
+        _start_ad_hoc(repo_root=repo_root, slug=ad_hoc)
+        return
+    if in_place and adopt is not None:
+        raise CommandError("--in-place and --adopt are mutually exclusive")
     with _write_context(repo_root) as write_root:
         p = _load(write_root)
         qid, _container, item = _find_item(p, id)
         kind = parse_id(qid)[0]
+        # ─── Lifecycle preflight FIRST. No git/worktree mutation may run if the
+        # row is DONE, or BLOCKED without --resume. _preflight_start raises before
+        # we touch the filesystem.
+        _preflight_start(qid, item, resume=resume)
+        if in_place:
+            _apply_start_in_place(qid, item)
+        else:
+            adopt_path: Path | None = Path(adopt).expanduser().resolve() if adopt else None
+            # Auto-adopt: caller cwd is inside a linked worktree of this repo.
+            from tasktool.worktree_lifecycle import is_inside_linked_worktree
+            if adopt_path is None and is_inside_linked_worktree(repo_root):
+                adopt_path = repo_root.resolve()
+            if adopt_path is not None:
+                _apply_start_adopt(write_root, qid, item, adopt_path)
+            else:
+                _apply_start_default(write_root, qid, item, resume=resume)
+        # _start_item now only mutates status/blocked_on/started; refusals already
+        # happened in _preflight_start, so this call cannot raise after side effects.
         _start_item(qid, item, resume=resume)
         _save(write_root, p)
         _notify_status(qid=qid, kind=kind, status=item.status, title=item.title)
+
+
+def _preflight_start(qid: str, item, *, resume: bool) -> None:
+    """Lifecycle refusals from `_start_item` lifted to run BEFORE any disk mutation.
+
+    `_start_item` itself is kept unchanged so callers like `cmd_set` / `cmd_unblock`
+    that don't touch worktrees continue to work; this preflight just runs the same
+    checks earlier so the worktree branch of `cmd_start` can't leave dangling
+    on-disk state after a refusal.
+    """
+    if item.status == Status.DONE:
+        raise CommandError(f"{qid} is already done")
+    if item.status == Status.BLOCKED and not resume:
+        raise CommandError(f"{qid} is blocked; use start --resume to clear blocked_on")
+
+
+def _start_ad_hoc(*, repo_root: Path, slug: str) -> None:
+    raise CommandError("--ad-hoc not yet implemented")
+
+
+def _apply_start_default(write_root: Path, qid: str, item, *, resume: bool) -> None:
+    if not (write_root / ".git").exists():
+        # No git repo (tests that pre-date P5.S1). Behave as pre-P5 start.
+        return
+    from tasktool.worktree_lifecycle import (
+        RecordedState, classify_recorded_state, worktree_name,
+    )
+    name = worktree_name(qid, item.title)
+    canonical_rel = f".worktrees/{name}"
+    canonical_path = (write_root / canonical_rel).resolve()
+    canonical_branch = name
+
+    recorded_path = (write_root / item.worktree_path).resolve() if item.worktree_path else None
+    state = classify_recorded_state(
+        write_root, recorded_path=recorded_path, recorded_branch=item.worktree_branch,
+    )
+    if state == RecordedState.CONSISTENT:
+        print(f"cd {recorded_path}")
+        return
+    if state == RecordedState.BOTH_MISSING:
+        raise CommandError(
+            f"{qid}: recorded worktree gone (path and branch missing); "
+            f"run `tasktool worktree repair {qid}` (P5.S2) or re-record with `tasktool worktree adopt`."
+        )
+    if state == RecordedState.PATH_MISSING:
+        raise CommandError(
+            f"{qid}: recorded worktree path missing but branch {item.worktree_branch!r} still exists; "
+            f"run `tasktool worktree adopt {qid} <new-path>` or `tasktool worktree repair {qid}` (P5.S2)."
+        )
+    if state == RecordedState.PATH_NOT_WORKTREE:
+        raise CommandError(
+            f"{qid}: recorded path {item.worktree_path!r} exists but is not a linked worktree. "
+            f"Run `tasktool worktree prune {qid} --force` (P5.S2) then re-`start`."
+        )
+    if state == RecordedState.BRANCH_MISMATCH:
+        raise CommandError(
+            f"{qid}: linked worktree at {item.worktree_path!r} is on a different branch than "
+            f"recorded ({item.worktree_branch!r}). Refusing to guess; resolve manually."
+        )
+    assert state == RecordedState.ABSENT
+    # Fresh creation: refuse if canonical path or branch already exists out-of-band.
+    if canonical_path.exists():
+        raise CommandError(
+            f"{qid}: canonical worktree path {canonical_rel!r} already exists outside tasktool. "
+            f"Adopt with `tasktool worktree adopt {qid} {canonical_rel}` or remove it manually."
+        )
+    res = _subprocess.run(
+        ["git", "show-ref", "--verify", "--quiet", f"refs/heads/{canonical_branch}"],
+        cwd=write_root,
+    )
+    if res.returncode == 0:
+        raise CommandError(
+            f"{qid}: branch {canonical_branch!r} already exists out-of-band; "
+            f"adopt the existing worktree or delete the branch."
+        )
+    canonical_path.parent.mkdir(parents=True, exist_ok=True)
+    _subprocess.run(
+        ["git", "worktree", "add", "-b", canonical_branch, str(canonical_path)],
+        cwd=write_root, check=True, text=True, capture_output=True,
+    )
+    item.worktree_path = canonical_rel
+    item.worktree_branch = canonical_branch
+    item.worktree_in_place = False
+    print(f"cd {canonical_path}")
+
+
+def _apply_start_in_place(qid: str, item) -> None:
+    if item.worktree_path is not None:
+        raise CommandError(
+            f"{qid}: --in-place refused; slice already has a recorded worktree at {item.worktree_path!r}."
+        )
+    item.worktree_in_place = True
+    item.worktree_path = None
+    item.worktree_branch = None
+
+
+def _apply_start_adopt(write_root: Path, qid: str, item, adopt_path: Path) -> None:
+    from tasktool.worktree_lifecycle import linked_worktree_branch
+    branch = linked_worktree_branch(write_root, adopt_path)
+    if branch is None:
+        raise CommandError(
+            f"{qid}: --adopt {adopt_path} is not a linked worktree of this repository."
+        )
+    try:
+        rel = adopt_path.relative_to(write_root.resolve())
+        rel_str = str(rel)
+    except ValueError:
+        rel_str = str(adopt_path)
+    item.worktree_path = rel_str
+    item.worktree_branch = branch
+    item.worktree_in_place = False
+    print(f"cd {adopt_path}")
 
 def cmd_set(
     *, repo_root: Path, id: str, status: str,
