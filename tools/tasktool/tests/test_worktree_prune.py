@@ -327,3 +327,87 @@ def test_force_does_not_clear_depends_on(tmp_path):
     _tasktool(repo, "worktree", "prune", "P1.S1", "--force")
     show = _tasktool(repo, "show", "P1.S2").stdout
     assert "P1.S1" in show  # dependency edge intact
+
+
+def test_prune_from_inside_sets_pending_marker_and_skips_remove(project_with_worktree, monkeypatch):
+    repo, wt = project_with_worktree
+    _tasktool(repo, "close", "P1.S1", "--skip-review-gate")
+    _run(repo, "git", "merge", "--no-ff", "-q", "-m", "m",
+         "worktree-p1-s1-first-slice")
+    # Invoke prune with cwd inside the doomed worktree.
+    res = subprocess.run(
+        [str(TASKTOOL), "--project-root", str(repo),
+         "worktree", "prune", "P1.S1"],
+        cwd=wt, text=True, capture_output=True, check=False,
+    )
+    assert res.returncode == 0
+    # Pending marker set, fields preserved.
+    show = _tasktool(repo, "show", "P1.S1").stdout
+    assert "worktree_prune_pending" in show
+    # Worktree still present.
+    assert wt.exists()
+    # Exact follow-up line printed.
+    assert "git worktree remove" in res.stdout
+    assert "tasktool worktree prune P1.S1 --finalize" in res.stdout
+
+
+def test_finalize_refuses_when_no_pending(project_with_worktree):
+    repo, _wt = project_with_worktree
+    res = _tasktool(repo, "worktree", "prune", "P1.S1", "--finalize", check=False)
+    assert res.returncode != 0
+    assert "no pending prune" in res.stderr.lower()
+
+
+def test_finalize_refuses_when_path_still_registered(project_with_worktree):
+    repo, wt = project_with_worktree
+    _tasktool(repo, "close", "P1.S1", "--skip-review-gate")
+    _run(repo, "git", "merge", "--no-ff", "-q", "-m", "m",
+         "worktree-p1-s1-first-slice")
+    # Trigger prune-from-inside to set pending marker.
+    subprocess.run(
+        [str(TASKTOOL), "--project-root", str(repo),
+         "worktree", "prune", "P1.S1"],
+        cwd=wt, text=True, capture_output=True, check=True,
+    )
+    # Worktree still registered. --finalize must refuse.
+    res = _tasktool(repo, "worktree", "prune", "P1.S1", "--finalize", check=False)
+    assert res.returncode != 0
+    assert "still registered" in res.stderr.lower() or "git worktree list" in res.stderr.lower()
+
+
+def test_finalize_refuses_when_directory_still_present(project_with_worktree):
+    repo, wt = project_with_worktree
+    _tasktool(repo, "close", "P1.S1", "--skip-review-gate")
+    _run(repo, "git", "merge", "--no-ff", "-q", "-m", "m",
+         "worktree-p1-s1-first-slice")
+    subprocess.run(
+        [str(TASKTOOL), "--project-root", str(repo),
+         "worktree", "prune", "P1.S1"],
+        cwd=wt, text=True, capture_output=True, check=True,
+    )
+    # Unregister via git but leave the directory present.
+    _run(repo, "git", "worktree", "remove", "--force", str(wt))
+    # Recreate the directory as a plain dir to simulate leftover state.
+    wt.mkdir(parents=True, exist_ok=True)
+    res = _tasktool(repo, "worktree", "prune", "P1.S1", "--finalize", check=False)
+    assert res.returncode != 0
+    assert "directory still present" in res.stderr.lower()
+
+
+def test_finalize_succeeds_when_all_preconditions_met(project_with_worktree):
+    repo, wt = project_with_worktree
+    _tasktool(repo, "close", "P1.S1", "--skip-review-gate")
+    _run(repo, "git", "merge", "--no-ff", "-q", "-m", "m",
+         "worktree-p1-s1-first-slice")
+    subprocess.run(
+        [str(TASKTOOL), "--project-root", str(repo),
+         "worktree", "prune", "P1.S1"],
+        cwd=wt, text=True, capture_output=True, check=True,
+    )
+    # Caller performs the destructive step out-of-band.
+    _run(repo, "git", "worktree", "remove", str(wt))
+    res = _tasktool(repo, "worktree", "prune", "P1.S1", "--finalize")
+    assert res.returncode == 0
+    show = _tasktool(repo, "show", "P1.S1").stdout
+    assert "worktree_pruned_at" in show
+    assert "worktree_prune_pending" not in show or "false" in show.lower()
