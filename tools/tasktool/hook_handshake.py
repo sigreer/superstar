@@ -34,6 +34,30 @@ def _git_top(cwd: Path) -> Optional[Path]:
     return Path(result.stdout.strip())
 
 
+def _git_hook_path(cwd: Path, repo_top: Path) -> Optional[Path]:
+    """Resolve the pre-commit hook path via `git rev-parse --git-path`.
+
+    Worktree-safe: in a linked worktree `.git` is a file, and hooks live in
+    the common-dir of the parent repo. `git rev-parse --git-path hooks/<n>`
+    correctly resolves to that path. The output may be relative; resolve to
+    absolute by joining with `repo_top`.
+    """
+    result = subprocess.run(
+        ["git", "rev-parse", "--git-path", "hooks/pre-commit"],
+        cwd=cwd,
+        capture_output=True, text=True, check=False,
+    )
+    if result.returncode != 0:
+        return None
+    raw = result.stdout.strip()
+    if not raw:
+        return None
+    path = Path(raw)
+    if not path.is_absolute():
+        path = repo_top / path
+    return path
+
+
 def _parse_header(text: str) -> dict[str, str]:
     out: dict[str, str] = {}
     for line in text.splitlines()[:32]:
@@ -53,7 +77,9 @@ def check_pre_commit_hook(cwd: Optional[Path] = None) -> Optional[str]:
     repo_top = _git_top(cwd)
     if repo_top is None:
         return None
-    hook_path = repo_top / ".git" / "hooks" / "pre-commit"
+    hook_path = _git_hook_path(cwd, repo_top)
+    if hook_path is None:
+        return None
     if not hook_path.exists():
         return None
     try:

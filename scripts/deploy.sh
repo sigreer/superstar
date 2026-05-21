@@ -127,6 +127,77 @@ check_shim() {
     SHIM_SOURCE_ROOTS["$name"]="$expanded_root"
 }
 
+check_hook() {
+    # Resolve git hooks path for the current working tree (worktree-safe).
+    if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        print_row "pre-commit" "NOT_DEPLOYED" "(not in a git working tree)"
+        return
+    fi
+
+    local repo_top
+    repo_top="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+    local hook_path
+    hook_path="$(git rev-parse --git-path hooks/pre-commit 2>/dev/null || true)"
+    if [[ -z "$hook_path" ]]; then
+        print_row "pre-commit" "NOT_DEPLOYED" "(failed to resolve git hooks path)"
+        return
+    fi
+    case "$hook_path" in
+        /*) ;;
+        *) hook_path="$repo_top/$hook_path" ;;
+    esac
+
+    if [[ ! -f "$hook_path" ]]; then
+        EXIT_CODE=1
+        print_row "pre-commit" "MISSING_TARGET" "$hook_path"
+        return
+    fi
+
+    local header
+    header="$(PARSE_HEADER "$hook_path")"
+
+    local hook_name="" hook_version="" hook_source_root=""
+    while IFS= read -r line; do
+        [[ -z "$line" ]] && continue
+        case "$line" in
+            superstar-hook-name=*) hook_name="${line#superstar-hook-name=}" ;;
+            superstar-hook-version=*) hook_version="${line#superstar-hook-version=}" ;;
+            superstar-hook-source-root=*) hook_source_root="${line#superstar-hook-source-root=}" ;;
+        esac
+    done <<< "$header"
+
+    if [[ "$hook_name" != "tasktool-pre-commit" ]]; then
+        print_row "pre-commit" "NOT_DEPLOYED" "(not a tasktool hook) $hook_path"
+        return
+    fi
+
+    if [[ -z "$hook_version" || -z "$hook_source_root" ]]; then
+        EXIT_CODE=1
+        print_row "pre-commit" "MALFORMED" "$hook_path (missing version/source-root header)"
+        return
+    fi
+
+    local expanded_root
+    expanded_root="$(EXPAND_PATH "$hook_source_root")"
+
+    if [[ ! -d "$expanded_root" || ! -r "$expanded_root/VERSION" ]]; then
+        EXIT_CODE=1
+        print_row "pre-commit" "MISSING_SOURCE" "$expanded_root (no readable VERSION)"
+        return
+    fi
+
+    local src_version
+    src_version="$(tr -d '[:space:]' < "$expanded_root/VERSION")"
+
+    if [[ "$hook_version" != "$src_version" ]]; then
+        EXIT_CODE=1
+        print_row "pre-commit" "DRIFT" "hook=$hook_version source-root has $src_version root=$expanded_root"
+        return
+    fi
+
+    print_row "pre-commit" "OK" "v$hook_version root=$expanded_root"
+}
+
 check_cache() {
     local name="$1" cache_dir="$2" dev_version="$3"
     local status="" detail=""
@@ -195,6 +266,10 @@ run_check() {
         echo
         print_row "source-roots" "SOURCE_ROOT_INFO" "shims point at differing source roots:$unique_roots (informational)"
     fi
+
+    echo
+    echo "Pre-commit hook:"
+    check_hook
 
     echo
     echo "Plugin caches:"
