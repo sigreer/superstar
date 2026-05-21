@@ -8,6 +8,29 @@ from tasktool.model import (
     Status, PlanningStatus, SCHEMA_VERSION,
 )
 
+_WORKTREE_DEFAULT_OMIT = {
+    # field -> default value to omit on
+    "worktree_path": None,
+    "worktree_branch": None,
+    "worktree_pruned_at": None,
+    "worktree_prune_pending_at": None,
+    "worktree_in_place": False,
+    "worktree_prune_pending": False,
+}
+
+
+def _strip_worktree_defaults(d: dict) -> dict:
+    """Drop worktree_* keys whose values equal their dataclass default.
+
+    Historical rows that never set worktree_* fields must NOT gain those keys
+    when re-serialised. Rows that explicitly set non-default values keep them.
+    """
+    for field, default in _WORKTREE_DEFAULT_OMIT.items():
+        if field in d and d[field] == default:
+            del d[field]
+    return d
+
+
 def to_dict(p: Project) -> dict:
     def _coerce(obj):
         if isinstance(obj, (Status, PlanningStatus)):
@@ -20,7 +43,15 @@ def to_dict(p: Project) -> dict:
         if isinstance(node, list):
             return [walk(v) for v in node]
         return _coerce(node)
-    return walk(raw)
+    out = walk(raw)
+    # Omit worktree_* fields whose values equal dataclass defaults from
+    # serialised slice and cross-cutting rows.
+    for phase in out.get("phases", []):
+        for slc in phase.get("slices", []):
+            _strip_worktree_defaults(slc)
+    for cross in out.get("cross_cutting", []):
+        _strip_worktree_defaults(cross)
+    return out
 
 def _strict_bool(value, *, scope: str, field: str, default: bool = False) -> bool:
     if value is None:

@@ -158,6 +158,27 @@ def _resolve_write_root(repo_root: Path) -> tuple[Path, bool, str, str]:
     )
 
 @contextmanager
+def _read_context(repo_root: Path):
+    """Read-only equivalent of `_write_context`.
+
+    Resolves the authoritative checkout for read purposes without acquiring
+    `.git/tasktool.lock` or enforcing authoritative cleanliness. Use this for
+    commands that only inspect state (e.g. `worktree list`, `worktree status`).
+    """
+    write_root, _routed, mode, authoritative_branch = _resolve_write_root(repo_root)
+    if mode == "authoritative-checkout":
+        try:
+            validate_authoritative_checkout(
+                write_root,
+                expected_branch=authoritative_branch,
+                caller_root=repo_root,
+            )
+        except AuthorityError as exc:
+            raise CommandError(str(exc)) from exc
+    yield write_root
+
+
+@contextmanager
 def _write_context(repo_root: Path):
     write_root, routed, mode, authoritative_branch = _resolve_write_root(repo_root)
     if mode == "authoritative-checkout":
@@ -1805,7 +1826,7 @@ def _health_for(write_root: Path, item) -> str:
 
 
 def cmd_worktree_list(*, repo_root: Path, show_all: bool = False) -> str:
-    with _write_context(repo_root) as write_root:
+    with _read_context(repo_root) as write_root:
         p = _load(write_root)
         rows = []
         for qid, item in _iter_worktree_rows(p):
@@ -1835,7 +1856,7 @@ def cmd_worktree_list(*, repo_root: Path, show_all: bool = False) -> str:
 
 
 def cmd_worktree_status(*, repo_root: Path, id: str) -> str:
-    with _write_context(repo_root) as write_root:
+    with _read_context(repo_root) as write_root:
         p = _load(write_root)
         qid, _container, item = _find_item(p, id)
         if item.worktree_in_place:

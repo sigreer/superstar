@@ -137,7 +137,9 @@ def test_slice_worktree_fields_round_trip():
     s = out["phases"][0]["slices"][0]
     assert s["worktree_path"] == ".worktrees/worktree-p1-s1-s"
     assert s["worktree_branch"] == "worktree-p1-s1-s"
-    assert s["worktree_in_place"] is False
+    # Default-valued worktree_in_place (False) is omitted from serialised form
+    # so historical rows do not gain new keys on round-trip.
+    assert "worktree_in_place" not in s
 
 
 def test_slice_worktree_fields_default_null_when_absent():
@@ -158,6 +160,70 @@ def test_slice_worktree_fields_default_null_when_absent():
     assert s.worktree_pruned_at is None
     assert s.worktree_prune_pending is False
     assert s.worktree_prune_pending_at is None
+
+
+def test_slice_without_worktree_fields_emits_no_worktree_keys():
+    """Historical rows that never set worktree_* fields must round-trip without
+    gaining those keys. Defaults must be omitted on serialise."""
+    from tasktool.serialize import from_dict, to_dict
+    raw = {
+        "project": "demo", "schema_version": 1,
+        "phases": [{
+            "id": "P1", "title": "P", "created": "2026-05-21", "status": "ready",
+            "slices": [{"id": "S1", "title": "S", "created": "2026-05-21", "status": "ready"}],
+        }],
+        "cross_cutting": [], "archived_phases": [], "archived_cross_cutting": [],
+    }
+    p = from_dict(raw)
+    out = to_dict(p)
+    s = out["phases"][0]["slices"][0]
+    for key in (
+        "worktree_path", "worktree_branch", "worktree_in_place",
+        "worktree_pruned_at", "worktree_prune_pending", "worktree_prune_pending_at",
+    ):
+        assert key not in s, f"unexpected default key {key!r} in serialised slice"
+
+
+def test_cross_without_worktree_fields_emits_no_worktree_keys():
+    from tasktool.serialize import from_dict, to_dict
+    raw = {
+        "project": "demo", "schema_version": 1,
+        "phases": [],
+        "cross_cutting": [{
+            "id": "X9", "title": "x", "created": "2026-05-21", "status": "ready",
+        }],
+        "archived_phases": [], "archived_cross_cutting": [],
+    }
+    p = from_dict(raw)
+    out = to_dict(p)
+    c = out["cross_cutting"][0]
+    for key in (
+        "worktree_path", "worktree_branch", "worktree_in_place",
+        "worktree_pruned_at", "worktree_prune_pending", "worktree_prune_pending_at",
+    ):
+        assert key not in c
+
+
+def test_slice_non_default_worktree_fields_are_preserved():
+    from tasktool.serialize import from_dict, to_dict
+    raw = {
+        "project": "demo", "schema_version": 1,
+        "phases": [{
+            "id": "P1", "title": "P", "created": "2026-05-21", "status": "ready",
+            "slices": [{
+                "id": "S1", "title": "S", "created": "2026-05-21", "status": "ready",
+                "worktree_in_place": True,
+            }],
+        }],
+        "cross_cutting": [], "archived_phases": [], "archived_cross_cutting": [],
+    }
+    p = from_dict(raw)
+    out = to_dict(p)
+    s = out["phases"][0]["slices"][0]
+    assert s["worktree_in_place"] is True
+    # The other defaults must still be omitted.
+    assert "worktree_path" not in s
+    assert "worktree_branch" not in s
 
 
 def test_cross_worktree_fields_round_trip():

@@ -51,7 +51,7 @@ def test_start_records_worktree_path_and_branch_and_creates_dir(tmp_path):
     expected_name = "worktree-p1-s1-lifecycle-core"
     assert sl["worktree_path"] == f".worktrees/{expected_name}"
     assert sl["worktree_branch"] == expected_name
-    assert sl["worktree_in_place"] is False
+    assert sl.get("worktree_in_place", False) is False
     assert (root / ".worktrees" / expected_name).is_dir()
     # Branch exists
     branches = _git(root, "branch", "--list", expected_name).stdout
@@ -163,8 +163,8 @@ def test_start_in_place_marks_slice(tmp_path):
     assert r.returncode == 0, r.stdout + r.stderr
     sl = tasklist(root)["phases"][0]["slices"][0]
     assert sl["worktree_in_place"] is True
-    assert sl["worktree_path"] is None
-    assert sl["worktree_branch"] is None
+    assert sl.get("worktree_path") is None
+    assert sl.get("worktree_branch") is None
     # No .worktrees directory created
     assert not (root / ".worktrees" / "worktree-p1-s1-lifecycle-core").exists()
 
@@ -269,7 +269,7 @@ def test_start_in_place_then_normal_start_is_refused(tmp_path):
     assert r.returncode == 0, r.stdout + r.stderr
     sl = tasklist(root)["phases"][0]["slices"][0]
     assert sl["worktree_in_place"] is True
-    assert sl["worktree_path"] is None
+    assert sl.get("worktree_path") is None
 
 
 def test_start_ad_hoc_creates_X_row_and_worktree(tmp_path):

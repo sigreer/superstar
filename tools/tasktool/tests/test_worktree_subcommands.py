@@ -199,6 +199,39 @@ def test_worktree_check_legacy_via_cli(tmp_path, monkeypatch):
     assert ".claude/worktrees" in r2.stdout
 
 
+def test_worktree_list_and_status_are_readonly_under_dirty_authoritative(tmp_path):
+    """F3: read-only commands must not gate on authoritative cleanliness or
+    acquire the write lock. Dirty authoritative tasklist must not block them."""
+    root = tmp_path / "repo"
+    root.mkdir()
+    _git(root, "init", "-b", "main")
+    _git(root, "config", "user.email", "t@example.invalid")
+    _git(root, "config", "user.name", "T")
+    (root / "docs").mkdir()
+    assert run(root, "config", "init-authority", "--branch", "main").returncode == 0
+    assert run(root, "init", "--project", "demo").returncode == 0
+    _git(root, "add", "-A")
+    _git(root, "commit", "-m", "init")
+    assert run(root, "create", "phase", "--title", "P").returncode == 0
+    assert run(root, "create", "slice", "P1", "--title", "Slice").returncode == 0
+    _git(root, "add", "-A")
+    _git(root, "commit", "-m", "seed slice")
+    assert run(root, "start", "P1.S1").returncode == 0
+    _git(root, "add", "-A")
+    _git(root, "commit", "-m", "start")
+    # Make the authoritative docs/tasklist.json dirty: write to it directly.
+    tl = root / "docs" / "tasklist.json"
+    data = json.loads(tl.read_text())
+    data["north_star"] = "dirty edit"
+    tl.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n")
+    r_list = run(root, "worktree", "list")
+    assert r_list.returncode == 0, r_list.stdout + r_list.stderr
+    assert "P1.S1" in r_list.stdout
+    r_status = run(root, "worktree", "status", "P1.S1")
+    assert r_status.returncode == 0, r_status.stdout + r_status.stderr
+    assert "P1.S1" in r_status.stdout
+
+
 def test_worktree_adopt_overwrites_dead_record(tmp_path):
     root = seed_with_started_slice(tmp_path)
     # Kill the live worktree but keep the branch
