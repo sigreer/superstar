@@ -1,0 +1,89 @@
+{
+  "schema_version": 1,
+  "chain": "x15-archive-closed-cross-cutting-items-plan",
+  "kind": "plan",
+  "target": "docs/plans/2026-05-21-X15-archive-closed-cross-cutting-items.md",
+  "work_id": null,
+  "legacy_migrated": false,
+  "rounds": [
+    {
+      "round": 1,
+      "reviewers": [
+        {
+          "role": "primary",
+          "sweep_group": null,
+          "parent_round": 1,
+          "request": "r1-2026-05-21T0128-request.md",
+          "response": "r1-2026-05-21T0128-response.md",
+          "verdict": "ready with small edits",
+          "verdict_valid": true,
+          "returncode": 0,
+          "status": "ok",
+          "provider": "claude",
+          "caller_provider": "codex",
+          "model": null,
+          "sandbox": {
+            "repo_root": "/home/simon/Dev/sigreer/skills/superstar",
+            "scratch_dir": "/tmp/superstar-reviewer-x15-archive-closed-cross-cutting-items-plan-r1-primary-9eus3haa",
+            "response_dir": "docs/reviewer/x15-archive-closed-cross-cutting-items-plan/.reviewer-output/r1-primary",
+            "mode": "plan-read-only"
+          },
+          "started_at": "2026-05-21T00:28:20.831Z",
+          "finished_at": "2026-05-21T00:30:34.446Z",
+          "duration_ms": 133615,
+          "estimated_usage": {
+            "formula": "ceil(chars / 4)",
+            "prompt_chars": 48275,
+            "response_chars": 9279,
+            "estimated_input_tokens": 12069,
+            "estimated_output_tokens": 2320,
+            "estimated_total_tokens": 14389
+          },
+          "exact_usage": null,
+          "usage_capture_status": "estimated_only",
+          "usage_capture_error": null
+        }
+      ],
+      "status": "ok",
+      "returncode": 0,
+      "started_at": "2026-05-21T00:28:20.831Z",
+      "finished_at": "2026-05-21T00:30:34.446Z",
+      "duration_ms": 133615,
+      "provider": "claude",
+      "caller_provider": "codex",
+      "model": null,
+      "estimated_usage": {
+        "formula": "ceil(chars / 4)",
+        "prompt_chars": 48275,
+        "response_chars": 9279,
+        "estimated_input_tokens": 12069,
+        "estimated_output_tokens": 2320,
+        "estimated_total_tokens": 14389
+      },
+      "exact_usage": null,
+      "usage_capture_status": "estimated_only",
+      "usage_capture_error": null,
+      "merged_verdict": "ready with small edits",
+      "merged_findings": null,
+      "request": "r1-2026-05-21T0128-request.md",
+      "response": "r1-2026-05-21T0128-response.md",
+      "resolution": null,
+      "resolution_parse_status": null,
+      "resolution_waiver": false,
+      "head_sha_at_request": "b6ec26fb30d80d5040e71ab27fa3b6da0f2cd11b",
+      "head_sha_after_round": "b6ec26fb30d80d5040e71ab27fa3b6da0f2cd11b",
+      "worktree_dirty_at_request": true,
+      "verdict": "ready with small edits",
+      "verdict_valid": true,
+      "findings_count": 11,
+      "blocking_findings_count": 0,
+      "base_ref": null,
+      "base_ref_source": null,
+      "diff_included": false
+    }
+  ],
+  "sweep_checkpoints": {
+    "first-round": "pending",
+    "final-ready": "pending"
+  }
+}
