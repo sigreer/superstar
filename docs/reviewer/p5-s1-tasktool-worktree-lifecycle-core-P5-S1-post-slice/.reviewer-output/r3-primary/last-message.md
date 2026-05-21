@@ -1,0 +1,34 @@
+1. Findings
+
+F1 — Severity: blocking — RESOLVED. Strict artifact status passes: `./tools/tasktool/tasktool artifact status P5.S1 --strict` returns `artifact status: ok`.
+
+F2 — Severity: blocking — RESOLVED. Serializer/default-field regression remains covered; the full tasktool suite passes.
+
+F3 — Severity: important — RESOLVED. `worktree list/status` still pass under the updated implementation, and focused worktree tests pass.
+
+S1.F1 — Severity: blocking — RESOLVED. `start --adopt <main-checkout>` and `worktree adopt <id> <main-checkout>` now explicitly reject the primary checkout before calling `linked_worktree_branch()` at `tools/tasktool/commands.py:865` and `tools/tasktool/commands.py:1911`. The helper excludes the first `git worktree list --porcelain` entry at `tools/tasktool/worktree_lifecycle.py:100`. Regression tests cover both paths at `tools/tasktool/tests/test_start_worktree.py:183` and `tools/tasktool/tests/test_worktree_subcommands.py:155`. I also reproduced the original temp-repo probe: it now exits `rc=1`, prints “main checkout”, and records no worktree fields.
+
+S1.F2 — Severity: blocking — RESOLVED for this review round. The post-slice chain now contains round 2 with `merged_verdict: "revise"` plus `final-ready: "completed"` at `docs/reviewer/p5-s1-tasktool-worktree-lifecycle-core-P5-S1-post-slice/chain.json:118` and `docs/reviewer/p5-s1-tasktool-worktree-lifecycle-core-P5-S1-post-slice/chain.json:228`. The remaining `tasktool close P5.S1` and reviewer artifact commit are still post-verdict coordinator steps, not implementation defects.
+
+No new findings.
+
+2. Open questions / assumptions
+
+Assumption: after this r3 response is recorded, the coordinator will run the normal closeout flow for `P5.S1` and commit the reviewer-chain artifacts plus authoritative tasklist update.
+
+3. Suggested document edits
+
+No required document edits.
+
+4. Verification gaps / commands that should be run, if any
+
+Ran:
+- `./tools/tasktool/tasktool validate --strict-format` — `ok`
+- `./tools/tasktool/tasktool artifact status P5.S1 --strict` — `artifact status: ok`
+- `./tools/tasktool/tasktool worktree status P5.S1` — `P5.S1: no worktree recorded`
+- `cd tools && python -m pytest tasktool/tests/test_start_worktree.py tasktool/tests/test_worktree_subcommands.py -q` — `35 passed`
+- `cd tools && python -m pytest tasktool/tests -q` — `464 passed`, with only the read-only `.pytest_cache` warning
+- Temp-repo `start P1.S1 --adopt <main-checkout>` probe — rejected with no recorded fields
+
+Overall verdict: ready
+
