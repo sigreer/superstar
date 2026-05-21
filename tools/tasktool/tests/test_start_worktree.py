@@ -270,3 +270,44 @@ def test_start_in_place_then_normal_start_is_refused(tmp_path):
     sl = tasklist(root)["phases"][0]["slices"][0]
     assert sl["worktree_in_place"] is True
     assert sl["worktree_path"] is None
+
+
+def test_start_ad_hoc_creates_X_row_and_worktree(tmp_path):
+    root = seed_repo(tmp_path)
+    r = run(root, "start", "--ad-hoc", "shim-drift")
+    assert r.returncode == 0, r.stdout + r.stderr
+    tl = tasklist(root)
+    assert len(tl["cross_cutting"]) == 1
+    x = tl["cross_cutting"][0]
+    assert x["id"].startswith("X")
+    assert x["title"] == "Ad-hoc: shim-drift"
+    assert x["status"] == "in_progress"
+    assert x["notes"] == "ad-hoc"
+    name = f"worktree-{x['id'].lower()}-ad-hoc-shim-drift"
+    assert x["worktree_path"] == f".worktrees/{name}"
+    assert x["worktree_branch"] == name
+    assert (root / ".worktrees" / name).is_dir()
+    # CLI prints the allocated ID so callers can chain commands
+    assert x["id"] in r.stdout
+
+
+def test_start_ad_hoc_requires_slug(tmp_path):
+    root = seed_repo(tmp_path)
+    r = run(root, "start", "--ad-hoc", "")
+    assert r.returncode != 0
+    assert "slug" in (r.stdout + r.stderr).lower()
+
+
+def test_start_ad_hoc_rejects_id_argument(tmp_path):
+    root = seed_repo(tmp_path)
+    r = run(root, "start", "P1.S1", "--ad-hoc", "x")
+    assert r.returncode != 0
+
+
+def test_ad_hoc_row_hidden_from_default_list_visible_with_all(tmp_path):
+    root = seed_repo(tmp_path)
+    assert run(root, "start", "--ad-hoc", "shim-drift").returncode == 0
+    r_default = run(root, "list")
+    r_all = run(root, "list", "--all")
+    assert "Ad-hoc: shim-drift" not in r_default.stdout
+    assert "Ad-hoc: shim-drift" in r_all.stdout

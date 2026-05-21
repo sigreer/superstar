@@ -744,7 +744,22 @@ def _preflight_start(qid: str, item, *, resume: bool) -> None:
 
 
 def _start_ad_hoc(*, repo_root: Path, slug: str) -> None:
-    raise CommandError("--ad-hoc not yet implemented")
+    slug = (slug or "").strip()
+    if not slug:
+        raise CommandError("--ad-hoc requires a non-empty <slug>")
+    title = f"Ad-hoc: {slug}"
+    with _write_context(repo_root) as write_root:
+        p = _load(write_root)
+        new_id = next_cross_id(p, write_root)
+        item = CrossCutting(
+            id=new_id, title=title, created=_today(),
+            status=Status.IN_PROGRESS, started=_today(), notes="ad-hoc",
+        )
+        p.cross_cutting.append(item)
+        _apply_start_default(write_root, new_id, item, resume=False)
+        _save(write_root, p)
+        _notify_status(qid=new_id, kind="cross", status=item.status, title=item.title)
+        print(new_id)
 
 
 def _apply_start_default(write_root: Path, qid: str, item, *, resume: bool) -> None:
@@ -1477,6 +1492,7 @@ def cmd_list(
     status: list[str] | None = None,
     kind: str | None = None,
     open_only: bool = False,
+    show_all: bool = False,
     format: str = "text",
 ) -> str:
     p = _load(repo_root)
@@ -1493,6 +1509,12 @@ def cmd_list(
         if kind and item_kind != kind:
             continue
         if status_filter and item.status.value not in status_filter:
+            continue
+        if (
+            not show_all
+            and item_kind == "cross"
+            and (getattr(item, "notes", "") or "").strip() == "ad-hoc"
+        ):
             continue
         rows.append((qid, item_kind, item.status.value, item.title))
     if format == "json":

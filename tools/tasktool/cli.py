@@ -217,6 +217,7 @@ def _build_parser() -> argparse.ArgumentParser:
     p_list.add_argument("--status")
     p_list.add_argument("--kind", choices=["phase", "slice", "task", "cross"])
     p_list.add_argument("--open", dest="open_only", action="store_true")
+    p_list.add_argument("--all", dest="show_all", action="store_true")
     p_list.add_argument("--format", choices=["text", "json"], default="text")
 
     p_validate = sub.add_parser("validate")
@@ -316,7 +317,10 @@ def main(argv: list[str]) -> int:
                 allow_ready_close=args.allow_ready_close, reason=args.reason,
             )
         elif args.cmd == "start":
-            if args.ad_hoc is None and not args.id:
+            if args.ad_hoc is not None:
+                if args.id is not None:
+                    parser.error("--ad-hoc cannot be combined with a positional id")
+            elif not args.id:
                 parser.error("start requires <id> unless --ad-hoc <slug> is given")
             commands.cmd_start(
                 repo_root=root, id=args.id, resume=args.resume,
@@ -403,7 +407,8 @@ def main(argv: list[str]) -> int:
             status_list = args.status.split(",") if args.status else None
             sys.stdout.write(commands.cmd_list(
                 repo_root=root, phase=args.phase, status=status_list,
-                kind=args.kind, open_only=args.open_only, format=args.format,
+                kind=args.kind, open_only=args.open_only,
+                show_all=args.show_all, format=args.format,
             ))
         elif args.cmd == "validate":
             rc, text = commands.cmd_validate(
