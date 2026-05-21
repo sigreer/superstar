@@ -8,8 +8,22 @@ TOOL = Path(__file__).resolve().parents[2] / "tasktool" / "__main__.py"
 PYTHONPATH = str(Path(__file__).resolve().parents[2])
 
 
+_SUBAGENT_GUARD_VARS = (
+    "SUPERSTAR_SUBAGENT_ROLE",
+    "CLAUDE_AGENT_ROLE",
+    "SUPERSTAR_FORCE_SUBAGENT",
+)
+
+
 def run(root, *args):
+    """Run tasktool in a child process. Strips ambient subagent-guard env vars
+    so positive lifecycle tests pass even when invoked from a shell that
+    followed the dispatched-subagent prompt directive (e.g. an implementer
+    subagent that exported SUPERSTAR_SUBAGENT_ROLE=implementer before running
+    pytest). Tests that need to exercise the guard use `_run_with_env`."""
     env = os.environ.copy()
+    for k in _SUBAGENT_GUARD_VARS:
+        env.pop(k, None)
     env["PYTHONPATH"] = PYTHONPATH + os.pathsep + env.get("PYTHONPATH", "")
     return subprocess.run(
         [sys.executable, str(TOOL), "--project-root", str(root), *args],
@@ -350,3 +364,23 @@ def test_start_env_i_bash_subshell_proceeds(tmp_path):
         text=True, capture_output=True,
     )
     assert r.returncode == 0, r.stdout + r.stderr
+
+
+def test_run_helper_strips_ambient_subagent_guard_env(tmp_path, monkeypatch):
+    """Regression: a dispatched subagent that follows the prompt directive
+    `export SUPERSTAR_SUBAGENT_ROLE=implementer` and then runs pytest should
+    still see positive lifecycle tests pass. The `run` helper scrubs the
+    three guard env vars so the test subprocess does not inherit them.
+    Sweep S1.F1 (post-slice r2)."""
+    monkeypatch.setenv("SUPERSTAR_SUBAGENT_ROLE", "implementer")
+    monkeypatch.setenv("CLAUDE_AGENT_ROLE", "subagent")
+    monkeypatch.setenv("SUPERSTAR_FORCE_SUBAGENT", "1")
+    seed(tmp_path)
+    r = run(tmp_path, "start", "P1.S1")
+    assert r.returncode == 0, (
+        f"`run` helper must strip ambient subagent-guard env so positive "
+        f"lifecycle tests pass under a dispatched-subagent shell. "
+        f"stdout={r.stdout!r} stderr={r.stderr!r}"
+    )
+    sl = tasklist(tmp_path)["phases"][0]["slices"][0]
+    assert sl["status"] == "in_progress"
