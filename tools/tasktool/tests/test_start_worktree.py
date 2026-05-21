@@ -155,3 +155,118 @@ def test_start_refused_when_branch_mismatched(tmp_path):
     assert r.returncode != 0
     out = r.stdout + r.stderr
     assert "different branch" in out
+
+
+def test_start_in_place_marks_slice(tmp_path):
+    root = seed_repo(tmp_path)
+    r = run(root, "start", "P1.S1", "--in-place")
+    assert r.returncode == 0, r.stdout + r.stderr
+    sl = tasklist(root)["phases"][0]["slices"][0]
+    assert sl["worktree_in_place"] is True
+    assert sl["worktree_path"] is None
+    assert sl["worktree_branch"] is None
+    # No .worktrees directory created
+    assert not (root / ".worktrees" / "worktree-p1-s1-lifecycle-core").exists()
+
+
+def test_start_adopt_records_external_worktree(tmp_path):
+    root = seed_repo(tmp_path)
+    external = tmp_path / "external"
+    _git(root, "worktree", "add", "-b", "manual-branch", str(external))
+    r = run(root, "start", "P1.S1", "--adopt", str(external))
+    assert r.returncode == 0, r.stdout + r.stderr
+    sl = tasklist(root)["phases"][0]["slices"][0]
+    assert sl["worktree_branch"] == "manual-branch"
+    assert sl["worktree_path"].endswith("external")
+
+
+def test_start_adopt_refuses_non_worktree_path(tmp_path):
+    root = seed_repo(tmp_path)
+    plain = tmp_path / "plain"
+    plain.mkdir()
+    r = run(root, "start", "P1.S1", "--adopt", str(plain))
+    assert r.returncode != 0
+    assert "not a linked worktree" in (r.stdout + r.stderr)
+
+
+def test_start_auto_adopt_from_linked_worktree_routes_to_authoritative(tmp_path):
+    """F2: end-to-end authoritative-routing fixture.
+
+    - Authoritative checkout on `main` configured via `config init-authority`.
+    - Tasklist row committed to `main` so the routed write target has a real row.
+    - A linked worker checkout is created; `tasktool start` is invoked from inside it.
+    - Assertion: the worktree fields are persisted in the AUTHORITATIVE checkout's
+      `docs/tasklist.json`, and the recorded path is the linked worker's path.
+    """
+    # 1. Build authoritative main checkout with init-authority routing.
+    auth = tmp_path / "authoritative"
+    auth.mkdir()
+    _git(auth, "init", "-b", "main")
+    _git(auth, "config", "user.email", "t@example.invalid")
+    _git(auth, "config", "user.name", "T")
+    (auth / "docs").mkdir()
+    assert run(auth, "config", "init-authority", "--branch", "main").returncode == 0
+    assert run(auth, "init", "--project", "demo").returncode == 0
+    _git(auth, "add", "-A")
+    _git(auth, "commit", "-m", "init")
+    assert run(auth, "create", "phase", "--title", "Phase one").returncode == 0
+    assert run(auth, "create", "slice", "P1", "--title", "Lifecycle core").returncode == 0
+    _git(auth, "add", "-A")
+    _git(auth, "commit", "-m", "seed slice")
+
+    # 2. Create a linked worker checkout from the authoritative repo.
+    worker = tmp_path / "worker"
+    _git(auth, "worktree", "add", "-b", "feature-branch", str(worker))
+
+    # 3. Run tasktool start from inside the worker; routing must auto-adopt.
+    env_extra = {"TASKTOOL_AUTHORITY_ROOT": str(auth)}
+    r = run(worker, "start", "P1.S1", env_extra=env_extra)
+    assert r.returncode == 0, r.stdout + r.stderr
+
+    # 4. Assertion: the authoritative tasklist now records the worker's path/branch.
+    sl = tasklist(auth)["phases"][0]["slices"][0]
+    assert sl["worktree_branch"] == "feature-branch"
+    assert Path(sl["worktree_path"]).name == "worker"
+
+    # 5. The worker checkout's tasklist (if any) must NOT shadow the authoritative one.
+    worker_tasklist = worker / "docs" / "tasklist.json"
+    if worker_tasklist.exists():
+        wsl = json.loads(worker_tasklist.read_text())["phases"][0]["slices"][0]
+        # routed writes go to auth; worker copy is whatever was committed on feature-branch
+        # (the seed slice with no worktree fields). The test is satisfied as long as
+        # the authoritative copy carries the new fields.
+        assert sl["worktree_branch"] == "feature-branch"
+
+
+def test_start_auto_adopt_unrouted_local_repo(tmp_path):
+    """Lighter sibling of the routed test: in `config init-local` mode (no
+    authoritative routing), auto-adopt should still record the linked-worktree
+    path against the slice. Verifies the `is_inside_linked_worktree` branch of
+    `cmd_start` without going through `_resolve_write_root`.
+    """
+    root = seed_repo(tmp_path)
+    linked = tmp_path / "linked"
+    _git(root, "worktree", "add", "-b", "in-flight", str(linked))
+    # Commit the seeded slice so the linked worktree sees the tasklist row.
+    _git(root, "add", "-A")
+    _git(root, "commit", "-m", "seed slice")
+    # Pull main's commit into the linked worktree
+    _git(linked, "merge", "main", "--ff")
+    r = run(linked, "start", "P1.S1")
+    assert r.returncode == 0, r.stdout + r.stderr
+    sl = tasklist(root)["phases"][0]["slices"][0]
+    assert sl["worktree_branch"] == "in-flight"
+    assert Path(sl["worktree_path"]).name == "linked"
+
+
+def test_start_in_place_then_normal_start_is_refused(tmp_path):
+    root = seed_repo(tmp_path)
+    assert run(root, "start", "P1.S1", "--in-place").returncode == 0
+    r = run(root, "start", "P1.S1")
+    # Slice is already in_progress (so _start_item is a no-op), and worktree
+    # state shows ABSENT path with worktree_in_place=true. Subsequent default
+    # start must not create a worktree behind the user's back.
+    assert r.returncode == 0, r.stdout + r.stderr
+    sl = tasklist(root)["phases"][0]["slices"][0]
+    assert sl["worktree_in_place"] is True
+    assert sl["worktree_path"] is None

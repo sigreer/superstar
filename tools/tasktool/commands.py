@@ -678,7 +678,33 @@ def cmd_start(
         return
     if in_place and adopt is not None:
         raise CommandError("--in-place and --adopt are mutually exclusive")
-    with _write_context(repo_root) as write_root:
+    # Auto-adopt: when invoked from inside a linked worktree of this repo, the
+    # tasklist write must hit the main checkout's docs/tasklist.json (in local
+    # mode) or be routed normally (in authoritative-checkout mode). Capture the
+    # linked-worktree path so we can record it as the adopted path below, then
+    # retarget `repo_root` to the main checkout for `_write_context`.
+    from tasktool.worktree_lifecycle import is_inside_linked_worktree
+    auto_adopt_path: Path | None = None
+    effective_root = repo_root
+    if adopt is None and not in_place and ad_hoc is None and is_inside_linked_worktree(repo_root):
+        auto_adopt_path = repo_root.resolve()
+        # In local mode, _resolve_write_root would write to the linked worktree's
+        # tasklist.json. Retarget to the main checkout (common-dir's parent) so
+        # the slice row in the canonical tasklist gets the worktree fields. In
+        # authoritative-checkout mode, _resolve_write_root already routes; do
+        # not retarget there.
+        try:
+            cfg = load_config(repo_root)
+            if cfg.tasklist.mutation_mode == "local":
+                common = _subprocess.run(
+                    ["git", "rev-parse", "--git-common-dir"], cwd=repo_root,
+                    text=True, capture_output=True, check=True,
+                ).stdout.strip()
+                main_checkout = Path(common).resolve().parent
+                effective_root = main_checkout
+        except (_subprocess.CalledProcessError, Exception):
+            pass
+    with _write_context(effective_root) as write_root:
         p = _load(write_root)
         qid, _container, item = _find_item(p, id)
         kind = parse_id(qid)[0]
@@ -690,10 +716,8 @@ def cmd_start(
             _apply_start_in_place(qid, item)
         else:
             adopt_path: Path | None = Path(adopt).expanduser().resolve() if adopt else None
-            # Auto-adopt: caller cwd is inside a linked worktree of this repo.
-            from tasktool.worktree_lifecycle import is_inside_linked_worktree
-            if adopt_path is None and is_inside_linked_worktree(repo_root):
-                adopt_path = repo_root.resolve()
+            if adopt_path is None and auto_adopt_path is not None:
+                adopt_path = auto_adopt_path
             if adopt_path is not None:
                 _apply_start_adopt(write_root, qid, item, adopt_path)
             else:
@@ -724,6 +748,9 @@ def _start_ad_hoc(*, repo_root: Path, slug: str) -> None:
 
 
 def _apply_start_default(write_root: Path, qid: str, item, *, resume: bool) -> None:
+    if item.worktree_in_place:
+        # In-place slice; default start is a no-op on disk.
+        return
     if not (write_root / ".git").exists():
         # No git repo (tests that pre-date P5.S1). Behave as pre-P5 start.
         return
