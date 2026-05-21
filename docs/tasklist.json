@@ -240,6 +240,22 @@
       "started": null,
       "status": "ready",
       "title": "Stamp installed shims and enforce version drift refusal"
+    },
+    {
+      "closed": null,
+      "created": "2026-05-21",
+      "id": "X17",
+      "notes": "",
+      "refs": [
+        "docs/specs/2026-05-21-X17-transactional-spec-plan-artifacts-design.md",
+        "docs/reviewer/x17-transactional-spec-plan-artifacts-design-spec",
+        "docs/plans/2026-05-21-X17-transactional-spec-plan-artifacts.md",
+        "docs/reviewer/x17-transactional-spec-plan-artifacts-plan",
+        "docs/handoffs/2026-05-21-X17-transactional-spec-plan-artifacts-prompt.md"
+      ],
+      "started": null,
+      "status": "ready",
+      "title": "Make spec and plan artifact handling transactional"
     }
   ],
   "last_reviewed": "2026-05-18",
