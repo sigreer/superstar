@@ -50,3 +50,102 @@ def worktree_name(id_value: str, title: str) -> str:
     if not title_part:
         return f"worktree-{id_part}"
     return f"worktree-{id_part}-{title_part}"
+
+import enum
+
+
+class RecordedState(enum.Enum):
+    """Outcome of comparing the recorded worktree_path/branch against live filesystem state.
+
+    Spec §5.3 idempotent-reuse table. CONSISTENT means `start` is a no-op;
+    every other variant requires explicit operator action (refused with a
+    targeted error message in `cmd_start`).
+    """
+    ABSENT = "absent"                       # No path recorded; start should create.
+    CONSISTENT = "consistent"               # Path is a linked worktree, branch matches.
+    BOTH_MISSING = "both_missing"           # Path gone, branch gone — repair.
+    PATH_MISSING = "path_missing"           # Path gone, branch still present — adopt/repair.
+    PATH_NOT_WORKTREE = "path_not_worktree" # Plain dir at recorded path — refuse.
+    BRANCH_MISMATCH = "branch_mismatch"     # Linked worktree, wrong branch — refuse.
+
+
+def _git(root: Path, *args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["git", *args], cwd=root, text=True, capture_output=True, check=check
+    )
+
+
+def linked_worktree_branch(authoritative_root: Path, candidate: Path) -> str | None:
+    """Return the branch checked out at `candidate` if it is a linked worktree of
+    `authoritative_root`, else None. Resolution uses `git worktree list --porcelain`."""
+    if not candidate.exists():
+        return None
+    candidate = candidate.resolve()
+    result = _git(authoritative_root, "worktree", "list", "--porcelain")
+    current_path: Path | None = None
+    current_branch: str = ""
+    for line in result.stdout.splitlines():
+        if line.startswith("worktree "):
+            if current_path is not None and current_path == candidate:
+                return current_branch or None
+            current_path = Path(line.removeprefix("worktree ")).resolve()
+            current_branch = ""
+        elif line.startswith("branch "):
+            current_branch = line.removeprefix("branch refs/heads/")
+    if current_path is not None and current_path == candidate:
+        return current_branch or None
+    return None
+
+
+def _branch_exists(root: Path, branch: str) -> bool:
+    res = _git(root, "show-ref", "--verify", "--quiet", f"refs/heads/{branch}", check=False)
+    return res.returncode == 0
+
+
+def classify_recorded_state(
+    authoritative_root: Path,
+    *,
+    recorded_path: Path | None,
+    recorded_branch: str | None,
+) -> RecordedState:
+    """Classify the live state of a recorded worktree against the filesystem.
+
+    Spec §5.3 idempotent-reuse table. `recorded_path`/`recorded_branch` must
+    either both be set or both be None.
+    """
+    if recorded_path is None and recorded_branch is None:
+        return RecordedState.ABSENT
+    assert recorded_path is not None and recorded_branch is not None
+    path_exists = recorded_path.exists()
+    branch_exists = _branch_exists(authoritative_root, recorded_branch)
+    if not path_exists and not branch_exists:
+        return RecordedState.BOTH_MISSING
+    if not path_exists and branch_exists:
+        return RecordedState.PATH_MISSING
+    # Path exists.
+    live_branch = linked_worktree_branch(authoritative_root, recorded_path)
+    if live_branch is None:
+        return RecordedState.PATH_NOT_WORKTREE
+    if live_branch == recorded_branch:
+        return RecordedState.CONSISTENT
+    return RecordedState.BRANCH_MISMATCH
+
+
+def is_inside_linked_worktree(cwd: Path) -> bool:
+    """True when `cwd` is inside a linked git worktree (not the main checkout).
+
+    Detected by `git rev-parse --git-dir` differing from `--git-common-dir`.
+    Returns False outside any git repository.
+    """
+    try:
+        gd = subprocess.run(
+            ["git", "rev-parse", "--git-dir"], cwd=cwd, text=True,
+            capture_output=True, check=True,
+        ).stdout.strip()
+        cd = subprocess.run(
+            ["git", "rev-parse", "--git-common-dir"], cwd=cwd, text=True,
+            capture_output=True, check=True,
+        ).stdout.strip()
+    except subprocess.CalledProcessError:
+        return False
+    return Path(gd).resolve() != Path(cd).resolve()
