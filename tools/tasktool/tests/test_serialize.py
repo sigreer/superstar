@@ -245,3 +245,41 @@ def test_cross_worktree_fields_round_trip():
     p = from_dict(raw)
     out = to_dict(p)
     assert out["cross_cutting"][0]["worktree_path"] == ".worktrees/worktree-x9-x"
+
+
+def test_serialize_audit_fields_round_trip(tmp_path):
+    from tasktool.model import Project, Phase, Slice
+    from tasktool.serialize import save_project, load_project
+    p = Project(project="demo")
+    ph = Phase(id="P5", title="t", created="2026-05-21")
+    s = Slice(id="S2", title="t", created="2026-05-21",
+              worktree_pruned_at="2026-05-22",
+              worktree_prune_pending=True,
+              worktree_prune_pending_at="2026-05-22")
+    ph.slices.append(s)
+    p.phases.append(ph)
+    path = tmp_path / "tasklist.json"
+    save_project(p, path)
+    p2 = load_project(path)
+    s2 = p2.phases[0].slices[0]
+    assert s2.worktree_pruned_at == "2026-05-22"
+    assert s2.worktree_prune_pending is True
+    assert s2.worktree_prune_pending_at == "2026-05-22"
+
+
+def test_serialize_cross_audit_fields_round_trip(tmp_path):
+    from tasktool.model import Project, CrossCutting
+    from tasktool.serialize import save_project, load_project
+    p = Project(project="demo")
+    c = CrossCutting(id="X1", title="t", created="2026-05-21",
+                     worktree_pruned_at="2026-05-22",
+                     worktree_prune_pending=True,
+                     worktree_prune_pending_at="2026-05-22")
+    p.cross_cutting.append(c)
+    path = tmp_path / "tasklist.json"
+    save_project(p, path)
+    p2 = load_project(path)
+    c2 = p2.cross_cutting[0]
+    assert c2.worktree_pruned_at == "2026-05-22"
+    assert c2.worktree_prune_pending is True
+    assert c2.worktree_prune_pending_at == "2026-05-22"
