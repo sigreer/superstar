@@ -306,7 +306,7 @@
         },
         {
           "blocked_on": null,
-          "closed": null,
+          "closed": "2026-05-21",
           "created": "2026-05-21",
           "depends_on": [
             "P5.S1",
@@ -324,7 +324,7 @@
           ],
           "reviewer_chain": "docs/reviewer/p5-s3-skill-rewrite-and-subagent-guard-P5-S3-post-slice",
           "started": "2026-05-21",
-          "status": "in_progress",
+          "status": "done",
           "tasks": [],
           "title": "Skill rewrite + subagent guard + workflow updates",
           "worktree_branch": "worktree-p5-s3-skill-rewrite-subagent-guard-workflow",
