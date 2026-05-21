@@ -1653,10 +1653,18 @@ with open(sys.argv[1], encoding="utf-8") as f:
 PY
 }
 
-# rsync a payload into both <cache>/<version>/ and <cache>/current/. The caller
-# supplies any --exclude args via the EXTRA_RSYNC_ARGS env var (space-sep).
+# rsync a payload into <dest>. The caller supplies any --exclude args via the
+# EXTRA_RSYNC_ARGS env var (space-sep). Honours DRY_RUN=1 by printing the
+# commands instead of executing them, matching the legacy publisher's `run`
+# wrapper semantics so `publish-to-local-*.sh --dry-run` remains side-effect
+# free.
 ss_publish_rsync_payload() {
   local source="$1" dest="$2"
+  if [[ "${DRY_RUN:-0}" == "1" ]]; then
+    printf '+ %q %q\n' mkdir -p "$dest"
+    printf '+ rsync -aL --delete %s %q %q\n' "${EXTRA_RSYNC_ARGS:-}" "$source/" "$dest/"
+    return 0
+  fi
   mkdir -p "$dest"
   # shellcheck disable=SC2086
   rsync -aL --delete ${EXTRA_RSYNC_ARGS:-} "$source/" "$dest/"
@@ -1802,7 +1810,7 @@ SCRIPT_LIB="$REPO_ROOT/scripts/lib/publish-common.sh"
 
 REQUIRED_PATHS="skills/using-superstar/SKILL.md:skills/project-setup/SKILL.md:skills/using-git-worktrees/SKILL.md:skills/external-review/scripts/external-reviewer.py:hooks/run-hook.cmd:hooks/agent-finished:tools/tasktool/notify.py:assets:VERSION"
 
-export EXTRA_RSYNC_ARGS="--exclude .git/ --exclude .pytest_cache/ --exclude __pycache__/ --exclude docs/reviewer/"
+export EXTRA_RSYNC_ARGS="--exclude .git/ --exclude .worktrees/ --exclude .agents/ --exclude .pytest_cache/ --exclude __pycache__/ --exclude docs/reviewer/"
 
 ss_publish_rsync_payload "$REPO_ROOT" "$CACHE_DIR"
 ss_publish_rsync_payload "$REPO_ROOT" "$CURRENT_DIR"
@@ -1819,9 +1827,25 @@ ss_publish_verify_version_file "$CACHE_DIR" "$CURRENT_DIR" "$VERSION"
 ss_publish_restamp_external_reviewer "$CURRENT_DIR"
 ```
 
-Cross-check the existing `--exclude` list in `scripts/publish-to-local-claude.sh:108-113` against what's set in `EXTRA_RSYNC_ARGS` above — if the live file has more excludes, append them to the env value verbatim.
+The exclude list above mirrors `scripts/publish-to-local-claude.sh:97-113` verbatim (`.git/`, `.worktrees/`, `.agents/`, `.pytest_cache/`, `__pycache__/`, `docs/reviewer/`). Before committing the converted publisher, run `grep -E '^\s*--exclude' scripts/publish-to-local-claude.sh` against the live file at conversion time and append any additional excludes that appear there to `EXTRA_RSYNC_ARGS` verbatim.
 
-- [ ] **Step 8.6: Run publish regression tests**
+- [ ] **Step 8.6: Verify `--dry-run` is side-effect free**
+
+Both publish scripts must still respect `--dry-run`. Run against a throwaway cache root and assert nothing is written:
+
+```bash
+tmp="$(mktemp -d)"
+bash scripts/publish-to-local-codex.sh --skip-codex-add --cache-root "$tmp/codex" --dry-run
+bash scripts/publish-to-local-claude.sh --skip-claude-update --cache-root "$tmp/claude" --dry-run
+# Confirm nothing was actually written:
+test ! -e "$tmp/codex" || { echo "FAIL: --dry-run wrote to codex cache"; exit 1; }
+test ! -e "$tmp/claude" || { echo "FAIL: --dry-run wrote to claude cache"; exit 1; }
+rm -rf "$tmp"
+```
+
+Expected: both scripts print the actions they would take; cache directories are not created.
+
+- [ ] **Step 8.7: Run publish regression tests**
 
 ```bash
 bash tests/codex-plugin-sync/test-publish-to-local-codex.sh
@@ -1830,7 +1854,7 @@ bash tests/claude-code/test-publish-to-local-claude.sh
 
 Expected: both pass, including the new VERSION assertions.
 
-- [ ] **Step 8.7: Real-repo smoke test**
+- [ ] **Step 8.8: Real-repo smoke test**
 
 ```bash
 bash scripts/publish-to-local-codex.sh
@@ -1840,7 +1864,7 @@ test -f ~/.codex/plugins/cache/superstar-dev/superstar/current/VERSION && \
 
 Expected: file exists; content matches `cat VERSION`.
 
-- [ ] **Step 8.8: Commit**
+- [ ] **Step 8.9: Commit**
 
 ```bash
 git add scripts/lib/publish-common.sh scripts/publish-to-local-codex.sh \
