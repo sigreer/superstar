@@ -31,6 +31,7 @@ from tasktool.artifacts import (
     git_status_map,
     normalize_artifact_path,
     referenced_path_is_unstaged,
+    referenced_paths_for_archives,
     referenced_paths_for_item,
     render_status_json,
     render_status_text,
@@ -825,6 +826,8 @@ def _artifact_status_problems(repo_root: Path, id: str | None) -> list[ArtifactP
                 )
 
     files = workflow_files(repo_root)
+    if id is None:
+        referenced.update(referenced_paths_for_archives(p, repo_root))
     tasklist_status = status_map.get("docs/tasklist.json")
     if files and tasklist_status and tasklist_status.has_unstaged_worktree_change:
         problems.append(

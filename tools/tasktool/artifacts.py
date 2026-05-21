@@ -181,6 +181,51 @@ def referenced_paths_for_item(item) -> set[str]:
     return paths
 
 
+def _iter_reference_items(project):
+    for phase in getattr(project, "phases", []) or []:
+        yield phase
+        for slc in getattr(phase, "slices", []) or []:
+            yield slc
+            for task in getattr(slc, "tasks", []) or []:
+                yield task
+    for item in getattr(project, "cross_cutting", []) or []:
+        yield item
+
+
+def _project_snapshot_from_archive_markdown(text: str):
+    from tasktool.serialize import loads_project
+
+    for match in re.finditer(r"```json\s*\n(.*?)\n```", text, re.DOTALL):
+        try:
+            return loads_project(match.group(1))
+        except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+            continue
+    return None
+
+
+def referenced_paths_for_archives(project, repo_root: Path) -> set[str]:
+    paths: set[str] = set()
+    for archived in getattr(project, "archived_phases", []) or []:
+        archived_path = getattr(archived, "archived_path", None)
+        if not archived_path or not is_workflow_artifact_path(archived_path):
+            continue
+        paths.add(archived_path)
+
+        path = repo_root / archived_path
+        if not path.is_file():
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeError):
+            continue
+        snapshot = _project_snapshot_from_archive_markdown(text)
+        if snapshot is None:
+            continue
+        for item in _iter_reference_items(snapshot):
+            paths.update(referenced_paths_for_item(item))
+    return paths
+
+
 def git_status_map(repo_root: Path) -> dict[str, GitPathStatus]:
     result = subprocess.run(
         ["git", "status", "--porcelain", "--untracked-files=all"],

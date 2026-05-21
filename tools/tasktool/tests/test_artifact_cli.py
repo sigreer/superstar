@@ -197,6 +197,57 @@ def test_artifact_status_reports_unreferenced_reviewer_directory(tmp_path: Path)
     assert "docs/reviewer/x1-plan" in r.stdout
 
 
+def test_artifact_status_accepts_archived_phase_and_snapshot_artifacts(tmp_path: Path) -> None:
+    root = _repo(tmp_path)
+    archive_rel = "docs/archived-tasks/P1-archived-work.md"
+    spec_rel = "docs/specs/2026-05-21-P1-archived-work-design.md"
+    chain_rel = "docs/reviewer/p1-archived-work-post-phase"
+    (root / archive_rel).parent.mkdir(parents=True)
+    (root / spec_rel).parent.mkdir(parents=True)
+    (root / chain_rel).mkdir(parents=True)
+    (root / spec_rel).write_text("# archived spec\n", encoding="utf-8")
+    (root / chain_rel / "chain.json").write_text('{"rounds":[]}\n', encoding="utf-8")
+    snapshot = {
+        "project": "demo",
+        "schema_version": 1,
+        "phases": [
+            {
+                "id": "P1",
+                "title": "Archived work",
+                "created": "2026-05-21",
+                "status": "done",
+                "spec_path": spec_rel,
+                "phase_reviewer_chain": chain_rel,
+                "slices": [],
+            }
+        ],
+        "cross_cutting": [],
+        "archived_phases": [],
+    }
+    (root / archive_rel).write_text(
+        "# P1 - Archived work\n\n```json\n"
+        + json.dumps(snapshot, indent=2, sort_keys=True)
+        + "\n```\n",
+        encoding="utf-8",
+    )
+    data = json.loads((root / "docs/tasklist.json").read_text(encoding="utf-8"))
+    data["archived_phases"] = [
+        {
+            "id": "P1",
+            "title": "Archived work",
+            "archived_path": archive_rel,
+            "archived_date": "2026-05-21",
+        }
+    ]
+    (root / "docs/tasklist.json").write_text(json.dumps(data), encoding="utf-8")
+    _git(root, "add", ".")
+    _git(root, "commit", "-m", "archive phase")
+
+    r = _tasktool(root, "artifact", "status", "--strict")
+
+    assert r.returncode == 0, r.stdout + r.stderr
+
+
 def test_artifact_status_accepts_registered_reviewer_directory_children(tmp_path: Path) -> None:
     root = _repo(tmp_path)
     chain = root / "docs" / "reviewer" / "x1-artifact-plan"
