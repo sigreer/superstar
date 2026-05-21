@@ -96,21 +96,13 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-SCRIPT = REPO_ROOT / "scripts" / "bump-version.sh"
-
-
-def _run(script_args: list[str], cwd: Path) -> subprocess.CompletedProcess:
-    return subprocess.run(
-        ["bash", str(SCRIPT), *script_args],
-        cwd=cwd,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+REAL_SCRIPT = REPO_ROOT / "scripts" / "bump-version.sh"
 
 
 def _seed_repo(tmp_path: Path, version: str) -> Path:
-    """Build a minimal fake repo with one JSON file, one plain VERSION, and a config."""
+    """Build an isolated fake repo so the script's own REPO_ROOT resolution
+    (`cd $SCRIPT_DIR/.. && pwd`) lands inside tmp_path and cannot mutate the
+    real checkout."""
     (tmp_path / "package.json").write_text(json.dumps({"version": version}, indent=2) + "\n")
     (tmp_path / "VERSION").write_text(version + "\n")
     config = {
@@ -122,15 +114,33 @@ def _seed_repo(tmp_path: Path, version: str) -> Path:
     }
     (tmp_path / ".version-bump.json").write_text(json.dumps(config, indent=2) + "\n")
     (tmp_path / "scripts").mkdir(exist_ok=True)
-    # Symlink the real bump-version.sh into the fake repo's scripts dir so relative
-    # REPO_ROOT resolution works.
-    (tmp_path / "scripts" / "bump-version.sh").symlink_to(SCRIPT)
+    # Symlink the real bump-version.sh into the fake repo's scripts dir. We
+    # MUST invoke this symlinked path (not REAL_SCRIPT) so the script's
+    # `dirname "$0"` -> `cd $SCRIPT_DIR/..` resolves to tmp_path. Invoking
+    # REAL_SCRIPT directly would resolve to the real superstar checkout and
+    # mutate its declared files.
+    fake_script = tmp_path / "scripts" / "bump-version.sh"
+    fake_script.symlink_to(REAL_SCRIPT)
     return tmp_path
+
+
+def _run(script_args: list[str], repo: Path) -> subprocess.CompletedProcess:
+    """Invoke the symlinked bump-version.sh inside `repo` so REPO_ROOT
+    resolution stays inside the fake repo."""
+    fake_script = repo / "scripts" / "bump-version.sh"
+    assert fake_script.exists(), "fake script symlink missing — call _seed_repo first"
+    return subprocess.run(
+        ["bash", str(fake_script), *script_args],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
 
 
 def test_check_lists_plain_version(tmp_path: Path) -> None:
     repo = _seed_repo(tmp_path, "1.2.3")
-    result = _run(["--check"], cwd=repo)
+    result = _run(["--check"], repo)
     assert result.returncode == 0, result.stderr
     assert "VERSION" in result.stdout
     assert "1.2.3" in result.stdout
@@ -138,7 +148,7 @@ def test_check_lists_plain_version(tmp_path: Path) -> None:
 
 def test_bump_writes_plain_version(tmp_path: Path) -> None:
     repo = _seed_repo(tmp_path, "1.2.3")
-    result = _run(["1.2.4"], cwd=repo)
+    result = _run(["1.2.4"], repo)
     assert result.returncode == 0, result.stderr
     assert (repo / "VERSION").read_text().strip() == "1.2.4"
     assert json.loads((repo / "package.json").read_text())["version"] == "1.2.4"
@@ -147,7 +157,7 @@ def test_bump_writes_plain_version(tmp_path: Path) -> None:
 def test_check_detects_drift_between_plain_and_json(tmp_path: Path) -> None:
     repo = _seed_repo(tmp_path, "1.2.3")
     (repo / "VERSION").write_text("1.2.4\n")
-    result = _run(["--check"], cwd=repo)
+    result = _run(["--check"], repo)
     assert result.returncode != 0
     assert "DRIFT" in result.stdout
 ```
@@ -762,7 +772,21 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-SOURCE_ROOT="${EXTERNAL_REVIEWER_SOURCE_ROOT:-$PLUGIN_ROOT}"
+SOURCE_ROOT="${EXTERNAL_REVIEWER_SOURCE_ROOT:-}"
+if [[ -z "$SOURCE_ROOT" ]]; then
+  SOURCE_ROOT="$PLUGIN_ROOT"
+  # When invoked from a versioned plugin cache, prefer the stable `current/`
+  # entrypoint so the stamped shim survives cache version bumps. Mirrors
+  # skills/external-review/install.sh.
+  case "$PLUGIN_ROOT" in
+    */plugins/cache/*/*/*)
+      STABLE_ROOT="$(dirname "$PLUGIN_ROOT")/current"
+      if [[ -f "$STABLE_ROOT/skills/project-setup/scripts/reviewer-agent" ]]; then
+        SOURCE_ROOT="$STABLE_ROOT"
+      fi
+      ;;
+  esac
+fi
 SOURCE_SCRIPT="$SOURCE_ROOT/skills/project-setup/scripts/reviewer-agent"
 TARGET_DIR="${EXTERNAL_REVIEWER_BIN:-${HOME}/.local/bin}"
 TARGET="$TARGET_DIR/reviewer-agent"
@@ -1071,17 +1095,38 @@ git commit -m "X16.T5: stamp tasktool shim with version header + drift check"
 
 - [ ] **Step 6.1: Write the failing migration tests**
 
-Open `tools/tasktool/tests/test_pre_commit_hook.py`. Append three new test functions (assume helpers `_install_hook(...)` and the test repo fixture already exist; adapt names to match the file's actual conventions):
+The existing `tools/tasktool/tests/test_pre_commit_hook.py` uses module-level constants `REPO`, `INSTALL`, `PKG_DIR` (see lines 5–8) and the `_seed_repo(tmp_path)` helper that returns `(repo, env)` (line 20). Tests follow the `test_NAME(tmp_path)` signature. **The installer reads `VERSION` from the real Superstar source root (`REPO`), not the consumer repo** — so the tests must assert against the real source's current version, not a fabricated one.
+
+Add a helper at the top of the file (next to `_tasktool`):
 
 ```python
-def test_hook_install_writes_stamped_header(test_repo, version="1.0.0"):
-    # Seed VERSION at the repo's resolved source root.
-    (test_repo / "VERSION").write_text(version + "\n")
-    _install_hook(test_repo)
-    hook = test_repo / ".git" / "hooks" / "pre-commit"
+def _read_source_version() -> str:
+    """Return the Superstar source VERSION (single line)."""
+    return (REPO / "VERSION").read_text().splitlines()[0].strip()
+
+
+def _install_hook_only(repo: Path, *, force: bool = False, check: bool = True) -> subprocess.CompletedProcess:
+    """Direct install.sh --hook invocation without going through _seed_repo,
+    used for tests that pre-place a hook file."""
+    args = ["bash", str(INSTALL), "--hook"]
+    if force:
+        args.append("--force")
+    result = subprocess.run(args, cwd=repo, capture_output=True, text=True, check=False)
+    if check:
+        assert result.returncode == 0, result.stdout + result.stderr
+    return result
+```
+
+Then add these new tests at the end of the file:
+
+```python
+def test_hook_install_writes_stamped_header(tmp_path):
+    repo, _env = _seed_repo(tmp_path)  # _seed_repo already ran install.sh --hook
+    hook = repo / ".git" / "hooks" / "pre-commit"
     text = hook.read_text()
+    src_version = _read_source_version()
     assert "superstar-hook-name: tasktool-pre-commit" in text
-    assert f"superstar-hook-version: {version}" in text
+    assert f"superstar-hook-version: {src_version}" in text
     assert "superstar-hook-source-root:" in text
     assert "superstar-hook-installer: tools/tasktool/install.sh --hook" in text
     assert "superstar-hook-generated-at:" in text
@@ -1089,45 +1134,38 @@ def test_hook_install_writes_stamped_header(test_repo, version="1.0.0"):
     assert "tasktool-pre-commit-hook" in text
 
 
-def test_hook_install_accepts_legacy_marker_without_force(test_repo):
-    (test_repo / "VERSION").write_text("1.0.0\n")
-    hook = test_repo / ".git" / "hooks" / "pre-commit"
+def test_hook_install_accepts_legacy_marker_without_force(tmp_path):
+    repo = tmp_path / "r"
+    repo.mkdir()
+    subprocess.run(["git", "-C", str(repo), "init", "-q", "-b", "main"], check=True)
+    hook = repo / ".git" / "hooks" / "pre-commit"
     hook.parent.mkdir(parents=True, exist_ok=True)
     # Pre-place a legacy-style hook (magic comment only, no superstar-hook header).
     hook.write_text("#!/usr/bin/env sh\n# tasktool-pre-commit-hook v1\nexit 0\n")
     hook.chmod(0o755)
     # Reinstall without --force should succeed and upgrade the header.
-    _install_hook(test_repo)
+    result = _install_hook_only(repo, force=False)
+    assert result.returncode == 0
     text = hook.read_text()
     assert "superstar-hook-name: tasktool-pre-commit" in text
+    src_version = _read_source_version()
+    assert f"superstar-hook-version: {src_version}" in text
 
 
-def test_hook_install_refuses_non_tasktool_hook_without_force(test_repo):
-    (test_repo / "VERSION").write_text("1.0.0\n")
-    hook = test_repo / ".git" / "hooks" / "pre-commit"
+def test_hook_install_refuses_non_tasktool_hook_without_force(tmp_path):
+    repo = tmp_path / "r"
+    repo.mkdir()
+    subprocess.run(["git", "-C", str(repo), "init", "-q", "-b", "main"], check=True)
+    hook = repo / ".git" / "hooks" / "pre-commit"
     hook.parent.mkdir(parents=True, exist_ok=True)
     hook.write_text("#!/usr/bin/env sh\n# someone-elses-hook\nexit 0\n")
     hook.chmod(0o755)
-    result = _install_hook(test_repo, check=False)
+    result = _install_hook_only(repo, force=False, check=False)
     assert result.returncode != 0
     assert "not a tasktool hook" in result.stderr
 ```
 
-If `_install_hook` doesn't already exist or accept `check=False`, refactor or add a small adapter at the top of the test file:
-
-```python
-def _install_hook(repo: Path, *, check: bool = True) -> subprocess.CompletedProcess:
-    result = subprocess.run(
-        ["bash", str(REPO_ROOT / "tools" / "tasktool" / "install.sh"), "--hook"],
-        cwd=repo,
-        capture_output=True, text=True, check=False,
-    )
-    if check:
-        result.check_returncode()
-    return result
-```
-
-Also keep the existing idempotency test that does two consecutive non-force installs — it should continue to pass.
+The existing `test_hook_install_is_idempotent` (currently around line 131 in the file) must continue to pass — it does two consecutive `--hook` installs and asserts both succeed without `--force`. After Task 6's installer changes, the second invocation should still see the new `superstar-hook-name` marker and accept itself as "ours".
 
 - [ ] **Step 6.2: Run tests to verify they fail**
 
@@ -1469,7 +1507,9 @@ Open `tools/tasktool/cli.py`. Add an import near the top of the file (next to th
 from tasktool import hook_handshake
 ```
 
-Then modify `main()` to call the check immediately after `parser.parse_args`. Find this block (~ line 211):
+Then modify `main()` to call the check **before** `parser.parse_args(argv)`. This matters because argparse's `--help` action raises `SystemExit` during `parse_args`, which would bypass any check placed after. Drift must block every tasktool invocation — including `--help` — until the operator re-runs the installer.
+
+Find this block (~ line 211):
 
 ```python
 def main(argv: list[str]) -> int:
@@ -1482,12 +1522,12 @@ Replace with:
 
 ```python
 def main(argv: list[str]) -> int:
-    parser = _build_parser()
-    args = parser.parse_args(argv)
     hook_drift_msg = hook_handshake.check_pre_commit_hook()
     if hook_drift_msg is not None:
         print(hook_drift_msg, file=sys.stderr)
         return 1
+    parser = _build_parser()
+    args = parser.parse_args(argv)
     root = _resolve_project_root(args)
 ```
 
@@ -1587,23 +1627,23 @@ Same expectation.
 
 - [ ] **Step 8.3: Extract `publish-common.sh`**
 
-Create `scripts/lib/publish-common.sh`. Move the bulk of the shared logic from `publish-to-local-codex.sh` and `publish-to-local-claude.sh` into shell functions. Concretely:
+The Codex and Claude publishers differ in three concrete ways that the shared library must parameterize:
+
+1. **Source layout.** Codex rsyncs `plugins/superstar/` (a subdirectory); Claude rsyncs `$REPO_ROOT/` (the whole repo, with excludes). The caller passes the source root.
+2. **Manifest subpath.** Codex uses `.codex-plugin/plugin.json`; Claude uses `.claude-plugin/plugin.json`. Passed as an arg.
+3. **Required payload list.** Identical except Claude requires `skills/external-review/scripts/external-reviewer.py` to exist in the cache (because the cache *is* the repo for Claude). Passed as a colon-separated list.
+4. **Hook command rewriting.** Both publishers rewrite the same two `${CLAUDE_PLUGIN_ROOT...}/hooks/run-hook.cmd` patterns. Identical logic.
+5. **VERSION file.** Codex needs the `plugins/superstar/VERSION` symlink (added in T1) so `rsync -aL` materializes a real file at `<cache>/VERSION`. Claude rsyncs the repo root so VERSION is already there. Both code paths reach the same end state: `<cache>/VERSION` and `<cache>/current/VERSION` are real files matching `$REPO_ROOT/VERSION`.
+
+Create `scripts/lib/publish-common.sh`:
 
 ```bash
-# scripts/lib/publish-common.sh — shared logic for publish-to-local-* scripts
-#
-# Functions defined:
-#   ss_publish_resolve_version <manifest-path>     prints version to stdout
-#   ss_publish_rsync_payload <source> <dest>       rsync -aL --delete
-#   ss_publish_verify_payload <cache-root> <current-root> <plugin> <expected-version>
-#   ss_publish_rewrite_hooks <cache-root> <current-root>
-#   ss_publish_verify_version_file <cache-root> <current-root> <expected-version>
-#   ss_publish_restamp_external_reviewer <current-root>
-#
-# Each function exits non-zero on its own error; the caller can `set -e`.
+# scripts/lib/publish-common.sh — shared logic for publish-to-local-* scripts.
+# All functions return non-zero on error; callers can `set -e`.
 
 set -euo pipefail
 
+# Resolve a "version" field from a JSON manifest.
 ss_publish_resolve_version() {
   local manifest="$1"
   python3 - "$manifest" <<'PY'
@@ -1613,12 +1653,17 @@ with open(sys.argv[1], encoding="utf-8") as f:
 PY
 }
 
+# rsync a payload into both <cache>/<version>/ and <cache>/current/. The caller
+# supplies any --exclude args via the EXTRA_RSYNC_ARGS env var (space-sep).
 ss_publish_rsync_payload() {
   local source="$1" dest="$2"
   mkdir -p "$dest"
-  rsync -aL --delete "$source/" "$dest/"
+  # shellcheck disable=SC2086
+  rsync -aL --delete ${EXTRA_RSYNC_ARGS:-} "$source/" "$dest/"
 }
 
+# Verify <cache>/VERSION and <cache>/current/VERSION are materialized real files
+# matching the expected value. Common across providers.
 ss_publish_verify_version_file() {
   local cache="$1" current="$2" expected="$3"
   for root in "$cache" "$current"; do
@@ -1636,6 +1681,10 @@ ss_publish_verify_version_file() {
   done
 }
 
+# Rewrite hook command-paths in <cache>/hooks/hooks.json and
+# <current>/hooks/hooks.json. Handles BOTH "${CLAUDE_PLUGIN_ROOT:-.}/..."
+# and "${CLAUDE_PLUGIN_ROOT}/..." variants so the Claude publisher's behaviour
+# is preserved.
 ss_publish_rewrite_hooks() {
   local cache="$1" current="$2"
   python3 - "$cache" "$current" <<'PY'
@@ -1648,58 +1697,65 @@ cache = Path(sys.argv[1]).resolve()
 current = Path(sys.argv[2]).resolve()
 hook_runner = shlex.quote(str(current / "hooks" / "run-hook.cmd"))
 
+PATTERNS = (
+    '"${CLAUDE_PLUGIN_ROOT:-.}/hooks/run-hook.cmd"',
+    '"${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd"',
+)
+
 for root in (cache, current):
     hooks_json = root / "hooks" / "hooks.json"
+    if not hooks_json.exists():
+        continue
     config = json.loads(hooks_json.read_text(encoding="utf-8"))
     for event_entries in config.get("hooks", {}).values():
         for entry in event_entries:
             for hook in entry.get("hooks", []):
                 command = hook.get("command")
                 if isinstance(command, str):
-                    hook["command"] = command.replace(
-                        '"${CLAUDE_PLUGIN_ROOT:-.}/hooks/run-hook.cmd"',
-                        hook_runner,
-                    )
+                    for pattern in PATTERNS:
+                        command = command.replace(pattern, hook_runner)
+                    hook["command"] = command
     hooks_json.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
 PY
 }
 
+# Verify cache + current have the expected manifest and required payload paths.
+# manifest_subpath is e.g. ".codex-plugin/plugin.json" or ".claude-plugin/plugin.json".
+# required_paths is a colon-separated list of paths relative to each root.
 ss_publish_verify_payload() {
   local cache="$1" current="$2" plugin="$3" expected="$4"
-  python3 - "$cache" "$current" "$plugin" "$expected" <<'PY'
+  local manifest_subpath="$5" required_paths="$6"
+  python3 - "$cache" "$current" "$plugin" "$expected" "$manifest_subpath" "$required_paths" <<'PY'
 import json
 import sys
 from pathlib import Path
 
 cache, current = Path(sys.argv[1]), Path(sys.argv[2])
 plugin, expected = sys.argv[3], sys.argv[4]
+manifest_subpath = sys.argv[5]
+required = sys.argv[6].split(":")
 
 for root in (cache, current):
-    manifest = root / ".codex-plugin" / "plugin.json"
+    manifest = root / manifest_subpath
     data = json.loads(manifest.read_text(encoding="utf-8"))
     if data.get("name") != plugin:
         raise SystemExit(f"{root} manifest name mismatch: {data.get('name')!r} != {plugin!r}")
     if data.get("version") != expected:
         raise SystemExit(f"{root} manifest version mismatch: {data.get('version')!r} != {expected!r}")
-    for rel in (
-        "skills/using-superstar/SKILL.md",
-        "skills/project-setup/SKILL.md",
-        "skills/using-git-worktrees/SKILL.md",
-        "hooks/run-hook.cmd",
-        "hooks/agent-finished",
-        "tools/tasktool/notify.py",
-        "assets",
-        "VERSION",
-    ):
+    for rel in required:
+        if not rel:
+            continue
         if not (root / rel).exists():
             raise SystemExit(f"{root} missing required payload: {rel}")
     for rel in ("skills", "hooks", "tools", "assets"):
-        if (root / rel).is_symlink():
+        if (root / rel).exists() and (root / rel).is_symlink():
             raise SystemExit(f"{root} {rel} payload is still a symlink; expected materialized path")
 print(f"PASS: {plugin} cache + current materialized")
 PY
 }
 
+# Restamp the external-reviewer shim against the just-materialised current/.
+# This preserves X14's "external-reviewer survives dev-checkout moves" property.
 ss_publish_restamp_external_reviewer() {
   local current="$1"
   EXTERNAL_REVIEWER_SOURCE_ROOT="$current" \
@@ -1709,12 +1765,14 @@ ss_publish_restamp_external_reviewer() {
 
 - [ ] **Step 8.4: Convert `publish-to-local-codex.sh` to use `publish-common.sh`**
 
-Replace the rsync/verify/rewrite/restamp blocks at the end of `scripts/publish-to-local-codex.sh` with:
+Source the lib early, set the codex-specific params, and replace the inline blocks at the end. The Codex publisher rsyncs `plugins/superstar/` so its required-payload list does **not** include `skills/external-review/scripts/external-reviewer.py` (that lives outside the plugin payload).
 
 ```bash
 SCRIPT_LIB="$REPO_ROOT/scripts/lib/publish-common.sh"
 # shellcheck source=scripts/lib/publish-common.sh
 . "$SCRIPT_LIB"
+
+REQUIRED_PATHS="skills/using-superstar/SKILL.md:skills/project-setup/SKILL.md:skills/using-git-worktrees/SKILL.md:hooks/run-hook.cmd:hooks/agent-finished:tools/tasktool/notify.py:assets:VERSION"
 
 ss_publish_rsync_payload "$SOURCE" "$CACHE_DIR"
 ss_publish_rsync_payload "$SOURCE" "$CURRENT_DIR"
@@ -1725,7 +1783,8 @@ if [[ "$DRY_RUN" -eq 1 ]]; then
 fi
 
 ss_publish_rewrite_hooks "$CACHE_DIR" "$CURRENT_DIR"
-ss_publish_verify_payload "$CACHE_DIR" "$CURRENT_DIR" "$PLUGIN" "$VERSION"
+ss_publish_verify_payload "$CACHE_DIR" "$CURRENT_DIR" "$PLUGIN" "$VERSION" \
+    ".codex-plugin/plugin.json" "$REQUIRED_PATHS"
 ss_publish_verify_version_file "$CACHE_DIR" "$CURRENT_DIR" "$VERSION"
 ss_publish_restamp_external_reviewer "$CURRENT_DIR"
 ```
@@ -1734,7 +1793,33 @@ Keep the argument-parsing prelude and the dry-run path checks above this block.
 
 - [ ] **Step 8.5: Convert `publish-to-local-claude.sh` to use `publish-common.sh`**
 
-Same treatment. (The exact original layout differs slightly; mirror Step 8.4's changes.)
+Claude's rsync source is `$REPO_ROOT/` with existing `--exclude` args; required-payload list adds `skills/external-review/scripts/external-reviewer.py` (which lives at this path in the dev tree the Claude cache mirrors). Set `EXTRA_RSYNC_ARGS` to carry over the existing excludes.
+
+```bash
+SCRIPT_LIB="$REPO_ROOT/scripts/lib/publish-common.sh"
+# shellcheck source=scripts/lib/publish-common.sh
+. "$SCRIPT_LIB"
+
+REQUIRED_PATHS="skills/using-superstar/SKILL.md:skills/project-setup/SKILL.md:skills/using-git-worktrees/SKILL.md:skills/external-review/scripts/external-reviewer.py:hooks/run-hook.cmd:hooks/agent-finished:tools/tasktool/notify.py:assets:VERSION"
+
+export EXTRA_RSYNC_ARGS="--exclude .git/ --exclude .pytest_cache/ --exclude __pycache__/ --exclude docs/reviewer/"
+
+ss_publish_rsync_payload "$REPO_ROOT" "$CACHE_DIR"
+ss_publish_rsync_payload "$REPO_ROOT" "$CURRENT_DIR"
+
+if [[ "$DRY_RUN" -eq 1 ]]; then
+  echo "Dry run complete."
+  exit 0
+fi
+
+ss_publish_rewrite_hooks "$CACHE_DIR" "$CURRENT_DIR"
+ss_publish_verify_payload "$CACHE_DIR" "$CURRENT_DIR" "$PLUGIN" "$VERSION" \
+    ".claude-plugin/plugin.json" "$REQUIRED_PATHS"
+ss_publish_verify_version_file "$CACHE_DIR" "$CURRENT_DIR" "$VERSION"
+ss_publish_restamp_external_reviewer "$CURRENT_DIR"
+```
+
+Cross-check the existing `--exclude` list in `scripts/publish-to-local-claude.sh:108-113` against what's set in `EXTRA_RSYNC_ARGS` above — if the live file has more excludes, append them to the env value verbatim.
 
 - [ ] **Step 8.6: Run publish regression tests**
 
@@ -1976,14 +2061,17 @@ PARSE_HEADER() {
 
 run_check() {
   local exit_code=0
-  local source_version
+  local dev_version
   if [[ -r "$REPO_ROOT/VERSION" ]]; then
-    source_version="$(head -n1 "$REPO_ROOT/VERSION" | tr -d '[:space:]')"
+    dev_version="$(head -n1 "$REPO_ROOT/VERSION" | tr -d '[:space:]')"
   else
     echo "ERROR: $REPO_ROOT/VERSION not readable" >&2
     return 1
   fi
-  echo "Source VERSION: $source_version ($REPO_ROOT/VERSION)"
+  echo "Dev-checkout VERSION: $dev_version ($REPO_ROOT/VERSION)"
+  echo "(Each shim is compared against its OWN stamped source-root's VERSION,"
+  echo " not the dev checkout — external-reviewer may legitimately be stamped"
+  echo " against a plugin-cache current/ instead.)"
   echo ""
 
   echo "Global shims:"
@@ -2014,16 +2102,26 @@ run_check() {
       exit_code=1
       continue
     fi
-    if [[ "$shim_version" != "$source_version" ]]; then
+    # Compare against the shim's OWN stamped source-root, not the dev checkout.
+    local shim_src_vfile="$expanded_root/VERSION"
+    if [[ ! -r "$shim_src_vfile" ]]; then
+      printf "    stamped source-root: %s\n" "$expanded_root"
+      printf "    status: MISSING_SOURCE (source-root has no readable VERSION)\n"
+      exit_code=1
+      continue
+    fi
+    local shim_src_version
+    shim_src_version="$(head -n1 "$shim_src_vfile" | tr -d '[:space:]')"
+    if [[ "$shim_version" != "$shim_src_version" ]]; then
       printf "    stamped version: %s\n" "$shim_version"
       printf "    source root: %s\n" "$expanded_root"
-      printf "    status: DRIFT (source is %s)\n" "$source_version"
+      printf "    status: DRIFT (source-root has %s)\n" "$shim_src_version"
       exit_code=1
       continue
     fi
     source_roots+=("$expanded_root")
     printf "    stamped version: %s\n" "$shim_version"
-    printf "    source root: %s\n" "$expanded_root"
+    printf "    source root: %s (VERSION=%s)\n" "$expanded_root" "$shim_src_version"
     printf "    status: OK\n"
   done
 
@@ -2032,16 +2130,22 @@ run_check() {
   for entry in "codex:$CODEX_CURRENT" "claude:$CLAUDE_CURRENT"; do
     local label="${entry%%:*}"
     local dir="${entry#*:}"
+    if [[ ! -d "$dir" ]]; then
+      # Not failing — the user may not have published this cache yet.
+      printf "  %-10s %s     status: NOT_DEPLOYED (informational)\n" "$label" "$dir"
+      continue
+    fi
     local vf="$dir/VERSION"
     if [[ ! -r "$vf" ]]; then
-      printf "  %-10s %s     status: MISSING_CACHE_VERSION\n" "$label" "$dir"
+      printf "  %-10s %s     status: MISSING_CACHE_VERSION (cache present but VERSION absent)\n" "$label" "$dir"
       exit_code=1
       continue
     fi
     local v
     v="$(head -n1 "$vf" | tr -d '[:space:]')"
-    if [[ "$v" != "$source_version" ]]; then
-      printf "  %-10s %s     version: %s     status: DRIFT (source is %s)\n" "$label" "$dir" "$v" "$source_version"
+    # Plugin caches are deploy outputs of the dev checkout; they should match dev_version.
+    if [[ "$v" != "$dev_version" ]]; then
+      printf "  %-10s %s     version: %s     status: DRIFT (dev is %s)\n" "$label" "$dir" "$v" "$dev_version"
       exit_code=1
     else
       printf "  %-10s %s     version: %s     status: OK\n" "$label" "$dir" "$v"
