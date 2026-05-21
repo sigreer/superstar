@@ -17,6 +17,12 @@
       "archived_path": "docs/archived-tasks/P3-phase-planning-workflow.md",
       "id": "P3",
       "title": "Phase planning workflow"
+    },
+    {
+      "archived_date": "2026-05-20",
+      "archived_path": "docs/archived-tasks/P1-external-reviewer-work-historical.md",
+      "id": "P1",
+      "title": "External-reviewer work (historical)"
     }
   ],
   "cross_cutting": [
@@ -224,22 +230,7 @@
   ],
   "last_reviewed": "2026-05-18",
   "north_star": "",
-  "phases": [
-    {
-      "closed": "2026-05-17",
-      "created": "2026-05-17",
-      "id": "P1",
-      "notes": "",
-      "phase_reviewer_chain": null,
-      "plan_path": null,
-      "planning_path": null,
-      "slices": [],
-      "spec_path": null,
-      "started": null,
-      "status": "done",
-      "title": "External-reviewer work (historical)"
-    }
-  ],
+  "phases": [],
   "project": "superstar",
   "schema_version": 1
 }
