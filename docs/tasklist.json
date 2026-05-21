@@ -261,7 +261,7 @@
       "slices": [
         {
           "blocked_on": null,
-          "closed": null,
+          "closed": "2026-05-21",
           "created": "2026-05-21",
           "depends_on": [],
           "id": "S1",
@@ -273,9 +273,9 @@
             "docs/plans/2026-05-21-P5-S1-tasktool-worktree-lifecycle-core.md",
             "docs/reviewer/p5-s1-tasktool-worktree-lifecycle-core-plan"
           ],
-          "reviewer_chain": "docs/reviewer/p5-s1-tasktool-worktree-lifecycle-core-plan",
-          "started": null,
-          "status": "ready",
+          "reviewer_chain": "docs/reviewer/p5-s1-tasktool-worktree-lifecycle-core-P5-S1-post-slice",
+          "started": "2026-05-21",
+          "status": "done",
           "tasks": [],
           "title": "Tasktool worktree lifecycle core"
         },
