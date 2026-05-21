@@ -1,0 +1,123 @@
+{
+  "schema_version": 1,
+  "chain": "p5-s2-prune-and-repair-P5-S2-post-slice",
+  "kind": "post-slice",
+  "target": "docs/plans/2026-05-21-P5-S2-prune-and-repair.md",
+  "work_id": "P5.S2",
+  "legacy_migrated": false,
+  "rounds": [
+    {
+      "round": 1,
+      "reviewers": [
+        {
+          "role": "primary",
+          "sweep_group": null,
+          "parent_round": 1,
+          "request": "r1-2026-05-21T1757-primary-request.md",
+          "response": "r1-2026-05-21T1757-primary-response.md",
+          "verdict": "revise",
+          "verdict_valid": true,
+          "returncode": 0,
+          "status": "ok",
+          "provider": "codex",
+          "caller_provider": "claude",
+          "model": null,
+          "sandbox": {
+            "repo_root": "/home/simon/Dev/sigreer/skills/superstar/.claude/worktrees/P5.S2-prune-and-repair",
+            "scratch_dir": "/tmp/superstar-reviewer-p5-s2-prune-and-repair-P5-S2-post-slice-r1-primary-8jvn8ws_",
+            "response_dir": "docs/reviewer/p5-s2-prune-and-repair-P5-S2-post-slice/.reviewer-output/r1-primary",
+            "mode": "workspace-write-with-read-access"
+          },
+          "started_at": "2026-05-21T16:57:38.858Z",
+          "finished_at": "2026-05-21T17:01:34.557Z",
+          "duration_ms": 235698,
+          "estimated_usage": {
+            "formula": "ceil(chars / 4)",
+            "prompt_chars": 60681,
+            "response_chars": 3516,
+            "estimated_input_tokens": 15171,
+            "estimated_output_tokens": 879,
+            "estimated_total_tokens": 16050
+          },
+          "exact_usage": null,
+          "usage_capture_status": "estimated_only",
+          "usage_capture_error": null
+        },
+        {
+          "role": "sweep",
+          "sweep_group": 1,
+          "parent_round": 1,
+          "request": "r1-2026-05-21T1757-sweep1-request.md",
+          "response": "r1-2026-05-21T1757-sweep1-response.md",
+          "verdict": "revise",
+          "verdict_valid": true,
+          "returncode": 0,
+          "status": "ok",
+          "provider": "codex",
+          "caller_provider": "claude",
+          "model": null,
+          "sandbox": {
+            "repo_root": "/home/simon/Dev/sigreer/skills/superstar/.claude/worktrees/P5.S2-prune-and-repair",
+            "scratch_dir": "/tmp/superstar-reviewer-p5-s2-prune-and-repair-P5-S2-post-slice-r1-sweep1-_bk2xwg6",
+            "response_dir": "docs/reviewer/p5-s2-prune-and-repair-P5-S2-post-slice/.reviewer-output/r1-sweep1",
+            "mode": "workspace-write-with-read-access"
+          },
+          "started_at": "2026-05-21T17:01:34.560Z",
+          "finished_at": "2026-05-21T17:04:03.961Z",
+          "duration_ms": 149400,
+          "estimated_usage": {
+            "formula": "ceil(chars / 4)",
+            "prompt_chars": 60681,
+            "response_chars": 3256,
+            "estimated_input_tokens": 15171,
+            "estimated_output_tokens": 814,
+            "estimated_total_tokens": 15985
+          },
+          "exact_usage": null,
+          "usage_capture_status": "estimated_only",
+          "usage_capture_error": null
+        }
+      ],
+      "status": "ok",
+      "returncode": 0,
+      "started_at": "2026-05-21T16:57:38.858Z",
+      "finished_at": "2026-05-21T17:01:34.557Z",
+      "duration_ms": 235698,
+      "provider": "codex",
+      "caller_provider": "claude",
+      "model": null,
+      "estimated_usage": {
+        "formula": "ceil(chars / 4)",
+        "prompt_chars": 60681,
+        "response_chars": 3516,
+        "estimated_input_tokens": 15171,
+        "estimated_output_tokens": 879,
+        "estimated_total_tokens": 16050
+      },
+      "exact_usage": null,
+      "usage_capture_status": "estimated_only",
+      "usage_capture_error": null,
+      "merged_verdict": "revise",
+      "merged_findings": "r1-merged-findings.md",
+      "request": "r1-2026-05-21T1757-primary-request.md",
+      "response": "r1-2026-05-21T1757-primary-response.md",
+      "resolution": null,
+      "resolution_parse_status": null,
+      "resolution_waiver": false,
+      "head_sha_at_request": "accdaa6ac64728678da76f8caa8bb52c49d0f745",
+      "head_sha_after_round": "accdaa6ac64728678da76f8caa8bb52c49d0f745",
+      "worktree_dirty_at_request": true,
+      "verdict": "revise",
+      "verdict_valid": true,
+      "findings_count": 2,
+      "blocking_findings_count": 1,
+      "base_ref": null,
+      "base_ref_source": null,
+      "diff_included": false
+    }
+  ],
+  "sweep_checkpoints": {
+    "first-round": "completed",
+    "final-ready": "pending"
+  }
+}
