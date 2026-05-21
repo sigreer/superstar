@@ -87,7 +87,7 @@ fi
 
 command -v rsync >/dev/null || { echo "ERROR: rsync not found" >&2; exit 1; }
 
-REQUIRED_PATHS="skills/using-superstar/SKILL.md:skills/project-setup/SKILL.md:skills/using-git-worktrees/SKILL.md:hooks/run-hook.cmd:hooks/agent-finished:tools/tasktool/notify.py:assets:VERSION"
+REQUIRED_PATHS="skills/using-superstar/SKILL.md:skills/project-setup/SKILL.md:skills/using-git-worktrees/SKILL.md:hooks/run-hook.cmd:hooks/agent-finished:tools/tasktool/notify.py:assets:VERSION:scripts/lib/shim-version-check.sh"
 
 DRY_RUN="$DRY_RUN" ss_publish_rsync_payload "$SOURCE" "$CACHE_DIR"
 DRY_RUN="$DRY_RUN" ss_publish_rsync_payload "$SOURCE" "$CURRENT_DIR"

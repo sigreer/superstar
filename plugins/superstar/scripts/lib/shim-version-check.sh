@@ -1,0 +1,1 @@
+../../../../scripts/lib/shim-version-check.sh
