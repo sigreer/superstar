@@ -258,7 +258,64 @@
       "phase_reviewer_chain": "docs/reviewer/p5-tasktool-worktree-lifecycle-design-spec",
       "plan_path": null,
       "planning_path": null,
-      "slices": [],
+      "slices": [
+        {
+          "blocked_on": null,
+          "closed": null,
+          "created": "2026-05-21",
+          "depends_on": [],
+          "id": "S1",
+          "notes": "",
+          "parallel_group": null,
+          "plan_path": null,
+          "planning_status": "proposed",
+          "refs": [],
+          "reviewer_chain": null,
+          "started": null,
+          "status": "ready",
+          "tasks": [],
+          "title": "Tasktool worktree lifecycle core"
+        },
+        {
+          "blocked_on": null,
+          "closed": null,
+          "created": "2026-05-21",
+          "depends_on": [
+            "P5.S1"
+          ],
+          "id": "S2",
+          "notes": "",
+          "parallel_group": null,
+          "plan_path": null,
+          "planning_status": "proposed",
+          "refs": [],
+          "reviewer_chain": null,
+          "started": null,
+          "status": "ready",
+          "tasks": [],
+          "title": "Prune + repair"
+        },
+        {
+          "blocked_on": null,
+          "closed": null,
+          "created": "2026-05-21",
+          "depends_on": [
+            "P5.S1",
+            "P5.S2"
+          ],
+          "id": "S3",
+          "notes": "",
+          "parallel_group": null,
+          "plan_path": null,
+          "planning_status": "proposed",
+          "refs": [],
+          "reviewer_chain": null,
+          "started": null,
+          "status": "ready",
+          "tasks": [],
+          "title": "Skill rewrite + subagent guard + workflow updates"
+        }
+      ],
       "spec_path": "docs/specs/2026-05-21-P5-tasktool-worktree-lifecycle-design.md",
       "started": null,
       "status": "ready",
