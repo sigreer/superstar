@@ -6,6 +6,7 @@ from tasktool.model import (
     Project, Phase, Slice, Task, CrossCutting, ArchivedPhase,
     ArchivedCrossCutting, BlockedOn,
     Status, PlanningStatus, SCHEMA_VERSION,
+    SliceWorkflowStep, PhaseWorkflowStep, ReviewStage,
 )
 
 _WORKTREE_DEFAULT_OMIT = {
@@ -31,9 +32,28 @@ def _strip_worktree_defaults(d: dict) -> dict:
     return d
 
 
+_WORKFLOW_DEFAULT_OMIT = {
+    "workflow_step": None,
+    "review_active": False,
+    "review_stage": None,
+}
+
+
+def _strip_workflow_defaults(d: dict) -> dict:
+    """Drop workflow/review keys whose values equal their dataclass default.
+
+    Historical rows must not gain these keys on round-trip when unset.
+    """
+    for field, default in _WORKFLOW_DEFAULT_OMIT.items():
+        if field in d and d[field] == default:
+            del d[field]
+    return d
+
+
 def to_dict(p: Project) -> dict:
     def _coerce(obj):
-        if isinstance(obj, (Status, PlanningStatus)):
+        if isinstance(obj, (Status, PlanningStatus,
+                            SliceWorkflowStep, PhaseWorkflowStep, ReviewStage)):
             return obj.value
         return obj
     raw = asdict(p)
@@ -47,8 +67,12 @@ def to_dict(p: Project) -> dict:
     # Omit worktree_* fields whose values equal dataclass defaults from
     # serialised slice and cross-cutting rows.
     for phase in out.get("phases", []):
+        # Phase only has workflow_step (no review_* fields apply to phases).
+        if "workflow_step" in phase and phase["workflow_step"] is None:
+            del phase["workflow_step"]
         for slc in phase.get("slices", []):
             _strip_worktree_defaults(slc)
+            _strip_workflow_defaults(slc)
     for cross in out.get("cross_cutting", []):
         _strip_worktree_defaults(cross)
     return out
@@ -76,6 +100,12 @@ def from_dict(d: dict) -> Project:
         return Status(v) if isinstance(v, str) else v
     def _planning_status(v):
         return PlanningStatus(v) if isinstance(v, str) else v
+    def _slice_workflow_step(v):
+        return SliceWorkflowStep(v) if isinstance(v, str) else v
+    def _phase_workflow_step(v):
+        return PhaseWorkflowStep(v) if isinstance(v, str) else v
+    def _review_stage(v):
+        return ReviewStage(v) if isinstance(v, str) else v
     def _task(td):
         return Task(
             id=td["id"], title=td["title"], created=td["created"],
@@ -101,6 +131,9 @@ def from_dict(d: dict) -> Project:
             plan_path=sd.get("plan_path"),
             refs=list(sd.get("refs", [])),
             notes=sd.get("notes", ""),
+            workflow_step=_slice_workflow_step(sd.get("workflow_step")),
+            review_active=_strict_bool(sd.get("review_active"), scope=scope, field="review_active"),
+            review_stage=_review_stage(sd.get("review_stage")),
             reviewer_chain=sd.get("reviewer_chain"),
             tasks=[_task(t) for t in sd.get("tasks", [])],
             worktree_path=_strict_opt_str(sd.get("worktree_path"), scope=scope, field="worktree_path"),
@@ -121,6 +154,7 @@ def from_dict(d: dict) -> Project:
             planning_path=pd.get("planning_path"),
             phase_reviewer_chain=pd.get("phase_reviewer_chain"),
             notes=pd.get("notes", ""),
+            workflow_step=_phase_workflow_step(pd.get("workflow_step")),
             slices=[_slice(s) for s in pd.get("slices", [])],
         )
     def _cross(xd):

@@ -5,6 +5,7 @@ import unittest
 from pathlib import Path
 from tasktool.model import (
     Project, Phase, Slice, Task, CrossCutting, BlockedOn, Status, PlanningStatus,
+    SliceWorkflowStep, PhaseWorkflowStep, ReviewStage,
 )
 from tasktool.serialize import (
     load_project, save_project, dumps_canonical, loads_project, to_dict, from_dict,
@@ -283,3 +284,75 @@ def test_serialize_cross_audit_fields_round_trip(tmp_path):
     assert c2.worktree_pruned_at == "2026-05-22"
     assert c2.worktree_prune_pending is True
     assert c2.worktree_prune_pending_at == "2026-05-22"
+
+
+def _round_trip(p: Project) -> Project:
+    return from_dict(to_dict(p))
+
+
+def test_workflow_step_round_trip_slice():
+    s = Slice(id="S1", title="t", created="2026-05-23",
+              workflow_step=SliceWorkflowStep.PLAN)
+    ph = Phase(id="P6", title="t", created="2026-05-23", slices=[s])
+    p = Project(project="x", phases=[ph])
+    rt = _round_trip(p)
+    assert rt.phases[0].slices[0].workflow_step is SliceWorkflowStep.PLAN
+
+
+def test_workflow_step_round_trip_phase():
+    ph = Phase(id="P6", title="t", created="2026-05-23",
+               workflow_step=PhaseWorkflowStep.IN_PROGRESS)
+    p = Project(project="x", phases=[ph])
+    rt = _round_trip(p)
+    assert rt.phases[0].workflow_step is PhaseWorkflowStep.IN_PROGRESS
+
+
+def test_review_fields_round_trip():
+    s = Slice(id="S1", title="t", created="2026-05-23",
+              review_active=True, review_stage=ReviewStage.APPLYING_FIXES)
+    ph = Phase(id="P6", title="t", created="2026-05-23", slices=[s])
+    p = Project(project="x", phases=[ph])
+    rt = _round_trip(p)
+    assert rt.phases[0].slices[0].review_active is True
+    assert rt.phases[0].slices[0].review_stage is ReviewStage.APPLYING_FIXES
+
+
+def test_workflow_step_default_none_omitted_from_json():
+    s = Slice(id="S1", title="t", created="2026-05-23")
+    ph = Phase(id="P6", title="t", created="2026-05-23", slices=[s])
+    p = Project(project="x", phases=[ph])
+    raw = to_dict(p)
+    s_dict = raw["phases"][0]["slices"][0]
+    assert "workflow_step" not in s_dict
+    assert "review_active" not in s_dict
+    assert "review_stage" not in s_dict
+    assert "workflow_step" not in raw["phases"][0]
+
+
+def test_review_active_false_omitted_even_with_stage_explicit():
+    s = Slice(id="S1", title="t", created="2026-05-23",
+              review_active=False, review_stage=None)
+    ph = Phase(id="P6", title="t", created="2026-05-23", slices=[s])
+    raw = to_dict(Project(project="x", phases=[ph]))
+    assert "review_active" not in raw["phases"][0]["slices"][0]
+    assert "review_stage" not in raw["phases"][0]["slices"][0]
+
+
+def test_legacy_row_without_workflow_fields_loads_clean():
+    raw = {
+        "project": "x",
+        "schema_version": 1,
+        "phases": [{
+            "id": "P1", "title": "t", "created": "2026-05-01", "slices": [
+                {"id": "S1", "title": "t", "created": "2026-05-01"}
+            ]
+        }],
+        "cross_cutting": [],
+        "archived_phases": [],
+        "archived_cross_cutting": [],
+    }
+    p = from_dict(raw)
+    assert p.phases[0].workflow_step is None
+    assert p.phases[0].slices[0].workflow_step is None
+    assert p.phases[0].slices[0].review_active is False
+    assert p.phases[0].slices[0].review_stage is None
