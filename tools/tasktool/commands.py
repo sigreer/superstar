@@ -61,6 +61,14 @@ from tasktool.worktree import (
 class CommandError(RuntimeError):
     pass
 
+def _refuse_if_cancelled(qid: str, item, command: str) -> None:
+    """Refuse a lifecycle command if the row is in CANCELLED status."""
+    if item.status == Status.CANCELLED:
+        hint = " — use note --append" if command == "replace notes" else ""
+        raise CommandError(
+            f"{qid}: cannot {command} a cancelled row{hint}"
+        )
+
 DEFAULT_JSON_REL = "docs/tasklist.json"
 UNCONFIGURED_HINT = (
     "tasktool: this repository has no authoritative-checkout routing configured. "
@@ -590,8 +598,8 @@ def _apply_review_gate(
         item.phase_reviewer_chain = rel
 
 def _start_item(qid: str, item, *, resume: bool = False) -> None:
-    if item.status == Status.DONE:
-        raise CommandError(f"{qid} is already done")
+    if is_terminal(item.status):
+        raise CommandError(f"{qid} is already {item.status.value}")
     if item.status == Status.BLOCKED:
         if not resume:
             raise CommandError(f"{qid} is blocked; use start --resume to clear blocked_on")
@@ -944,9 +952,15 @@ def cmd_set(
     reviewer_chain: Path | None = None, skip_review_gate: bool = False,
     allow_ready_close: bool = False, reason: str | None = None,
 ) -> None:
+    if status == "cancelled":
+        raise CommandError(
+            f"{id}: cannot set status=cancelled directly; "
+            f"use `tasktool cancel <id> --reason \"...\"`"
+        )
     with _write_context(repo_root) as write_root:
         p = _load(write_root)
         qid, _container, item = _find_item(p, id)
+        _refuse_if_cancelled(qid, item, "set")
         new_status = Status(status)
         kind = parse_id(qid)[0]
         if new_status == Status.BLOCKED and kind != "slice":
@@ -980,6 +994,7 @@ def cmd_close(
     with _write_context(repo_root) as write_root:
         p = _load(write_root)
         qid, _container, item = _find_item(p, id)
+        _refuse_if_cancelled(qid, item, "close")
         kind = parse_id(qid)[0]
         if no_archive and kind != "cross":
             raise CommandError("--no-archive is only valid for cross-cutting items")
@@ -1091,6 +1106,7 @@ def cmd_block(*, repo_root: Path, slice_id: str, on: str) -> None:
         if not is_slice_id(slice_id):
             raise CommandError(f"block only works on slices; {slice_id} is a {kind_of(slice_id)}")
         _qid, _container, item = _find_item(p, slice_id)
+        _refuse_if_cancelled(_qid, item, "block")
         if on.startswith("external:"):
             item.blocked_on = BlockedOn(kind="external", value=on[len("external:"):])
         else:
@@ -1106,6 +1122,7 @@ def cmd_unblock(*, repo_root: Path, slice_id: str, resume: bool = False) -> None
         if not is_slice_id(slice_id):
             raise CommandError(f"unblock only works on slices; {slice_id} is a {kind_of(slice_id)}")
         _qid, _container, item = _find_item(p, slice_id)
+        _refuse_if_cancelled(_qid, item, "unblock")
         item.blocked_on = None
         if resume:
             _start_item(_qid, item, resume=True)
@@ -1125,6 +1142,7 @@ def cmd_deps(
         qid, _container, item = _find_item(p, slice_id)
         if parse_id(qid)[0] != "slice":
             raise CommandError(f"deps only works on slices; {qid} is a {parse_id(qid)[0]}")
+        _refuse_if_cancelled(qid, item, "change deps for")
         dep = _resolve_dependency_id(p, add or remove or "")
         if add is not None and dep not in item.depends_on:
             item.depends_on.append(dep)
@@ -1141,6 +1159,7 @@ def cmd_ratify(
         qid, _container, item = _find_item(p, slice_id)
         if parse_id(qid)[0] != "slice":
             raise CommandError(f"ratify only works on slices; {qid} is a {parse_id(qid)[0]}")
+        _refuse_if_cancelled(qid, item, "ratify")
         item.planning_status = PlanningStatus(status)
         if parallel_group is not None:
             item.parallel_group = parallel_group or None
@@ -1166,6 +1185,8 @@ def cmd_note(
     with _write_context(repo_root) as write_root:
         p = _load(write_root)
         _qid, _container, item = _find_item(p, id)
+        if replace is not None:
+            _refuse_if_cancelled(_qid, item, "replace notes")
         if append is not None:
             item.notes = (item.notes + "\n" + append).strip() if item.notes else append
         else:

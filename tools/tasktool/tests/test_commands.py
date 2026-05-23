@@ -980,3 +980,135 @@ class CancelPhaseTests(unittest.TestCase):
         self.assertFalse(
             any(e["id"] == "P1.S1" and e["status"] == "cancelled" for e in events)
         )
+
+
+class CancelledRowGuardTests(unittest.TestCase):
+    """Lifecycle-adjacent commands must refuse to mutate cancelled rows
+    (except note --append, ref add/remove, and title)."""
+
+    def setUp(self):
+        self.t = _Tmp()
+        commands.cmd_init(repo_root=self.t.root, project="demo")
+        commands.cmd_create_phase(repo_root=self.t.root, title="P1")
+        commands.cmd_create_slice(repo_root=self.t.root, phase_id="P1", title="S1")
+        commands.cmd_create_slice(repo_root=self.t.root, phase_id="P1", title="S2")
+        commands.cmd_cancel(
+            repo_root=self.t.root, id="P1.S1", reason="scope dropped"
+        )
+
+    def tearDown(self):
+        self.t.cleanup()
+
+    def _slice(self, qid="P1.S1"):
+        p = load_project(self.t.root / "docs/tasklist.json")
+        phase_id, slice_id = qid.split(".")
+        ph = next(x for x in p.phases if x.id == phase_id)
+        return next(s for s in ph.slices if s.id == slice_id)
+
+    def test_cmd_close_refuses_cancelled(self):
+        with self.assertRaisesRegex(commands.CommandError, "cancelled"):
+            commands.cmd_close(
+                repo_root=self.t.root, id="P1.S1", skip_review_gate=True
+            )
+
+    def test_cmd_set_refuses_cancelled_for_all_new_statuses(self):
+        for new in ("ready", "in_progress", "done"):
+            with self.assertRaisesRegex(commands.CommandError, "cancelled"):
+                commands.cmd_set(
+                    repo_root=self.t.root, id="P1.S1", status=new,
+                    skip_review_gate=True,
+                )
+
+    def test_cmd_set_refuses_status_cancelled_with_hint(self):
+        # Defense in depth: even on a non-cancelled row, status="cancelled"
+        # must be rejected and point at `tasktool cancel`.
+        with self.assertRaisesRegex(commands.CommandError, "tasktool cancel"):
+            commands.cmd_set(
+                repo_root=self.t.root, id="P1.S2", status="cancelled",
+            )
+
+    def test_cmd_start_refuses_cancelled(self):
+        with self.assertRaisesRegex(commands.CommandError, "cancelled"):
+            commands.cmd_start(repo_root=self.t.root, id="P1.S1")
+
+    def test_cmd_block_refuses_cancelled(self):
+        with self.assertRaisesRegex(commands.CommandError, "cancelled"):
+            commands.cmd_block(
+                repo_root=self.t.root, slice_id="P1.S1", on="P1.S2"
+            )
+
+    def test_cmd_unblock_refuses_cancelled(self):
+        with self.assertRaisesRegex(commands.CommandError, "cancelled"):
+            commands.cmd_unblock(repo_root=self.t.root, slice_id="P1.S1")
+
+    def test_cmd_deps_add_refuses_cancelled(self):
+        with self.assertRaisesRegex(commands.CommandError, "cancelled"):
+            commands.cmd_deps(
+                repo_root=self.t.root, slice_id="P1.S1", add="P1.S2"
+            )
+
+    def test_cmd_deps_remove_refuses_cancelled(self):
+        with self.assertRaisesRegex(commands.CommandError, "cancelled"):
+            commands.cmd_deps(
+                repo_root=self.t.root, slice_id="P1.S1", remove="P1.S2"
+            )
+
+    def test_cmd_ratify_refuses_cancelled(self):
+        with self.assertRaisesRegex(commands.CommandError, "cancelled"):
+            commands.cmd_ratify(
+                repo_root=self.t.root, slice_id="P1.S1", status="ratified"
+            )
+
+    def test_cmd_note_replace_refuses_cancelled_with_append_hint(self):
+        with self.assertRaisesRegex(commands.CommandError, "--append"):
+            commands.cmd_note(
+                repo_root=self.t.root, id="P1.S1", replace="overwrite"
+            )
+
+    def test_cmd_note_append_allowed_on_cancelled(self):
+        commands.cmd_note(
+            repo_root=self.t.root, id="P1.S1", append="post-mortem note"
+        )
+        s = self._slice("P1.S1")
+        self.assertIn("post-mortem note", s.notes)
+
+    def test_cmd_ref_add_allowed_on_cancelled(self):
+        commands.cmd_ref(
+            repo_root=self.t.root, id="P1.S1", add="docs/foo.md"
+        )
+        s = self._slice("P1.S1")
+        self.assertIn("docs/foo.md", s.refs)
+
+    def test_cmd_ref_remove_allowed_on_cancelled(self):
+        commands.cmd_ref(
+            repo_root=self.t.root, id="P1.S1", add="docs/foo.md"
+        )
+        commands.cmd_ref(
+            repo_root=self.t.root, id="P1.S1", remove="docs/foo.md"
+        )
+        s = self._slice("P1.S1")
+        self.assertNotIn("docs/foo.md", s.refs)
+
+    def test_cmd_title_allowed_on_cancelled(self):
+        commands.cmd_title(
+            repo_root=self.t.root, id="P1.S1", new="new title"
+        )
+        s = self._slice("P1.S1")
+        self.assertEqual(s.title, "new title")
+
+    def test_cli_set_choices_do_not_include_cancelled(self):
+        from tasktool import cli
+        parser = cli._build_parser()
+        # Find the 'set' subparser action and verify --status choices.
+        set_action = None
+        for action in parser._actions:
+            if hasattr(action, "choices") and isinstance(action.choices, dict):
+                if "set" in action.choices:
+                    set_action = action.choices["set"]
+                    break
+        self.assertIsNotNone(set_action)
+        status_arg = next(
+            a for a in set_action._actions
+            if "--status" in getattr(a, "option_strings", [])
+        )
+        self.assertNotIn("cancelled", status_arg.choices)
