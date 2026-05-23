@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# PostToolUse hook for TodoWrite.
+# Writes the full todo list to ~/.claude/projects/<project-slug>/<session_id>/todos.json
+# so the statusline and any external sidebar can render live progress.
+
+set -u
+set -o pipefail
+
+command -v jq >/dev/null 2>&1 || exit 0
+
+input=$(cat)
+
+session_id=$(echo "$input" | jq -r '.session_id // empty')
+cwd=$(echo "$input" | jq -r '.cwd // empty')
+if [ -z "$session_id" ] || [ -z "$cwd" ]; then
+    exit 0
+fi
+
+project_slug=$(echo "$cwd" | sed 's|/|-|g')
+session_dir="${HOME}/.claude/projects/${project_slug}/${session_id}"
+mkdir -p "$session_dir"
+
+todos=$(echo "$input" | jq -c '.tool_input.todos // []')
+total=$(echo "$todos" | jq 'length')
+done=$(echo "$todos" | jq '[.[] | select(.status=="completed")] | length')
+in_progress=$(echo "$todos" | jq '[.[] | select(.status=="in_progress")] | length')
+updated_at=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+jq -n \
+    --arg session_id "$session_id" \
+    --arg updated_at "$updated_at" \
+    --argjson total "$total" \
+    --argjson done "$done" \
+    --argjson in_progress "$in_progress" \
+    --argjson todos "$todos" \
+    '{session_id: $session_id, updated_at: $updated_at, counts: {done: $done, in_progress: $in_progress, total: $total}, todos: $todos}' \
+    > "${session_dir}/todos.json"
