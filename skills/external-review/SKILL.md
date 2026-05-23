@@ -39,7 +39,7 @@ By default the bridge chooses the opposite reviewer provider from the caller:
 | Claude | Codex |
 | Codex | Claude |
 
-Provider selection is controlled by `--reviewer-provider auto|codex|claude|custom` or `AGENT_REVIEWER_PROVIDER`. Caller detection is controlled by `--caller-provider auto|claude|codex|unknown` or `AGENT_REVIEWER_CALLER`. If both are `auto` and the caller cannot be detected, the bridge fails closed and asks for an explicit provider or command.
+Provider selection is controlled by `--reviewer-provider auto|codex|claude|custom` or `AGENT_REVIEWER_PROVIDER`. Caller detection is controlled by `--caller-provider auto|claude|codex|unknown` or `AGENT_REVIEWER_CALLER`. When caller detection is `auto`, explicit caller env wins first; known harness env vars are checked next; then the bridge inspects the local process ancestry for unambiguous `claude` or `codex` executables. If both provider and caller are `auto` and the caller cannot be detected, the bridge fails closed and asks for an explicit provider or command.
 
 The reviewer command is still overrideable via `AGENT_REVIEWER_CMD` or `--reviewer-cmd`. Any explicit reviewer command is treated as `custom` and bypasses provider auto-selection. Custom wrappers are responsible for their own sandboxing.
 

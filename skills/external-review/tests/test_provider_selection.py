@@ -20,6 +20,7 @@ def _clean_env(monkeypatch):
         "CLAUDECODE",
         "CLAUDE_CODE",
         "CODEX_HOME",
+        "OPENAI_CODEX",
     ):
         monkeypatch.delenv(key, raising=False)
 
@@ -67,6 +68,52 @@ def test_unknown_caller_auto_fails_closed():
             reviewer_cmd=None,
             env=dict(),
         )
+
+
+def test_env_caller_detection_wins_over_process_fallback(monkeypatch):
+    monkeypatch.setenv("CODEX_HOME", "/tmp/codex")
+    monkeypatch.setattr(
+        er,
+        "_detect_caller_provider_from_process_tree",
+        lambda: pytest.fail("process fallback should not run when env is explicit"),
+    )
+
+    assert er.detect_caller_provider() == "codex"
+
+
+def test_process_tree_fallback_detects_codex(monkeypatch):
+    monkeypatch.setattr(er, "_process_tokens_for_pid", lambda pid: {
+        10: ["zsh"],
+        9: ["/opt/codex/bin/codex"],
+    }.get(pid, []))
+    monkeypatch.setattr(er, "_parent_pid_for_pid", lambda pid: {
+        10: 9,
+        9: 1,
+    }.get(pid))
+
+    assert er._detect_caller_provider_from_process_tree(start_pid=10) == "codex"
+
+
+def test_process_tree_fallback_detects_claude_package(monkeypatch):
+    monkeypatch.setattr(er, "_process_tokens_for_pid", lambda pid: {
+        10: ["node", "/usr/lib/node_modules/@anthropic-ai/claude-code/cli.js"],
+    }.get(pid, []))
+    monkeypatch.setattr(er, "_parent_pid_for_pid", lambda pid: 1)
+
+    assert er._detect_caller_provider_from_process_tree(start_pid=10) == "claude"
+
+
+def test_process_tree_fallback_fails_closed_on_ambiguous_hints(monkeypatch):
+    monkeypatch.setattr(er, "_process_tokens_for_pid", lambda pid: {
+        10: ["/opt/codex/bin/codex"],
+        9: ["/usr/bin/claude"],
+    }.get(pid, []))
+    monkeypatch.setattr(er, "_parent_pid_for_pid", lambda pid: {
+        10: 9,
+        9: 1,
+    }.get(pid))
+
+    assert er._detect_caller_provider_from_process_tree(start_pid=10) == "unknown"
 
 
 def test_explicit_provider_uses_reviewer_agent_command():

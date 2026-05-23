@@ -342,6 +342,82 @@ class ProviderResolutionError(Exception):
     pass
 
 
+def _provider_from_process_tokens(tokens: list[str]) -> str | None:
+    provider_names = {
+        "claude": {"claude", "claude.exe", "claude-code", "claude-code.exe"},
+        "codex": {"codex", "codex.exe", "codex.js"},
+    }
+    provider_prefixes = {
+        "claude": ("claude-",),
+        "codex": ("codex-",),
+    }
+    package_markers = {
+        "claude": ("/@anthropic-ai/claude-code", "/anthropic-ai/claude-code"),
+        "codex": ("/@openai/codex", "/openai/codex"),
+    }
+
+    hits: set[str] = set()
+    for token in tokens:
+        normalized = token.lower().replace("\\", "/")
+        basename = Path(normalized).name
+        for provider, names in provider_names.items():
+            if basename in names or any(basename.startswith(prefix) for prefix in provider_prefixes[provider]):
+                hits.add(provider)
+            if any(marker in normalized for marker in package_markers[provider]):
+                hits.add(provider)
+    if len(hits) == 1:
+        return next(iter(hits))
+    return None
+
+
+def _process_tokens_for_pid(pid: int) -> list[str]:
+    proc = Path("/proc") / str(pid)
+    try:
+        raw = (proc / "cmdline").read_bytes()
+    except OSError:
+        raw = b""
+    tokens = [part.decode("utf-8", errors="replace") for part in raw.split(b"\0") if part]
+    if tokens:
+        return tokens
+    try:
+        comm = (proc / "comm").read_text(encoding="utf-8", errors="replace").strip()
+    except OSError:
+        comm = ""
+    return [comm] if comm else []
+
+
+def _parent_pid_for_pid(pid: int) -> int | None:
+    try:
+        for line in (Path("/proc") / str(pid) / "status").read_text(encoding="utf-8", errors="replace").splitlines():
+            if line.startswith("PPid:"):
+                return int(line.split()[1])
+    except (OSError, ValueError, IndexError):
+        return None
+    return None
+
+
+def _detect_caller_provider_from_process_tree(*, start_pid: int | None = None, max_depth: int = 12) -> str:
+    pid = start_pid if start_pid is not None else os.getppid()
+    seen: set[int] = set()
+    hits: set[str] = set()
+    depth = 0
+    while pid and pid > 1 and pid not in seen and depth < max_depth:
+        seen.add(pid)
+        hint = _provider_from_process_tokens(_process_tokens_for_pid(pid))
+        if hint:
+            hits.add(hint)
+            if len(hits) > 1:
+                return "unknown"
+        parent = _parent_pid_for_pid(pid)
+        if parent is None or parent == pid:
+            break
+        pid = parent
+        depth += 1
+    if len(hits) == 1:
+        return next(iter(hits))
+    return "unknown"
+
+
 def detect_caller_provider(env: dict | None = None) -> str:
     env = env if env is not None else os.environ
     explicit = env.get("AGENT_REVIEWER_CALLER")
@@ -351,7 +427,7 @@ def detect_caller_provider(env: dict | None = None) -> str:
         return "claude"
     if env.get("CODEX_HOME") or env.get("OPENAI_CODEX"):
         return "codex"
-    return "unknown"
+    return _detect_caller_provider_from_process_tree()
 
 
 def resolve_reviewer_provider(

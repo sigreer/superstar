@@ -11,6 +11,12 @@
       "archived_path": "docs/archived-tasks/X16-stamp-installed-shims-and-enforce-versio.md",
       "id": "X16",
       "title": "Stamp installed shims and enforce version drift refusal"
+    },
+    {
+      "archived_date": "2026-05-23",
+      "archived_path": "docs/archived-tasks/X18-harden-external-reviewer-caller-detectio.md",
+      "id": "X18",
+      "title": "Harden external reviewer caller detection for Codex"
     }
   ],
   "archived_phases": [
