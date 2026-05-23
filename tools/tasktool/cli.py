@@ -139,6 +139,12 @@ def _build_parser() -> argparse.ArgumentParser:
     p_close.add_argument("--reason")
     p_close.add_argument("--no-archive", action="store_true")
 
+    p_cancel = sub.add_parser("cancel")
+    p_cancel.add_argument("id")
+    p_cancel.add_argument("--reason", required=True)
+    p_cancel.add_argument("--cascade", action="store_true")
+    p_cancel.add_argument("--no-archive", action="store_true")
+
     p_block = sub.add_parser("block")
     p_block.add_argument("slice_id")
     p_block.add_argument("--on", required=True)
@@ -381,6 +387,11 @@ def main(argv: list[str]) -> int:
                 reviewer_chain=args.reviewer_chain, skip_review_gate=args.skip_review_gate,
                 allow_ready_close=args.allow_ready_close, reason=args.reason,
                 no_archive=args.no_archive,
+            )
+        elif args.cmd == "cancel":
+            commands.cmd_cancel(
+                repo_root=root, id=args.id, reason=args.reason,
+                cascade=args.cascade, no_archive=args.no_archive,
             )
         elif args.cmd == "block":
             commands.cmd_block(repo_root=root, slice_id=args.slice_id, on=args.on)

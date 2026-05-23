@@ -18,6 +18,7 @@ from tasktool.config import (
 from tasktool.model import (
     ArchivedCrossCutting,
     Project, Phase, Slice, Task, CrossCutting, BlockedOn, Status, PlanningStatus,
+    is_terminal,
 )
 from tasktool.serialize import load_project, save_project
 from tasktool.validate import validate_project
@@ -611,7 +612,7 @@ def _archive_cross_at_root(
     p: Project,
     item: CrossCutting,
 ) -> tuple[Path, str]:
-    if item.status != Status.DONE:
+    if not is_terminal(item.status):
         raise CommandError(
             f"cross-cutting {item.id} must be done before archive; run tasktool close {item.id} first"
         )
@@ -1007,6 +1008,55 @@ def cmd_close(
         if archive_path is not None:
             _git_stage(write_root, archive_path)
         _notify_status(qid=qid, kind=kind, status=item.status, title=item.title)
+
+def _stamp_cancellation(item, reason: str, *, suffix: str | None) -> None:
+    ts = _dt.datetime.now().isoformat(timespec="seconds")
+    line = f"Cancelled {ts}: {reason}"
+    if suffix:
+        line += f" ({suffix})"
+    item.notes = (item.notes + "\n" + line).strip() if item.notes else line
+    item.status = Status.CANCELLED
+    item.closed = _today()
+
+
+def cmd_cancel(
+    *, repo_root: Path, id: str, reason: str | None,
+    cascade: bool = False, no_archive: bool = False,
+) -> None:
+    if reason is None or not reason.strip():
+        raise CommandError(f"{id}: cancel requires --reason")
+    reason = reason.strip()
+
+    kind = parse_id(id)[0]
+    if kind == "task":
+        raise CommandError(
+            "cancel does not apply to tasks; cancel the parent slice instead"
+        )
+    if cascade and kind != "phase":
+        raise CommandError(f"{id}: --cascade is only valid for phase ids")
+    if no_archive and kind != "cross":
+        raise CommandError(f"{id}: --no-archive is only valid for cross-cutting ids")
+
+    with _write_context(repo_root) as write_root:
+        p = _load(write_root)
+        qid, _container, item = _find_item(p, id)
+        if is_terminal(item.status):
+            raise CommandError(f"{qid} is already {item.status.value}; cannot cancel")
+
+        if kind == "phase":
+            # cascade handling deferred to Task 8
+            raise CommandError(f"{qid}: phase cancel not yet implemented")
+
+        _stamp_cancellation(item, reason, suffix=None)
+
+        archive_path: Path | None = None
+        if kind == "cross" and not no_archive:
+            archive_path, _archive_rel = _archive_cross_at_root(write_root, p, item)
+        _save(write_root, p)
+        if archive_path is not None:
+            _git_stage(write_root, archive_path)
+        _notify_status(qid=qid, kind=kind, status=item.status, title=item.title)
+
 
 def cmd_archive_cross(*, repo_root: Path, id: str) -> None:
     with _write_context(repo_root) as write_root:

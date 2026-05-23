@@ -751,3 +751,134 @@ class ArchivePhaseTests(unittest.TestCase):
             self.assertIn("open slices", str(cm.exception).lower())
         finally:
             t.cleanup()
+
+
+import datetime as _dt
+
+
+class CancelTests(unittest.TestCase):
+    def setUp(self):
+        self.t = _Tmp()
+        commands.cmd_init(repo_root=self.t.root, project="demo")
+        commands.cmd_create_phase(repo_root=self.t.root, title="P1")
+        commands.cmd_create_slice(repo_root=self.t.root, phase_id="P1", title="S1")
+        commands.cmd_create_slice(repo_root=self.t.root, phase_id="P1", title="S2")
+        commands.cmd_create_task(repo_root=self.t.root, slice_id="P1.S1", title="T1")
+
+    def tearDown(self):
+        self.t.cleanup()
+
+    def _slice(self, qid="P1.S1"):
+        p = load_project(self.t.root / "docs/tasklist.json")
+        phase_id, slice_id = qid.split(".")
+        ph = next(x for x in p.phases if x.id == phase_id)
+        return next(s for s in ph.slices if s.id == slice_id)
+
+    def test_cancel_slice_stamps_status_closed_and_audit_note(self):
+        commands.cmd_cancel(
+            repo_root=self.t.root, id="P1.S1", reason="scope dropped"
+        )
+        s = self._slice()
+        self.assertEqual(s.status, Status.CANCELLED)
+        self.assertEqual(s.closed, _dt.date.today().isoformat())
+        self.assertIn("Cancelled ", s.notes)
+        self.assertIn("scope dropped", s.notes)
+
+    def test_cancel_requires_reason_none(self):
+        with self.assertRaisesRegex(commands.CommandError, "--reason"):
+            commands.cmd_cancel(repo_root=self.t.root, id="P1.S1", reason=None)
+
+    def test_cancel_requires_reason_empty(self):
+        with self.assertRaisesRegex(commands.CommandError, "--reason"):
+            commands.cmd_cancel(repo_root=self.t.root, id="P1.S1", reason="")
+
+    def test_cancel_requires_reason_whitespace(self):
+        with self.assertRaisesRegex(commands.CommandError, "--reason"):
+            commands.cmd_cancel(repo_root=self.t.root, id="P1.S1", reason="   ")
+
+    def test_cancel_rejects_task_id(self):
+        with self.assertRaisesRegex(
+            commands.CommandError, "cancel does not apply to tasks"
+        ):
+            commands.cmd_cancel(
+                repo_root=self.t.root, id="P1.S1.T1", reason="x"
+            )
+
+    def test_cancel_rejects_already_terminal(self):
+        # Mark P1.S1 cancelled first, then try again.
+        commands.cmd_cancel(repo_root=self.t.root, id="P1.S1", reason="first")
+        with self.assertRaisesRegex(commands.CommandError, "already"):
+            commands.cmd_cancel(repo_root=self.t.root, id="P1.S1", reason="second")
+
+    def test_cancel_no_archive_rejected_for_slice(self):
+        with self.assertRaisesRegex(commands.CommandError, "--no-archive"):
+            commands.cmd_cancel(
+                repo_root=self.t.root, id="P1.S1", reason="x", no_archive=True
+            )
+
+    def test_cancel_cascade_rejected_for_slice(self):
+        with self.assertRaisesRegex(commands.CommandError, "--cascade"):
+            commands.cmd_cancel(
+                repo_root=self.t.root, id="P1.S1", reason="x", cascade=True
+            )
+
+    def test_cancel_slice_emits_cancelled_notification_once(self):
+        log = self.t.root / "notify.jsonl"
+        with patch.dict(
+            os.environ,
+            {
+                "SUPERSTAR_NOTIFY_DISABLE": "0",
+                "SUPERSTAR_NOTIFY_DRY_RUN": "1",
+                "SUPERSTAR_NOTIFY_LOG": str(log),
+            },
+        ):
+            commands.cmd_cancel(repo_root=self.t.root, id="P1.S1", reason="x")
+        events = [
+            json.loads(line) for line in log.read_text(encoding="utf-8").splitlines()
+        ]
+        cancel_events = [e for e in events if e["id"] == "P1.S1" and e["status"] == "cancelled"]
+        self.assertEqual(len(cancel_events), 1)
+
+
+class CancelCrossTests(unittest.TestCase):
+    def setUp(self):
+        self.t = _Tmp()
+        commands.cmd_init(repo_root=self.t.root, project="demo")
+        commands.cmd_create_cross(repo_root=self.t.root, title="cross item")
+
+    def tearDown(self):
+        self.t.cleanup()
+
+    def test_cancel_cross_auto_archives_with_status_cancelled(self):
+        commands.cmd_cancel(repo_root=self.t.root, id="X1", reason="superseded")
+        p = load_project(self.t.root / "docs/tasklist.json")
+        self.assertTrue(all(c.id != "X1" for c in p.cross_cutting))
+        archived = next(a for a in p.archived_cross_cutting if a.id == "X1")
+        text = (self.t.root / archived.archived_path).read_text(encoding="utf-8")
+        self.assertIn("status: cancelled", text)
+
+    def test_cancel_cross_no_archive_keeps_visible(self):
+        commands.cmd_cancel(
+            repo_root=self.t.root, id="X1", reason="defer", no_archive=True
+        )
+        p = load_project(self.t.root / "docs/tasklist.json")
+        x = next(c for c in p.cross_cutting if c.id == "X1")
+        self.assertEqual(x.status, Status.CANCELLED)
+        self.assertEqual(p.archived_cross_cutting, [])
+
+    def test_cancel_cross_emits_cancelled_notification_once(self):
+        log = self.t.root / "notify.jsonl"
+        with patch.dict(
+            os.environ,
+            {
+                "SUPERSTAR_NOTIFY_DISABLE": "0",
+                "SUPERSTAR_NOTIFY_DRY_RUN": "1",
+                "SUPERSTAR_NOTIFY_LOG": str(log),
+            },
+        ):
+            commands.cmd_cancel(repo_root=self.t.root, id="X1", reason="x")
+        events = [
+            json.loads(line) for line in log.read_text(encoding="utf-8").splitlines()
+        ]
+        cancel_events = [e for e in events if e["id"] == "X1" and e["status"] == "cancelled"]
+        self.assertEqual(len(cancel_events), 1)
