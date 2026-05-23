@@ -152,6 +152,8 @@ This skill enforces two **gating** external reviews. Both are mandatory unless t
 
 If the brainstorming step produced a spec, run `[[external-review]]` with `--kind spec` against that spec **before** starting the plan, whether it lives under `docs/specs/`, `docs/superstar/specs/`, or a user-specified path. Iterate until the verdict is `ready` or `ready with small edits`. During this stage you may apply the reviewer's edits directly — no parallel implementation subagents exist yet. Do not ask the user before this review unless blocked.
 
+When `docs/tasklist.json` exists, a passing spec review is not complete until the spec transaction from `[[brainstorming]]` is closed: register the spec-review chain, run `tasktool artifact status <id> --strict`, and immediately commit the registered spec/reviewer artifacts with `tasktool artifact commit <id> --message "<id>: add <slug> spec"` unless the user explicitly asked not to commit. Do this before drafting the plan.
+
 ### 2. Plan review (after plan save, before execution handoff)
 
 After saving the plan, run `[[external-review]]` with `--kind plan` against the plan, passing the spec as `--context`. Iterate until the verdict is `ready` or `ready with small edits` before proceeding to the handoff step below. Do not ask the user before this review unless blocked.

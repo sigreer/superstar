@@ -29,6 +29,9 @@ grep -q "whether it lives under" "$WRITING_PLANS" \
 grep -q "Do not ask the user before this review unless blocked" "$WRITING_PLANS" \
     || fail "writing-plans must not pause before mandatory review gates"
 
+grep -q "Do this before drafting the plan" "$WRITING_PLANS" \
+    || fail "writing-plans must commit reviewed spec artifacts before plan drafting"
+
 grep -q "required slice/phase external-review gates" "$SDD" \
     || fail "SDD completion must include slice/phase external-review gates"
 
