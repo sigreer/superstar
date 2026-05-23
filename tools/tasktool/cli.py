@@ -87,8 +87,17 @@ def _build_parser() -> argparse.ArgumentParser:
 
     p_set = sub.add_parser("set")
     p_set.add_argument("id")
-    p_set.add_argument("--status", required=True,
-                       choices=["ready", "in_progress", "done"])
+    p_set.add_argument("--status", choices=["ready", "in_progress", "done"])
+    p_set.add_argument(
+        "--workflow-step",
+        help="spec|plan|implement|done for slices; spec|ready|in_progress|done for phases",
+    )
+    p_set.add_argument("--clear-workflow-step", action="store_true")
+    p_set.add_argument("--review-active", choices=["true", "false"])
+    p_set.add_argument(
+        "--review-stage",
+        choices=["awaiting_response", "applying_fixes", "passed"],
+    )
     p_set.add_argument("--reviewer-chain", type=Path)
     p_set.add_argument("--skip-review-gate", action="store_true")
     p_set.add_argument("--allow-ready-close", action="store_true")
@@ -334,8 +343,17 @@ def main(argv: list[str]) -> int:
             elif args.create_kind == "cross":
                 print(commands.cmd_create_cross(repo_root=root, title=args.title))
         elif args.cmd == "set":
+            review_active_bool: bool | None
+            if args.review_active is None:
+                review_active_bool = None
+            else:
+                review_active_bool = (args.review_active == "true")
             commands.cmd_set(
                 repo_root=root, id=args.id, status=args.status,
+                workflow_step=args.workflow_step,
+                clear_workflow_step=args.clear_workflow_step,
+                review_active=review_active_bool,
+                review_stage=args.review_stage,
                 reviewer_chain=args.reviewer_chain, skip_review_gate=args.skip_review_gate,
                 allow_ready_close=args.allow_ready_close, reason=args.reason,
             )

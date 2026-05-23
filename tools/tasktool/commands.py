@@ -18,6 +18,7 @@ from tasktool.config import (
 from tasktool.model import (
     ArchivedCrossCutting,
     Project, Phase, Slice, Task, CrossCutting, BlockedOn, Status, PlanningStatus,
+    SliceWorkflowStep, PhaseWorkflowStep, ReviewStage,
 )
 from tasktool.serialize import load_project, save_project
 from tasktool.validate import validate_project
@@ -59,6 +60,63 @@ from tasktool.worktree import (
 
 class CommandError(RuntimeError):
     pass
+
+
+class UsageError(CommandError):
+    """Misuse of a tasktool command — invalid flag combination, unknown ID, etc.
+
+    Inherits CommandError so cli.py's existing `except CommandError` clause
+    catches it and emits the standard `tasktool: <msg>` line with exit code 1.
+    """
+
+
+def _validate_set_flags(
+    *, id, status, workflow_step, clear_workflow_step,
+    review_active, review_stage, reviewer_chain,
+) -> None:
+    mutating = any(
+        x is not None
+        for x in (status, workflow_step, review_active, review_stage, reviewer_chain)
+    )
+    mutating = mutating or clear_workflow_step
+    if not mutating:
+        raise UsageError("tasktool set: at least one mutating flag is required")
+    if workflow_step is not None and clear_workflow_step:
+        raise UsageError(
+            "tasktool set: --workflow-step and --clear-workflow-step are mutually exclusive"
+        )
+    if review_active is False and review_stage is not None:
+        raise UsageError(
+            "tasktool set: --review-stage cannot be set when --review-active is false"
+        )
+    try:
+        kind = kind_of(id)
+    except Exception as exc:
+        raise UsageError(f"tasktool set: invalid id {id!r}: {exc}") from exc
+    # For qualified ids (P6.S1), kind_of via parse_id returns the kind of the
+    # deepest level — that's what we want.
+    if (review_active is not None or review_stage is not None) and kind != "slice":
+        raise UsageError(
+            "tasktool set: --review-active / --review-stage are review flags "
+            "only valid on slice rows"
+        )
+    if workflow_step is not None:
+        if kind == "slice" and workflow_step not in {"spec", "plan", "implement", "done"}:
+            raise UsageError(
+                f"tasktool set: workflow_step {workflow_step!r} not valid for slice rows"
+            )
+        if kind == "phase" and workflow_step not in {"spec", "ready", "in_progress", "done"}:
+            raise UsageError(
+                f"tasktool set: workflow_step {workflow_step!r} not valid for phase rows"
+            )
+        if kind == "cross":
+            raise UsageError(
+                "tasktool set: --workflow-step is not valid for cross-cutting rows"
+            )
+        if kind == "task":
+            raise UsageError(
+                "tasktool set: --workflow-step is not valid for task rows"
+            )
 
 DEFAULT_JSON_REL = "docs/tasklist.json"
 UNCONFIGURED_HINT = (
@@ -939,34 +997,80 @@ def _apply_start_adopt(write_root: Path, qid: str, item, adopt_path: Path) -> No
     print(f"cd {adopt_path}")
 
 def cmd_set(
-    *, repo_root: Path, id: str, status: str,
-    reviewer_chain: Path | None = None, skip_review_gate: bool = False,
-    allow_ready_close: bool = False, reason: str | None = None,
+    repo_root: Path | None = None,
+    *,
+    id: str,
+    status: str | None = None,
+    workflow_step: str | None = None,
+    clear_workflow_step: bool = False,
+    review_active: bool | None = None,
+    review_stage: str | None = None,
+    reviewer_chain: Path | None = None,
+    skip_review_gate: bool = False,
+    allow_ready_close: bool = False,
+    reason: str | None = None,
 ) -> None:
+    # Tolerate the historical positional/keyword `repo_root=` calling style: it
+    # is required, but accepting it positionally lets the new tests call
+    # `cmd_set(p, id=...)` (matches the plan spec) while old callers keep
+    # working unchanged.
+    if repo_root is None:
+        raise TypeError("cmd_set: repo_root is required")
+    _validate_set_flags(
+        id=id, status=status, workflow_step=workflow_step,
+        clear_workflow_step=clear_workflow_step,
+        review_active=review_active, review_stage=review_stage,
+        reviewer_chain=reviewer_chain,
+    )
     with _write_context(repo_root) as write_root:
         p = _load(write_root)
         qid, _container, item = _find_item(p, id)
-        new_status = Status(status)
         kind = parse_id(qid)[0]
-        if new_status == Status.BLOCKED and kind != "slice":
-            raise CommandError(f"only slices can be blocked; {qid} is a {kind}")
-        if new_status == Status.DONE and kind in ("slice", "phase"):
-            _apply_review_gate(repo_root, item, qid, kind, reviewer_chain, skip_review_gate)
-        if new_status == Status.DONE and kind == "slice" and getattr(item, "started", None) is None:
-            if not allow_ready_close:
-                raise CommandError(
-                    f"{qid} must be started before close; run `tasktool start {qid}` first, "
-                    f"or use `tasktool set {qid} --status done --allow-ready-close --reason ...` if applicable"
-                )
-            _apply_ready_close_override(qid, item, reason=reason)
-        if new_status == Status.IN_PROGRESS:
-            _start_item(qid, item)
-        else:
-            item.status = new_status
-        if new_status == Status.DONE and item.closed is None:
-            item.closed = _today()
+
+        if status is not None:
+            new_status = Status(status)
+            if new_status == Status.BLOCKED and kind != "slice":
+                raise CommandError(f"only slices can be blocked; {qid} is a {kind}")
+            if new_status == Status.DONE and kind in ("slice", "phase"):
+                _apply_review_gate(repo_root, item, qid, kind, reviewer_chain, skip_review_gate)
+            if new_status == Status.DONE and kind == "slice" and getattr(item, "started", None) is None:
+                if not allow_ready_close:
+                    raise CommandError(
+                        f"{qid} must be started before close; run `tasktool start {qid}` first, "
+                        f"or use `tasktool set {qid} --status done --allow-ready-close --reason ...` if applicable"
+                    )
+                _apply_ready_close_override(qid, item, reason=reason)
+            if new_status == Status.IN_PROGRESS:
+                _start_item(qid, item)
+            else:
+                item.status = new_status
+            if new_status == Status.DONE and item.closed is None:
+                item.closed = _today()
+
+        if workflow_step is not None:
+            if kind == "slice":
+                item.workflow_step = SliceWorkflowStep(workflow_step)
+                # Step change clears the slice review block.
+                item.review_active = False
+                item.review_stage = None
+            elif kind == "phase":
+                item.workflow_step = PhaseWorkflowStep(workflow_step)
+        elif clear_workflow_step:
+            item.workflow_step = None
+            if kind == "slice":
+                item.review_active = False
+                item.review_stage = None
+
+        if review_active is not None and kind == "slice":
+            item.review_active = bool(review_active)
+            if not review_active:
+                item.review_stage = None
+        if review_stage is not None and kind == "slice":
+            item.review_stage = ReviewStage(review_stage)
+
         _save(write_root, p)
-        _notify_status(qid=qid, kind=kind, status=item.status, title=item.title)
+        if status is not None:
+            _notify_status(qid=qid, kind=kind, status=item.status, title=item.title)
 
 def cmd_close(
     *, repo_root: Path, id: str,

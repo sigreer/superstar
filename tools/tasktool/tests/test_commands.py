@@ -751,3 +751,83 @@ class ArchivePhaseTests(unittest.TestCase):
             self.assertIn("open slices", str(cm.exception).lower())
         finally:
             t.cleanup()
+
+
+# ── P6.S1 Task 4: cmd_set workflow-step / review flags ──
+import pytest  # noqa: E402  (placed at file end for cohesion with new P6.S1 tests)
+
+
+def test_set_workflow_step_on_slice(tmp_project_with_p6_s1):
+    p = tmp_project_with_p6_s1
+    commands.cmd_set(p, id="P6.S1", workflow_step="plan")
+    state = commands.load_project(p / "docs" / "tasklist.json")
+    s = state.phases[0].slices[0]
+    assert s.workflow_step.value == "plan"
+
+
+def test_set_workflow_step_on_phase(tmp_project_with_p6_s1):
+    p = tmp_project_with_p6_s1
+    commands.cmd_set(p, id="P6", workflow_step="ready")
+    state = commands.load_project(p / "docs" / "tasklist.json")
+    assert state.phases[0].workflow_step.value == "ready"
+
+
+def test_set_rejects_no_op_invocation(tmp_project_with_p6_s1):
+    p = tmp_project_with_p6_s1
+    with pytest.raises(commands.UsageError, match="at least one mutating flag"):
+        commands.cmd_set(p, id="P6.S1")
+
+
+def test_set_rejects_workflow_step_and_clear(tmp_project_with_p6_s1):
+    p = tmp_project_with_p6_s1
+    with pytest.raises(commands.UsageError, match="mutually exclusive"):
+        commands.cmd_set(p, id="P6.S1", workflow_step="plan", clear_workflow_step=True)
+
+
+def test_set_rejects_review_active_false_with_stage(tmp_project_with_p6_s1):
+    p = tmp_project_with_p6_s1
+    with pytest.raises(commands.UsageError, match="review-stage cannot be set"):
+        commands.cmd_set(p, id="P6.S1", review_active=False, review_stage="passed")
+
+
+def test_set_rejects_review_flags_on_phase(tmp_project_with_p6_s1):
+    p = tmp_project_with_p6_s1
+    with pytest.raises(commands.UsageError, match="review.*only.*slice"):
+        commands.cmd_set(p, id="P6", review_active=True)
+
+
+def test_set_rejects_slice_step_value_on_phase(tmp_project_with_p6_s1):
+    p = tmp_project_with_p6_s1
+    with pytest.raises(commands.UsageError, match="not valid for phase"):
+        commands.cmd_set(p, id="P6", workflow_step="plan")
+
+
+def test_set_rejects_phase_step_value_on_slice(tmp_project_with_p6_s1):
+    p = tmp_project_with_p6_s1
+    with pytest.raises(commands.UsageError, match="not valid for slice"):
+        commands.cmd_set(p, id="P6.S1", workflow_step="ready")
+
+
+def test_set_status_only_still_works(tmp_project_with_p6_s1):
+    p = tmp_project_with_p6_s1
+    commands.cmd_set(p, id="P6.S1", status="in_progress")
+    state = commands.load_project(p / "docs" / "tasklist.json")
+    assert state.phases[0].slices[0].status.value == "in_progress"
+
+
+def test_set_workflow_step_clears_review_block(tmp_project_with_p6_s1):
+    p = tmp_project_with_p6_s1
+    commands.cmd_set(p, id="P6.S1", review_active=True, review_stage="awaiting_response")
+    commands.cmd_set(p, id="P6.S1", workflow_step="plan")
+    state = commands.load_project(p / "docs" / "tasklist.json")
+    s = state.phases[0].slices[0]
+    assert s.review_active is False
+    assert s.review_stage is None
+
+
+def test_clear_workflow_step(tmp_project_with_p6_s1):
+    p = tmp_project_with_p6_s1
+    commands.cmd_set(p, id="P6.S1", workflow_step="plan")
+    commands.cmd_set(p, id="P6.S1", clear_workflow_step=True)
+    state = commands.load_project(p / "docs" / "tasklist.json")
+    assert state.phases[0].slices[0].workflow_step is None
