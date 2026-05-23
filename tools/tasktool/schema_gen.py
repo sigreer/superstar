@@ -64,6 +64,15 @@ def build_schema() -> dict:
             "worktree_pruned_at": {"oneOf": [date_str, {"type": "null"}]},
             "worktree_prune_pending": {"type": "boolean"},
             "worktree_prune_pending_at": {"oneOf": [date_str, {"type": "null"}]},
+            "workflow_step": {"oneOf": [
+                {"enum": ["spec", "plan", "implement", "done"]},
+                {"type": "null"},
+            ]},
+            "review_active": {"type": "boolean"},
+            "review_stage": {"oneOf": [
+                {"enum": ["awaiting_response", "applying_fixes", "passed"]},
+                {"type": "null"},
+            ]},
         },
         "additionalProperties": False,
     }
@@ -83,6 +92,10 @@ def build_schema() -> dict:
             "phase_reviewer_chain": {"oneOf": [{"type": "string"}, {"type": "null"}]},
             "notes": {"type": "string"},
             "slices": {"type": "array", "items": slice_},
+            "workflow_step": {"oneOf": [
+                {"enum": ["spec", "ready", "in_progress", "done"]},
+                {"type": "null"},
+            ]},
         },
         "additionalProperties": False,
     }

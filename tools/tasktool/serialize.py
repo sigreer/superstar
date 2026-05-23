@@ -75,6 +75,8 @@ def to_dict(p: Project) -> dict:
             _strip_workflow_defaults(slc)
     for cross in out.get("cross_cutting", []):
         _strip_worktree_defaults(cross)
+    # Always emit current SCHEMA_VERSION on save (auto-promotion of legacy rows).
+    out["schema_version"] = SCHEMA_VERSION
     return out
 
 def _strict_bool(value, *, scope: str, field: str, default: bool = False) -> bool:

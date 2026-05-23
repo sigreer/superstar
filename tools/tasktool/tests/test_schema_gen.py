@@ -45,3 +45,37 @@ def test_schema_includes_prune_audit_fields():
     assert "worktree_pruned_at" in cross_props
     assert "worktree_prune_pending" in cross_props
     assert "worktree_prune_pending_at" in cross_props
+
+
+def test_schema_version_bumped_to_2():
+    schema = build_schema()
+    assert schema["properties"]["schema_version"]["const"] == 2
+
+
+def test_slice_schema_includes_workflow_step():
+    schema = build_schema()
+    slice_schema = schema["properties"]["phases"]["items"]["properties"]["slices"]["items"]
+    ws = slice_schema["properties"]["workflow_step"]
+    assert ws == {"oneOf": [{"enum": ["spec", "plan", "implement", "done"]}, {"type": "null"}]}
+
+
+def test_slice_schema_includes_review_block_fields():
+    schema = build_schema()
+    slice_schema = schema["properties"]["phases"]["items"]["properties"]["slices"]["items"]
+    assert slice_schema["properties"]["review_active"] == {"type": "boolean"}
+    assert slice_schema["properties"]["review_stage"] == {
+        "oneOf": [{"enum": ["awaiting_response", "applying_fixes", "passed"]}, {"type": "null"}]
+    }
+
+
+def test_phase_schema_includes_workflow_step():
+    schema = build_schema()
+    phase_schema = schema["properties"]["phases"]["items"]
+    ws = phase_schema["properties"]["workflow_step"]
+    assert ws == {"oneOf": [{"enum": ["spec", "ready", "in_progress", "done"]}, {"type": "null"}]}
+
+
+def test_cross_schema_does_not_include_workflow_step():
+    schema = build_schema()
+    cross_schema = schema["properties"]["cross_cutting"]["items"]
+    assert "workflow_step" not in cross_schema["properties"]
