@@ -2311,3 +2311,61 @@ def cmd_worktree_repair(*, repo_root: Path, id: str) -> None:
             )
         wt.git_worktree_add(write_root, wt_path, branch)
         print(f"{qid}: worktree recreated at {wt_path} on branch {branch}.")
+
+
+# ───── infer-step (workflow_step inference) ─────
+
+def _find_row(p: Project, qid: str):
+    """Returns ("slice", phase, slice) | ("phase", phase, None) | ("cross", cross, None).
+
+    Delegates to the existing `_find_item` helper, which already handles
+    qualified-vs-short ID resolution. Raises UsageError on missing IDs.
+    """
+    try:
+        qid_resolved, _container, item = _find_item(p, qid)
+    except CommandError as e:
+        raise UsageError(str(e)) from e
+    parsed = parse_id(qid_resolved)[0]
+    if parsed == "slice":
+        phase_part = split_qualified(qid_resolved)[0]
+        phase = next(ph for ph in p.phases if ph.id == phase_part)
+        return "slice", phase, item
+    if parsed == "phase":
+        return "phase", item, None
+    if parsed == "cross":
+        return "cross", item, None
+    raise UsageError(f"infer-step: unsupported id kind: {qid}")
+
+
+def _infer_step_for_slice(phase: Phase, slice_: Slice) -> dict:
+    if slice_.status == Status.DONE:
+        return {"step": "done", "blocked": False}
+    blocked = slice_.status == Status.BLOCKED
+    has_slice_plan = bool(slice_.plan_path)
+    plan_ratified = slice_.planning_status == PlanningStatus.RATIFIED
+    # Per spec §3.3: the slice-level step is driven by the slice's own plan_path.
+    # Absence of plan_path keeps the slice in the spec stage; once a plan exists,
+    # ratification advances it to implement. (The phase's spec_path governs the
+    # phase-level inference, handled in Task 6.)
+    if not has_slice_plan:
+        step = "spec"
+    elif not plan_ratified:
+        step = "plan"
+    else:
+        step = "implement"
+    return {"step": step, "blocked": blocked}
+
+
+def _infer_step_for_phase(phase: Phase) -> dict:
+    raise NotImplementedError  # implemented in Task 6
+
+
+def infer_step_for_id(p: Project, qid: str) -> dict:
+    kind, parent, child = _find_row(p, qid)
+    if kind == "cross":
+        return {"step": "n/a", "blocked": False}
+    if kind == "slice":
+        return _infer_step_for_slice(parent, child)
+    if kind == "phase":
+        return _infer_step_for_phase(parent)
+    raise UsageError(f"infer-step: unsupported kind for {qid}")

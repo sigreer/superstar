@@ -831,3 +831,66 @@ def test_clear_workflow_step(tmp_project_with_p6_s1):
     commands.cmd_set(p, id="P6.S1", clear_workflow_step=True)
     state = commands.load_project(p / "docs" / "tasklist.json")
     assert state.phases[0].slices[0].workflow_step is None
+
+
+def _make_project(slice_kwargs=None, phase_kwargs=None, extra_slices=None):
+    # Slices use SHORT ids in the model — qualification is done at the CLI/lookup layer.
+    from tasktool.model import Project, Phase, Slice
+    s = Slice(id="S1", title="t", created="2026-05-23", **(slice_kwargs or {}))
+    slices = [s] + list(extra_slices or [])
+    ph = Phase(id="P6", title="t", created="2026-05-23", slices=slices, **(phase_kwargs or {}))
+    return Project(project="t", phases=[ph])
+
+
+def test_infer_step_slice_no_plan_no_phase_spec():
+    p = _make_project()
+    assert commands.infer_step_for_id(p, "P6.S1") == {"step": "spec", "blocked": False}
+
+
+def test_infer_step_slice_phase_has_spec_no_plan():
+    p = _make_project(phase_kwargs={"spec_path": "docs/specs/P6.md"})
+    assert commands.infer_step_for_id(p, "P6.S1") == {"step": "spec", "blocked": False}
+
+
+def test_infer_step_slice_plan_proposed():
+    from tasktool.model import PlanningStatus
+    p = _make_project(slice_kwargs={"plan_path": "docs/plans/P6.S1.md", "planning_status": PlanningStatus.PROPOSED})
+    assert commands.infer_step_for_id(p, "P6.S1") == {"step": "plan", "blocked": False}
+
+
+def test_infer_step_slice_plan_ratified_ready():
+    from tasktool.model import PlanningStatus
+    p = _make_project(slice_kwargs={"plan_path": "docs/plans/P6.S1.md", "planning_status": PlanningStatus.RATIFIED})
+    assert commands.infer_step_for_id(p, "P6.S1") == {"step": "implement", "blocked": False}
+
+
+def test_infer_step_slice_done_wins_over_everything():
+    from tasktool.model import Status
+    p = _make_project(slice_kwargs={"status": Status.DONE})
+    assert commands.infer_step_for_id(p, "P6.S1") == {"step": "done", "blocked": False}
+
+
+def test_infer_step_slice_blocked_overlay():
+    from tasktool.model import Status, PlanningStatus, BlockedOn
+    p = _make_project(slice_kwargs={
+        "status": Status.BLOCKED,
+        "plan_path": "docs/plans/P6.S1.md",
+        "planning_status": PlanningStatus.RATIFIED,
+        "blocked_on": BlockedOn(kind="external", value="waiting on x"),
+    })
+    assert commands.infer_step_for_id(p, "P6.S1") == {"step": "implement", "blocked": True}
+
+
+def test_infer_step_done_overrides_blocked():
+    from tasktool.model import Status
+    p = _make_project(slice_kwargs={"status": Status.DONE})
+    # Even if blocked were set somehow, done wins. (status=done can't coexist with blocked
+    # in the validator, but the inference contract is explicit.)
+    assert commands.infer_step_for_id(p, "P6.S1") == {"step": "done", "blocked": False}
+
+
+def test_infer_step_cross_cutting_returns_na():
+    from tasktool.model import Project, CrossCutting
+    p = Project(project="t",
+                cross_cutting=[CrossCutting(id="X1", title="t", created="2026-05-23")])
+    assert commands.infer_step_for_id(p, "X1") == {"step": "n/a", "blocked": False}
