@@ -38,7 +38,7 @@
     ],
     "PostToolUse": [
       {
-        "matcher": "TodoWrite",
+        "matcher": "TodoWrite|update_plan|functions.update_plan",
         "hooks": [
           {
             "type": "command",

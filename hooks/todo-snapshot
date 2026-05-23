@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# PostToolUse hook for TodoWrite.
-# Writes the full todo list to ~/.claude/projects/<project-slug>/<session_id>/todos.json
-# so the statusline and any external sidebar can render live progress.
+# PostToolUse hook for Claude TodoWrite and Codex update_plan.
+# Writes the full todo list to the harness project cache so statuslines and
+# external sidebars can render live progress.
 
 set -u
 set -o pipefail
@@ -10,28 +10,52 @@ command -v jq >/dev/null 2>&1 || exit 0
 
 input=$(cat)
 
-session_id=$(echo "$input" | jq -r '.session_id // empty')
-cwd=$(echo "$input" | jq -r '.cwd // empty')
+tool_name=$(echo "$input" | jq -r '.tool_name // .tool // empty')
+is_codex_plan=$(echo "$input" | jq -r 'if (.tool_input.plan? | type) == "array" then "1" else "0" end')
+session_id=$(echo "$input" | jq -r '.session_id // .thread_id // .conversation_id // empty')
+cwd=$(echo "$input" | jq -r '.cwd // .workspace_root // empty')
 if [ -z "$session_id" ] || [ -z "$cwd" ]; then
     exit 0
 fi
 
+todos=$(echo "$input" | jq -c '
+    if (.tool_input.todos? | type) == "array" then
+        .tool_input.todos
+    elif (.tool_input.plan? | type) == "array" then
+        [.tool_input.plan[] | {content: .step, status: .status}]
+    else
+        empty
+    end
+')
+if [ -z "$todos" ]; then
+    exit 0
+fi
+
+case "$tool_name:$is_codex_plan" in
+    update_plan:*|functions.update_plan:*|*:1)
+        harness_home="${HOME}/.codex"
+        ;;
+    *)
+        harness_home="${HOME}/.claude"
+        ;;
+esac
+
 project_slug=$(echo "$cwd" | sed 's|/|-|g')
-session_dir="${HOME}/.claude/projects/${project_slug}/${session_id}"
+session_dir="${harness_home}/projects/${project_slug}/${session_id}"
 mkdir -p "$session_dir"
 
-todos=$(echo "$input" | jq -c '.tool_input.todos // []')
 total=$(echo "$todos" | jq 'length')
-done=$(echo "$todos" | jq '[.[] | select(.status=="completed")] | length')
+done=$(echo "$todos" | jq '[.[] | select(.status=="completed" or .status=="done")] | length')
 in_progress=$(echo "$todos" | jq '[.[] | select(.status=="in_progress")] | length')
 updated_at=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
 jq -n \
+    --arg source_tool "$tool_name" \
     --arg session_id "$session_id" \
     --arg updated_at "$updated_at" \
     --argjson total "$total" \
     --argjson done "$done" \
     --argjson in_progress "$in_progress" \
     --argjson todos "$todos" \
-    '{session_id: $session_id, updated_at: $updated_at, counts: {done: $done, in_progress: $in_progress, total: $total}, todos: $todos}' \
+    '{source_tool: $source_tool, session_id: $session_id, updated_at: $updated_at, counts: {done: $done, in_progress: $in_progress, total: $total}, todos: $todos}' \
     > "${session_dir}/todos.json"

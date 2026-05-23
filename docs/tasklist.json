@@ -17,6 +17,12 @@
       "archived_path": "docs/archived-tasks/X18-harden-external-reviewer-caller-detectio.md",
       "id": "X18",
       "title": "Harden external reviewer caller detection for Codex"
+    },
+    {
+      "archived_date": "2026-05-23",
+      "archived_path": "docs/archived-tasks/X20-install-codex-todo-snapshot-hook.md",
+      "id": "X20",
+      "title": "Install Codex todo snapshot hook"
     }
   ],
   "archived_phases": [

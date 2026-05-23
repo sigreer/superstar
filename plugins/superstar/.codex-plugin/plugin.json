@@ -21,6 +21,7 @@
     "workflow"
   ],
   "skills": "./skills/",
+  "hooks": "./hooks/hooks.json",
   "interface": {
     "displayName": "Superstar",
     "shortDescription": "Planning, TDD, debugging, and delivery workflows for coding agents",
