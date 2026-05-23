@@ -1,16 +1,17 @@
 from __future__ import annotations
-from tasktool.model import Project, Phase, Slice, CrossCutting, Status
+from tasktool.model import Project, Phase, Slice, CrossCutting, Status, is_terminal
 
 STATUS_EMOJI = {
     Status.DONE: "✅",
     Status.IN_PROGRESS: "🚧",
     Status.BLOCKED: "⏸",
     Status.READY: "☐",
+    Status.CANCELLED: "🚫",
 }
 
 def _slice_tag(s: Slice) -> str:
-    if s.status is Status.DONE and s.closed:
-        return f" `DONE {s.closed}`"
+    if is_terminal(s.status) and s.closed:
+        return f" `{s.status.value.upper()} {s.closed}`"
     if s.status is Status.IN_PROGRESS:
         return " `IN PROGRESS`"
     if s.status is Status.BLOCKED and s.blocked_on:
@@ -25,8 +26,8 @@ def _non_slice_emoji(status: Status) -> str:
     return STATUS_EMOJI[status]
 
 def _phase_tag(ph: Phase) -> str:
-    if ph.status is Status.DONE and ph.closed:
-        return f" `DONE {ph.closed}`"
+    if is_terminal(ph.status) and ph.closed:
+        return f" `{ph.status.value.upper()} {ph.closed}`"
     if ph.status is Status.IN_PROGRESS:
         return " `IN PROGRESS`"
     return ""

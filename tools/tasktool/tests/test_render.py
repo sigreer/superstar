@@ -9,7 +9,7 @@ from tasktool.model import (
     Status,
     BlockedOn,
 )
-from tasktool.render import render_project
+from tasktool.render import render_project, STATUS_EMOJI
 
 class TestRender(unittest.TestCase):
     def test_basic_render(self):
@@ -84,6 +84,33 @@ class TestRender(unittest.TestCase):
         self.assertNotIn("**X2**", active_section)
         self.assertIn("**X2**", archived_section)
         self.assertIn("docs/archived-tasks/X2-archived-cross.md", archived_section)
+
+
+class TestCancelledRendering(unittest.TestCase):
+    def test_cancelled_emoji_present(self):
+        self.assertEqual(STATUS_EMOJI[Status.CANCELLED], "🚫")
+
+    def test_cancelled_slice_renders_with_closed_date(self):
+        p = Project(project="demo")
+        ph = Phase(id="P1", title="p", created="2026-05-23")
+        ph.slices.append(Slice(
+            id="S1", title="dropped", created="2026-05-23",
+            status=Status.CANCELLED, closed="2026-05-23",
+        ))
+        p.phases.append(ph)
+        out = render_project(p)
+        self.assertIn("🚫", out)
+        self.assertIn("2026-05-23", out)
+
+    def test_cancelled_phase_renders_with_closed_date(self):
+        p = Project(project="demo")
+        p.phases.append(Phase(
+            id="P1", title="dropped phase", created="2026-05-23",
+            status=Status.CANCELLED, closed="2026-05-23",
+        ))
+        out = render_project(p)
+        self.assertIn("🚫", out)
+        self.assertIn("2026-05-23", out)
 
 
 if __name__ == "__main__":
