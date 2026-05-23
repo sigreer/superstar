@@ -11,6 +11,7 @@ from tasktool.model import (
     CrossCutting,
     Status,
     PlanningStatus,
+    is_terminal,
 )
 from tasktool.serialize import load_project, save_project, dumps_canonical
 from tasktool.ids import parse_id, IdParseError
@@ -70,8 +71,13 @@ def _check_dates(
 def _check_task(t: Task, scope: str) -> None:
     _check_id(t.id, _TASK_RE, scope)
     _require(t.status != Status.BLOCKED, f"{scope}: tasks cannot be blocked (slice-only)")
-    if t.status == Status.DONE:
-        _require(t.closed is not None, f"{scope}: status=done requires closed date")
+    if t.status == Status.CANCELLED:
+        raise ValidationError(
+            f"{scope}: cancelled is not a valid task status; cancel the parent slice instead"
+        )
+    if is_terminal(t.status):
+        _require(t.closed is not None,
+                 f"{scope}: status={t.status.value} requires closed date")
     _check_dates(t.created, t.started, t.closed, scope)
 
 def _check_slice(s: Slice, scope: str) -> None:
@@ -84,8 +90,9 @@ def _check_slice(s: Slice, scope: str) -> None:
         _require(s.blocked_on is not None, f"{scope}: blocked requires blocked_on")
     if s.blocked_on is not None:
         _require(s.status == Status.BLOCKED, f"{scope}: blocked_on without blocked status")
-    if s.status == Status.DONE:
-        _require(s.closed is not None, f"{scope}: status=done requires closed date")
+    if is_terminal(s.status):
+        _require(s.closed is not None,
+                 f"{scope}: status={s.status.value} requires closed date")
     _check_dates(s.created, s.started, s.closed, scope)
     # worktree fields (P5.S1)
     if s.worktree_in_place:
@@ -117,8 +124,9 @@ def _check_slice(s: Slice, scope: str) -> None:
 def _check_phase(p: Phase, scope: str) -> None:
     _check_id(p.id, _PHASE_RE, scope)
     _require(p.status != Status.BLOCKED, f"{scope}: phases cannot be blocked")
-    if p.status == Status.DONE:
-        _require(p.closed is not None, f"{scope}: status=done requires closed date")
+    if is_terminal(p.status):
+        _require(p.closed is not None,
+                 f"{scope}: status={p.status.value} requires closed date")
     _check_dates(p.created, p.started, p.closed, scope)
     seen: set[str] = set()
     for s in p.slices:
@@ -130,8 +138,9 @@ def _check_phase(p: Phase, scope: str) -> None:
 def _check_cross(c: CrossCutting, scope: str) -> None:
     _check_id(c.id, _CROSS_RE, scope)
     _require(c.status != Status.BLOCKED, f"{scope}: cross-cutting cannot be blocked")
-    if c.status == Status.DONE:
-        _require(c.closed is not None, f"{scope}: status=done requires closed date")
+    if is_terminal(c.status):
+        _require(c.closed is not None,
+                 f"{scope}: status={c.status.value} requires closed date")
     _check_dates(c.created, c.started, c.closed, scope)
     # worktree fields (P5.S1)
     if c.worktree_in_place:

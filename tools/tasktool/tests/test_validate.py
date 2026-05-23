@@ -529,6 +529,51 @@ def test_validate_accepts_worktree_pruned_at_alone():
     validate_project(p)  # no raise
 
 
+def test_cancelled_slice_requires_closed_date():
+    import pytest
+    p = _project_with_slice(status=Status.CANCELLED, closed=None)
+    with pytest.raises(ValidationError, match="cancelled.*closed"):
+        validate_project(p)
+
+
+def test_cancelled_slice_with_closed_passes():
+    p = _project_with_slice(
+        status=Status.CANCELLED,
+        started="2026-05-17",
+        closed="2026-05-17",
+    )
+    validate_project(p)
+
+
+def test_cancelled_task_rejected_semantically():
+    import pytest
+    p = _project_with_slice()
+    p.phases[0].slices[0].tasks.append(
+        Task(id="T1", title="t", created="2026-05-17",
+             status=Status.CANCELLED, closed="2026-05-17"),
+    )
+    with pytest.raises(ValidationError, match="cancel.*task"):
+        validate_project(p)
+
+
+def test_cancelled_phase_requires_closed():
+    import pytest
+    p = Project(project="demo")
+    p.phases.append(Phase(id="P1", title="p", created="2026-05-17",
+                          status=Status.CANCELLED))
+    with pytest.raises(ValidationError, match="cancelled.*closed"):
+        validate_project(p)
+
+
+def test_cancelled_cross_requires_closed():
+    import pytest
+    p = Project(project="demo")
+    p.cross_cutting.append(CrossCutting(id="X1", title="x", created="2026-05-17",
+                                        status=Status.CANCELLED))
+    with pytest.raises(ValidationError, match="cancelled.*closed"):
+        validate_project(p)
+
+
 def test_validate_rejects_bad_pruned_at_date():
     from tasktool.model import Project, Phase, Slice
     from tasktool.validate import validate_project, ValidationError
