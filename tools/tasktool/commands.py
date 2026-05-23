@@ -1044,8 +1044,22 @@ def cmd_cancel(
             raise CommandError(f"{qid} is already {item.status.value}; cannot cancel")
 
         if kind == "phase":
-            # cascade handling deferred to Task 8
-            raise CommandError(f"{qid}: phase cancel not yet implemented")
+            open_slices = [s for s in item.slices if not is_terminal(s.status)]
+            if open_slices and not cascade:
+                ids = ", ".join(s.id for s in open_slices)
+                raise CommandError(
+                    f"{qid}: phase has open slices ({ids}); use --cascade to cancel them"
+                )
+            for s in open_slices:
+                _stamp_cancellation(s, reason, suffix=f"cascaded from {qid}")
+                _notify_status(
+                    qid=f"{qid}.{s.id}", kind="slice",
+                    status=s.status, title=s.title,
+                )
+            _stamp_cancellation(item, reason, suffix=None)
+            _save(write_root, p)
+            _notify_status(qid=qid, kind="phase", status=item.status, title=item.title)
+            return
 
         _stamp_cancellation(item, reason, suffix=None)
 

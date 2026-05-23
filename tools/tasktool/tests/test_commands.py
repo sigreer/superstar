@@ -882,3 +882,101 @@ class CancelCrossTests(unittest.TestCase):
         ]
         cancel_events = [e for e in events if e["id"] == "X1" and e["status"] == "cancelled"]
         self.assertEqual(len(cancel_events), 1)
+
+
+class CancelPhaseTests(unittest.TestCase):
+    def setUp(self):
+        self.t = _Tmp()
+        commands.cmd_init(repo_root=self.t.root, project="demo")
+        commands.cmd_create_phase(repo_root=self.t.root, title="P1")
+        commands.cmd_create_slice(repo_root=self.t.root, phase_id="P1", title="S1")
+        commands.cmd_create_slice(repo_root=self.t.root, phase_id="P1", title="S2")
+        commands.cmd_create_slice(repo_root=self.t.root, phase_id="P1", title="S3")
+
+    def tearDown(self):
+        self.t.cleanup()
+
+    def _phase(self):
+        p = load_project(self.t.root / "docs/tasklist.json")
+        return next(x for x in p.phases if x.id == "P1")
+
+    def _slice(self, sid):
+        ph = self._phase()
+        return next(s for s in ph.slices if s.id == sid)
+
+    def _close_slice(self, sid):
+        commands.cmd_start(repo_root=self.t.root, id=f"P1.{sid}")
+        commands.cmd_close(
+            repo_root=self.t.root, id=f"P1.{sid}", skip_review_gate=True
+        )
+
+    def test_cancel_phase_refuses_with_open_slices(self):
+        with self.assertRaisesRegex(commands.CommandError, "open"):
+            commands.cmd_cancel(repo_root=self.t.root, id="P1", reason="pivoting")
+
+    def test_cancel_phase_refuses_lists_open_slice_ids(self):
+        # Close S1 so only S2/S3 are open; error should list them.
+        self._close_slice("S1")
+        with self.assertRaisesRegex(commands.CommandError, "S2.*S3"):
+            commands.cmd_cancel(repo_root=self.t.root, id="P1", reason="pivot")
+
+    def test_cancel_phase_succeeds_when_all_slices_terminal(self):
+        # S1 done, S2 cancelled, S3 cancelled -> phase cancels without --cascade.
+        self._close_slice("S1")
+        commands.cmd_cancel(repo_root=self.t.root, id="P1.S2", reason="dropped")
+        commands.cmd_cancel(repo_root=self.t.root, id="P1.S3", reason="dropped")
+        commands.cmd_cancel(repo_root=self.t.root, id="P1", reason="rollup")
+        ph = self._phase()
+        self.assertEqual(ph.status, Status.CANCELLED)
+        self.assertEqual(ph.closed, _dt.date.today().isoformat())
+        # Done child untouched
+        s1 = self._slice("S1")
+        self.assertEqual(s1.status, Status.DONE)
+
+    def test_cancel_phase_cascade_cancels_open_leaves_done(self):
+        # S1 done, S2 ready, S3 in_progress
+        self._close_slice("S1")
+        commands.cmd_start(repo_root=self.t.root, id="P1.S3")
+        s1_closed_before = self._slice("S1").closed
+        commands.cmd_cancel(
+            repo_root=self.t.root, id="P1", reason="pivot", cascade=True
+        )
+        ph = self._phase()
+        s1 = self._slice("S1")
+        s2 = self._slice("S2")
+        s3 = self._slice("S3")
+        self.assertEqual(ph.status, Status.CANCELLED)
+        self.assertEqual(s1.status, Status.DONE)
+        self.assertEqual(s1.closed, s1_closed_before)
+        self.assertEqual(s2.status, Status.CANCELLED)
+        self.assertEqual(s3.status, Status.CANCELLED)
+        self.assertIn("(cascaded from P1)", s2.notes)
+        self.assertIn("(cascaded from P1)", s3.notes)
+        self.assertEqual(s2.closed, _dt.date.today().isoformat())
+        self.assertEqual(s3.closed, _dt.date.today().isoformat())
+
+    def test_cancel_phase_cascade_notifies_each_cascaded_child_and_phase(self):
+        self._close_slice("S1")
+        log = self.t.root / "notify.jsonl"
+        with patch.dict(
+            os.environ,
+            {
+                "SUPERSTAR_NOTIFY_DISABLE": "0",
+                "SUPERSTAR_NOTIFY_DRY_RUN": "1",
+                "SUPERSTAR_NOTIFY_LOG": str(log),
+            },
+        ):
+            commands.cmd_cancel(
+                repo_root=self.t.root, id="P1", reason="pivot", cascade=True
+            )
+        events = [
+            json.loads(line) for line in log.read_text(encoding="utf-8").splitlines()
+        ]
+        ids_with_cancel = sorted(
+            e["id"] for e in events if e["status"] == "cancelled"
+        )
+        self.assertEqual(ids_with_cancel, ["P1", "P1.S2", "P1.S3"])
+        # The done slice S1 must NOT emit a cancel event.
+        self.assertFalse(
+            any(e["id"] == "P1.S1" and e["status"] == "cancelled" for e in events)
+        )
