@@ -23,6 +23,12 @@
       "archived_path": "docs/archived-tasks/X20-install-codex-todo-snapshot-hook.md",
       "id": "X20",
       "title": "Install Codex todo snapshot hook"
+    },
+    {
+      "archived_date": "2026-05-23",
+      "archived_path": "docs/archived-tasks/X19-install-todowrite-snapshot-hook-via-depl.md",
+      "id": "X19",
+      "title": "Install TodoWrite snapshot hook via deploy.sh"
     }
   ],
   "archived_phases": [
@@ -263,16 +269,6 @@
       "started": "2026-05-21",
       "status": "done",
       "title": "Make spec and plan artifact handling transactional"
-    },
-    {
-      "closed": null,
-      "created": "2026-05-23",
-      "id": "X19",
-      "notes": "",
-      "refs": [],
-      "started": null,
-      "status": "ready",
-      "title": "Install TodoWrite snapshot hook via deploy.sh"
     }
   ],
   "last_reviewed": "2026-05-18",
