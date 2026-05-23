@@ -2380,3 +2380,105 @@ def infer_step_for_id(p: Project, qid: str) -> dict:
     if kind == "phase":
         return _infer_step_for_phase(parent)
     raise UsageError(f"infer-step: unsupported kind for {qid}")
+
+
+def _stored_step_for(item) -> str | None:
+    """Return the stored workflow_step value (enum .value) or None."""
+    ws = getattr(item, "workflow_step", None)
+    if ws is None:
+        return None
+    return getattr(ws, "value", ws)
+
+
+def _format_single_text(qid: str, inferred: dict, stored: str | None) -> str:
+    parts = [f"{qid}: {inferred['step']}"]
+    if inferred.get("blocked"):
+        parts.append("(blocked)")
+    parts.append(f"(stored: {stored})")
+    return " ".join(parts) + "\n"
+
+
+def _format_all_row(qid: str, inferred: dict, stored: str | None, drift: bool) -> str:
+    prefix = "!" if drift else " "
+    return f"{prefix} {qid:<10} inferred={inferred['step']}  stored={stored}\n"
+
+
+def cmd_infer_step(
+    *, repo_root: Path, id: str | None, all: bool, diff: bool, format: str,
+) -> int:
+    """Infer workflow_step for one row or every row.
+
+    Returns:
+      - 0 on success (single-row, or --all with no drift when --diff)
+      - 1 when --all --diff finds drift
+      - 2 on a process error (unknown id)
+    """
+    try:
+        p = _load(repo_root)
+    except CommandError as e:
+        print(f"tasktool: {e}", file=sys.stderr)
+        return 2
+
+    if not all:
+        # Single-row mode.
+        try:
+            kind, parent, child = _find_row(p, id)
+        except UsageError as e:
+            print(f"tasktool: {e}", file=sys.stderr)
+            return 2
+        # Build the qualified id from the resolved row.
+        if kind == "slice":
+            qid = f"{parent.id}.{child.id}"
+            item = child
+        else:
+            qid = parent.id
+            item = parent
+        inferred = infer_step_for_id(p, qid)
+        stored = _stored_step_for(item)
+        if format == "json":
+            print(_json.dumps({
+                "id": qid,
+                "step": inferred["step"],
+                "blocked": inferred["blocked"],
+                "stored": stored,
+            }))
+        else:
+            sys.stdout.write(_format_single_text(qid, inferred, stored))
+        return 0
+
+    # --all mode: iterate phases + slices.
+    rows: list[tuple[str, dict, str | None]] = []
+    for ph in p.phases:
+        ph_inferred = _infer_step_for_phase(ph)
+        rows.append((ph.id, ph_inferred, _stored_step_for(ph)))
+        for s in ph.slices:
+            qid = f"{ph.id}.{s.id}"
+            s_inferred = _infer_step_for_slice(ph, s)
+            rows.append((qid, s_inferred, _stored_step_for(s)))
+
+    # `stored=None` is opt-in — never counts as drift.
+    def _is_drift(inferred: dict, stored: str | None) -> bool:
+        return stored is not None and stored != inferred["step"]
+
+    if diff:
+        rows = [(qid, inf, stored) for (qid, inf, stored) in rows if _is_drift(inf, stored)]
+
+    if format == "json":
+        payload = [
+            {
+                "id": qid,
+                "step": inf["step"],
+                "blocked": inf["blocked"],
+                "stored": stored,
+                "drift": _is_drift(inf, stored),
+            }
+            for (qid, inf, stored) in rows
+        ]
+        print(_json.dumps(payload))
+    else:
+        for qid, inf, stored in rows:
+            sys.stdout.write(_format_all_row(qid, inf, stored, _is_drift(inf, stored)))
+
+    if diff and rows:
+        return 1
+    return 0

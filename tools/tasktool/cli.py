@@ -103,6 +103,14 @@ def _build_parser() -> argparse.ArgumentParser:
     p_set.add_argument("--allow-ready-close", action="store_true")
     p_set.add_argument("--reason")
 
+    p_infer = sub.add_parser("infer-step")
+    group = p_infer.add_mutually_exclusive_group(required=True)
+    group.add_argument("id", nargs="?")
+    group.add_argument("--all", action="store_true", dest="all_rows")
+    p_infer.add_argument("--diff", action="store_true",
+                         help="Only emit rows where stored != inferred (use with --all)")
+    p_infer.add_argument("--format", choices=["text", "json"], default="text")
+
     p_start = sub.add_parser("start")
     p_start.add_argument("id", nargs="?")
     p_start.add_argument("--resume", action="store_true")
@@ -356,6 +364,14 @@ def main(argv: list[str]) -> int:
                 review_stage=args.review_stage,
                 reviewer_chain=args.reviewer_chain, skip_review_gate=args.skip_review_gate,
                 allow_ready_close=args.allow_ready_close, reason=args.reason,
+            )
+        elif args.cmd == "infer-step":
+            return commands.cmd_infer_step(
+                repo_root=root,
+                id=args.id,
+                all=args.all_rows,
+                diff=args.diff,
+                format=args.format,
             )
         elif args.cmd == "start":
             if args.ad_hoc is not None:

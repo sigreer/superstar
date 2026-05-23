@@ -488,3 +488,52 @@ def test_config_init_authority_rejects_wrong_checkout_branch(tmp_path):
     assert r.returncode == 1
     assert "expected branch main" in r.stderr
     assert not (tmp_path / ".tasktool" / "config.json").exists()
+
+
+def test_infer_step_single_text(tmp_project_with_p6_s1):
+    r = run_cli("--project-root", str(tmp_project_with_p6_s1), "infer-step", "P6.S1")
+    assert r.returncode == 0
+    assert "spec" in r.stdout
+
+
+def test_infer_step_single_json(tmp_project_with_p6_s1):
+    r = run_cli("--project-root", str(tmp_project_with_p6_s1),
+                "infer-step", "P6.S1", "--format", "json")
+    assert r.returncode == 0
+    out = json.loads(r.stdout)
+    assert out == {"id": "P6.S1", "step": "spec", "blocked": False, "stored": None}
+
+
+def test_infer_step_all_no_diff_exits_zero(tmp_project_with_p6_s1):
+    r = run_cli("--project-root", str(tmp_project_with_p6_s1), "infer-step", "--all", "--diff")
+    assert r.returncode == 0
+    assert r.stdout.strip() == ""
+
+
+def test_infer_step_all_with_drift_uses_qualified_id_and_exits_one(tmp_project_with_p6_s1):
+    run_cli("--project-root", str(tmp_project_with_p6_s1),
+            "set", "P6.S1", "--workflow-step", "implement")
+    r = run_cli("--project-root", str(tmp_project_with_p6_s1),
+                "infer-step", "--all", "--diff")
+    assert r.returncode == 1
+    assert "P6.S1" in r.stdout
+    assert " S1 " not in r.stdout
+
+
+def test_infer_step_unknown_id_exits_two(tmp_project_with_p6_s1):
+    r = run_cli("--project-root", str(tmp_project_with_p6_s1), "infer-step", "P9.S99")
+    assert r.returncode == 2
+
+
+def test_set_no_op_emits_controlled_cli_error(tmp_project_with_p6_s1):
+    r = run_cli("--project-root", str(tmp_project_with_p6_s1), "set", "P6.S1")
+    assert r.returncode != 0
+    assert "Traceback" not in r.stderr
+    assert "at least one mutating flag" in (r.stdout + r.stderr)
+
+
+def test_set_invalid_workflow_step_emits_controlled_cli_error(tmp_project_with_p6_s1):
+    r = run_cli("--project-root", str(tmp_project_with_p6_s1),
+                "set", "P6.S1", "--workflow-step", "bogus")
+    assert r.returncode != 0
+    assert "Traceback" not in r.stderr
