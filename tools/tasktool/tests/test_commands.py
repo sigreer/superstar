@@ -866,6 +866,18 @@ class CancelCrossTests(unittest.TestCase):
         self.assertEqual(x.status, Status.CANCELLED)
         self.assertEqual(p.archived_cross_cutting, [])
 
+    def test_archive_cross_after_cancel_no_archive_preserves_status(self):
+        commands.cmd_cancel(
+            repo_root=self.t.root, id="X1", reason="defer", no_archive=True
+        )
+        commands.cmd_archive_cross(repo_root=self.t.root, id="X1")
+        p = load_project(self.t.root / "docs/tasklist.json")
+        self.assertTrue(all(c.id != "X1" for c in p.cross_cutting))
+        archived = next(a for a in p.archived_cross_cutting if a.id == "X1")
+        body = (self.t.root / archived.archived_path).read_text(encoding="utf-8")
+        self.assertIn("status: cancelled", body)
+        self.assertNotIn("status: done", body)
+
     def test_cancel_cross_emits_cancelled_notification_once(self):
         log = self.t.root / "notify.jsonl"
         with patch.dict(
