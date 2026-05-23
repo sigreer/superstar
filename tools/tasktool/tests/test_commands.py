@@ -516,6 +516,27 @@ class SchedulingTests(unittest.TestCase):
         self.assertIn("Open phases", out)
         self.assertIn("P1", out)
 
+    def test_schedule_emits_cancelled_deps(self):
+        commands.cmd_cancel(repo_root=self.t.root, id="P1.S1", reason="dropped")
+        out = commands.cmd_schedule(
+            repo_root=self.t.root, phase_id="P1", format="json"
+        )
+        rows = json.loads(out)
+        s2 = next(r for r in rows if r["id"] == "P1.S2")
+        self.assertEqual(s2["cancelled_deps"], ["P1.S1"])
+        self.assertEqual(s2["waiting_on"], [])
+        self.assertFalse(s2["ready"])
+
+    def test_schedule_text_includes_cancelled_deps(self):
+        commands.cmd_cancel(repo_root=self.t.root, id="P1.S1", reason="dropped")
+        out = commands.cmd_schedule(repo_root=self.t.root, phase_id="P1")
+        self.assertIn("cancelled_deps=P1.S1", out)
+
+    def test_ready_slices_omits_slice_with_cancelled_dep(self):
+        commands.cmd_cancel(repo_root=self.t.root, id="P1.S1", reason="dropped")
+        out = commands.cmd_ready_slices(repo_root=self.t.root, phase_id="P1")
+        self.assertNotIn("P1.S2", out)
+
 class ShortFormResolutionTests(unittest.TestCase):
     def setUp(self):
         self.t = _Tmp()

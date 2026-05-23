@@ -1540,10 +1540,16 @@ def _phase_by_id(p: Project, phase_id: str) -> Phase:
 def _done_slice_ids(phase: Phase) -> set[str]:
     return {f"{phase.id}.{s.id}" for s in phase.slices if s.status == Status.DONE}
 
+def _cancelled_slice_ids(phase: Phase) -> set[str]:
+    return {f"{phase.id}.{s.id}" for s in phase.slices if s.status == Status.CANCELLED}
+
 def _is_slice_ready_for_work(phase: Phase, s: Slice) -> bool:
-    if s.status in (Status.DONE, Status.BLOCKED):
+    if is_terminal(s.status) or s.status == Status.BLOCKED:
         return False
     if s.planning_status == PlanningStatus.SUPERSEDED:
+        return False
+    cancelled = _cancelled_slice_ids(phase)
+    if any(dep in cancelled for dep in s.depends_on):
         return False
     return all(dep in _done_slice_ids(phase) for dep in s.depends_on)
 
@@ -1574,10 +1580,14 @@ def cmd_schedule(*, repo_root: Path, phase_id: str, format: str = "text") -> str
     p = _load(repo_root)
     phase = _phase_by_id(p, phase_id)
     done = _done_slice_ids(phase)
+    cancelled = _cancelled_slice_ids(phase)
     rows = []
     for s in phase.slices:
-        waiting_on = [dep for dep in s.depends_on if dep not in done]
-        ready = _is_slice_ready_for_work(phase, s)
+        waiting_on = [
+            dep for dep in s.depends_on if dep not in done and dep not in cancelled
+        ]
+        cancelled_deps = [dep for dep in s.depends_on if dep in cancelled]
+        ready = _is_slice_ready_for_work(phase, s) and not cancelled_deps
         rows.append({
             "id": f"{phase.id}.{s.id}",
             "status": s.status.value,
@@ -1585,6 +1595,7 @@ def cmd_schedule(*, repo_root: Path, phase_id: str, format: str = "text") -> str
             "parallel_group": s.parallel_group,
             "depends_on": s.depends_on,
             "waiting_on": waiting_on,
+            "cancelled_deps": cancelled_deps,
             "ready": ready,
             "title": s.title,
         })
@@ -1598,10 +1609,14 @@ def cmd_schedule(*, repo_root: Path, phase_id: str, format: str = "text") -> str
         ready = "ready" if row["ready"] else "waiting"
         deps = ", ".join(row["depends_on"]) if row["depends_on"] else "-"
         waits = ", ".join(row["waiting_on"]) if row["waiting_on"] else "-"
+        cancelled_str = (
+            ", ".join(row["cancelled_deps"]) if row["cancelled_deps"] else "-"
+        )
         group = row["parallel_group"] or "-"
         lines.append(
             f"{row['id']}  [{row['status']}/{row['planning_status']}]  "
-            f"group={group}  {ready}  deps={deps}  waiting_on={waits}  {row['title']}"
+            f"group={group}  {ready}  deps={deps}  waiting_on={waits}  "
+            f"cancelled_deps={cancelled_str}  {row['title']}"
         )
     return "\n".join(lines).rstrip() + "\n"
 
