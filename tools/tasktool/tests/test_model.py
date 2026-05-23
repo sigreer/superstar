@@ -3,6 +3,7 @@ import unittest
 from tasktool.model import (
     Project, Phase, Slice, Task, CrossCutting, BlockedOn, Status,
     PlanningStatus, ArchivedCrossCutting, SCHEMA_VERSION,
+    SliceWorkflowStep, PhaseWorkflowStep, ReviewStage,
 )
 
 class StatusTests(unittest.TestCase):
@@ -101,12 +102,6 @@ def test_cross_audit_fields_default_to_none_and_false():
     assert c.worktree_pruned_at is None
     assert c.worktree_prune_pending is False
     assert c.worktree_prune_pending_at is None
-
-
-from tasktool.model import (
-    Slice, Phase, SCHEMA_VERSION,
-    SliceWorkflowStep, PhaseWorkflowStep, ReviewStage,
-)
 
 
 def test_schema_version_is_2():
