@@ -894,3 +894,59 @@ def test_infer_step_cross_cutting_returns_na():
     p = Project(project="t",
                 cross_cutting=[CrossCutting(id="X1", title="t", created="2026-05-23")])
     assert commands.infer_step_for_id(p, "X1") == {"step": "n/a", "blocked": False}
+
+
+def _phase_with(*statuses):
+    from tasktool.model import Project, Phase, Slice, Status
+    slices = [
+        Slice(id=f"S{i+1}", title="t", created="2026-05-23",
+              status=Status(s))
+        for i, s in enumerate(statuses)
+    ]
+    ph = Phase(id="P6", title="t", created="2026-05-23",
+               spec_path="docs/specs/P6.md", slices=slices)
+    return Project(project="t", phases=[ph])
+
+
+def test_phase_step_no_spec():
+    from tasktool.model import Project, Phase
+    p = Project(project="t", phases=[Phase(id="P6", title="t", created="2026-05-23")])
+    assert commands.infer_step_for_id(p, "P6") == {"step": "spec", "blocked": False}
+
+
+def test_phase_step_spec_but_no_slices():
+    from tasktool.model import Project, Phase
+    p = Project(project="t", phases=[
+        Phase(id="P6", title="t", created="2026-05-23", spec_path="docs/specs/P6.md")
+    ])
+    assert commands.infer_step_for_id(p, "P6") == {"step": "spec", "blocked": False}
+
+
+def test_phase_step_all_ready():
+    p = _phase_with("ready", "ready")
+    assert commands.infer_step_for_id(p, "P6") == {"step": "ready", "blocked": False}
+
+
+def test_phase_step_one_in_progress():
+    p = _phase_with("in_progress", "ready")
+    assert commands.infer_step_for_id(p, "P6") == {"step": "in_progress", "blocked": False}
+
+
+def test_phase_step_blocked_overlay():
+    p = _phase_with("blocked", "ready")
+    assert commands.infer_step_for_id(p, "P6") == {"step": "in_progress", "blocked": True}
+
+
+def test_phase_step_done_plus_ready():
+    p = _phase_with("done", "ready")
+    assert commands.infer_step_for_id(p, "P6") == {"step": "in_progress", "blocked": False}
+
+
+def test_phase_step_done_plus_blocked():
+    p = _phase_with("done", "blocked")
+    assert commands.infer_step_for_id(p, "P6") == {"step": "in_progress", "blocked": True}
+
+
+def test_phase_step_all_done():
+    p = _phase_with("done", "done")
+    assert commands.infer_step_for_id(p, "P6") == {"step": "done", "blocked": False}

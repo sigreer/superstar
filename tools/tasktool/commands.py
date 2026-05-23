@@ -2357,7 +2357,18 @@ def _infer_step_for_slice(phase: Phase, slice_: Slice) -> dict:
 
 
 def _infer_step_for_phase(phase: Phase) -> dict:
-    raise NotImplementedError  # implemented in Task 6
+    if not phase.spec_path:
+        return {"step": "spec", "blocked": False}
+    if not phase.slices:
+        return {"step": "spec", "blocked": False}
+    statuses = [s.status for s in phase.slices]
+    if all(s == Status.DONE for s in statuses):
+        return {"step": "done", "blocked": False}
+    any_started = any(s in (Status.IN_PROGRESS, Status.BLOCKED, Status.DONE) for s in statuses)
+    if any_started:
+        blocked = any(s == Status.BLOCKED for s in statuses)
+        return {"step": "in_progress", "blocked": blocked}
+    return {"step": "ready", "blocked": False}
 
 
 def infer_step_for_id(p: Project, qid: str) -> dict:
