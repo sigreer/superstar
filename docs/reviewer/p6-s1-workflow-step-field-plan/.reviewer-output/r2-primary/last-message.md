@@ -1,0 +1,34 @@
+1. Findings
+
+F1. RESOLVED — The plan no longer targets `tools/tasktool/migrate.py` or a nonexistent `migrate_file` API. Task 3 now explicitly says no schema migration is added in S1 and uses v1 load defaults plus `to_dict` schema version promotion instead: `docs/plans/2026-05-23-P6.S1-workflow-step-field.md:392-404`.
+
+F2. RESOLVED — The schema tests now use `build_schema()` and inspect the current inline schema shape under `properties.phases.items...`, matching `tools/tasktool/schema_gen.py`: `docs/plans/2026-05-23-P6.S1-workflow-step-field.md:406-442`.
+
+F3. RESOLVED — The `cmd_infer_step` pseudocode now uses `_load(repo_root)`, not `load_project(repo_root)`: `docs/plans/2026-05-23-P6.S1-workflow-step-field.md:1175-1178`. It also treats stored `None` as non-drift in `--all --diff`: `docs/plans/2026-05-23-P6.S1-workflow-step-field.md:1202-1209`.
+
+F4. RESOLVED WITH SMALL EDIT — The substantive `executing-plans` omission is fixed in the file table and Task 11: `docs/plans/2026-05-23-P6.S1-workflow-step-field.md:73-75`, `docs/plans/2026-05-23-P6.S1-workflow-step-field.md:1597-1603`. Remaining typo: the architecture summary still says “Five skill markdown files” even though the plan now updates six: `docs/plans/2026-05-23-P6.S1-workflow-step-field.md:7`.
+
+F5. Severity: blocking — The `infer-step` plan is still built around the wrong slice ID representation. The repo stores slice row IDs as short IDs (`S1`) under a phase, and qualifies them for display/lookup as `P6.S1` (`tools/tasktool/schema_gen.py:46`, `tools/tasktool/commands.py:1571-1577`, `docs/tasklist.json:315`). The plan’s fixture and helper-created models instead store `"id": "P6.S1"` inside slice rows (`docs/plans/2026-05-23-P6.S1-workflow-step-field.md:663-666`, `docs/plans/2026-05-23-P6.S1-workflow-step-field.md:828-833`), and the proposed `_find_row` compares the user’s qualified ID directly to `s.id` (`docs/plans/2026-05-23-P6.S1-workflow-step-field.md:916-920`). Implemented literally, `tasktool infer-step P6.S1` will fail on real tasklists, while tests pass only against invalid fixtures. Reuse `_find_item` / `_resolve_id` or split the qualified ID and compare `phase.id == Pn` plus `slice.id == Sm`; fix all fixtures and v1 compatibility examples to use short slice IDs in JSON.
+
+F6. Severity: important — The plan introduces `UsageError(ValueError)` for `tasktool set` validation, but the CLI only catches `commands.CommandError` (`tools/tasktool/cli.py:498-500`). Invalid CLI calls such as no-op `tasktool set P6.S1` or bad workflow-step values will likely traceback instead of producing a controlled tasktool error. The plan should make `UsageError` inherit `CommandError`, reuse `CommandError`, or add explicit CLI handling, and include at least one CLI-level validation test.
+
+2. Open questions / assumptions
+
+- I assume the persisted tasklist format should continue using short slice IDs (`S1`) inside phase rows, with qualified IDs only at command/UI boundaries.
+- I assume the remaining “Five skill markdown files” text is just stale prose, not a scope decision.
+
+3. Suggested document edits
+
+- Replace the custom `_find_row` with a repo-grounded lookup that preserves current qualified-ID behavior.
+- Change all test fixtures and raw v1 examples from `"id": "P6.S1"` / `"id": "P1.S1"` to `"id": "S1"`.
+- Make `UsageError` CLI-safe, preferably by subclassing `CommandError`.
+- Change the summary count from five to six skill markdown files.
+
+4. Verification gaps / commands that should be run
+
+- `cd tools/tasktool && python -m pytest tests/test_commands.py -k 'set_ or infer_step or list_filter_workflow_step' -v`
+- `cd tools/tasktool && python -m pytest tests/test_cli_integration.py -k infer_step -v`
+- `cd tools/tasktool && python -m pytest tests/test_schema_gen.py tests/test_v1_compat.py -v`
+- Add a real-format smoke test using JSON with `{"id": "S1"}` and command input `P6.S1`.
+
+Overall verdict: revise
