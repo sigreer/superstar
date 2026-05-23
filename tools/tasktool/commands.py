@@ -1689,6 +1689,7 @@ def cmd_list(
     kind: str | None = None,
     open_only: bool = False,
     show_all: bool = False,
+    workflow_step: str | None = None,
     format: str = "text",
 ) -> str:
     p = _load(repo_root)
@@ -1706,6 +1707,10 @@ def cmd_list(
             continue
         if status_filter and item.status.value not in status_filter:
             continue
+        if workflow_step is not None:
+            item_step = getattr(item, "workflow_step", None)
+            if item_step is None or item_step.value != workflow_step:
+                continue
         if (
             not show_all
             and item_kind == "cross"

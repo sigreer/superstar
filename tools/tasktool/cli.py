@@ -258,6 +258,7 @@ def _build_parser() -> argparse.ArgumentParser:
     p_list.add_argument("--kind", choices=["phase", "slice", "task", "cross"])
     p_list.add_argument("--open", dest="open_only", action="store_true")
     p_list.add_argument("--all", dest="show_all", action="store_true")
+    p_list.add_argument("--workflow-step", dest="workflow_step")
     p_list.add_argument("--format", choices=["text", "json"], default="text")
 
     p_validate = sub.add_parser("validate")
@@ -489,7 +490,9 @@ def main(argv: list[str]) -> int:
             sys.stdout.write(commands.cmd_list(
                 repo_root=root, phase=args.phase, status=status_list,
                 kind=args.kind, open_only=args.open_only,
-                show_all=args.show_all, format=args.format,
+                show_all=args.show_all,
+                workflow_step=args.workflow_step,
+                format=args.format,
             ))
         elif args.cmd == "validate":
             rc, text = commands.cmd_validate(

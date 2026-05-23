@@ -950,3 +950,12 @@ def test_phase_step_done_plus_blocked():
 def test_phase_step_all_done():
     p = _phase_with("done", "done")
     assert commands.infer_step_for_id(p, "P6") == {"step": "done", "blocked": False}
+
+
+def test_list_filter_workflow_step(tmp_project_with_p6_s1):
+    p = tmp_project_with_p6_s1
+    commands.cmd_set(p, id="P6.S1", workflow_step="plan")
+    text = commands.cmd_list(repo_root=p, workflow_step="plan", format="json")
+    assert any(row["id"] == "P6.S1" for row in json.loads(text))
+    text_no = commands.cmd_list(repo_root=p, workflow_step="implement", format="json")
+    assert not any(row["id"] == "P6.S1" for row in json.loads(text_no))
