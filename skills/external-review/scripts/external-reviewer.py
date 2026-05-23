@@ -2357,6 +2357,45 @@ def compute_diff_section(
     return cap_with_elision(full, max_bytes=max(max_lines * 80, 64 * 1024))
 
 
+import re as _re_workflow
+_SLICE_ID_RE = _re_workflow.compile(r"^P\d+\.S\d+(?:[a-z]+)?$")
+
+
+def maybe_update_workflow_block_target(*, kind: str, work_id: str | None) -> str | None:
+    """Return the slice ID to mutate, or None if no mutation should happen."""
+    if not work_id:
+        return None
+    if kind not in {"plan", "post-slice"}:
+        return None
+    if not _SLICE_ID_RE.match(work_id):
+        return None
+    return work_id
+
+
+def _run_tasktool_set(*, id: str, **fields) -> None:
+    """Best-effort tasktool set; logs and swallows failures."""
+    cmd = ["tasktool", "set", id]
+    for k, v in fields.items():
+        flag = "--" + k.replace("_", "-")
+        cmd.extend([flag, str(v)])
+    try:
+        subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=10)
+    except (FileNotFoundError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+        sys.stderr.write(f"warning: tasktool set {id} ({fields}) failed: {e}\n")
+
+
+def workflow_block_round_start(slice_id: str) -> None:
+    _run_tasktool_set(id=slice_id, review_active="true", review_stage="awaiting_response")
+
+
+def workflow_block_after_verdict(slice_id: str, *, verdict: str | None) -> None:
+    if verdict in {"ready", "ready with small edits", "ready_with_small_edits"}:
+        _run_tasktool_set(id=slice_id, review_stage="passed")
+    else:
+        # Treat `revise`, `None`, and any other non-ready value as "applying fixes".
+        _run_tasktool_set(id=slice_id, review_stage="applying_fixes")
+
+
 def main() -> int:
     args = parse_args()
     # --state-file is global: hoist to env so load_state()/save_state() honour it.
@@ -2534,6 +2573,11 @@ def main() -> int:
 
     round_num = next_round_number(chain_dir)
     timestamp = dt.datetime.now().strftime("%Y-%m-%dT%H%M")
+
+    # Best-effort: mutate the slice review block at round start.
+    slice_id = maybe_update_workflow_block_target(kind=args.kind, work_id=args.work_id)
+    if slice_id:
+        workflow_block_round_start(slice_id)
 
     resolution_file = chain_dir / f"r{round_num - 1}-resolution.md"
     resolution_attached = resolution_file.name if (round_num > 1 and resolution_file.exists()) else None
@@ -2734,6 +2778,10 @@ def main() -> int:
     else:
         merged_path = None
         merged_verdict = primary.verdict if primary.returncode == 0 else None
+
+    # Best-effort: mutate the slice review block after the verdict is known.
+    if slice_id:
+        workflow_block_after_verdict(slice_id, verdict=merged_verdict)
 
     # Spec: failed primary reviewers must record findings_count = 0.
     # Echoed prompt fragments on stderr can otherwise yield false finding
