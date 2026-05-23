@@ -199,12 +199,19 @@ check_hook() {
 }
 
 check_cache() {
-    local name="$1" cache_dir="$2" dev_version="$3"
+    local name="$1" cache_dir="$2" dev_version="$3" required="$4"
     local status="" detail=""
 
     if [[ ! -d "$cache_dir" ]]; then
-        status="NOT_DEPLOYED"
+        if (( required == 0 )); then
+            status="SKIPPED"
+            detail="$cache_dir"
+            print_row "$name" "$status" "$detail"
+            return
+        fi
+        status="MISSING_CACHE"
         detail="$cache_dir"
+        EXIT_CODE=1
         print_row "$name" "$status" "$detail"
         return
     fi
@@ -274,11 +281,11 @@ run_check() {
     echo
     echo "Plugin caches:"
     local dev_version=""
-    if [[ -r "$REPO_ROOT/VERSION" ]]; then
-        dev_version="$(tr -d '[:space:]' < "$REPO_ROOT/VERSION")"
+    if [[ -r "$SOURCE_ROOT/VERSION" ]]; then
+        dev_version="$(tr -d '[:space:]' < "$SOURCE_ROOT/VERSION")"
     fi
-    check_cache "codex-cache" "${HOME}/.codex/plugins/cache/superstar-dev/superstar/current" "$dev_version"
-    check_cache "claude-cache" "${HOME}/.claude/plugins/cache/superstar-dev/superstar/current" "$dev_version"
+    check_cache "codex-cache" "${HOME}/.codex/plugins/cache/superstar-dev/superstar/current" "$dev_version" "$((1 - SKIP_CODEX))"
+    check_cache "claude-cache" "${HOME}/.claude/plugins/cache/superstar-dev/superstar/current" "$dev_version" "$((1 - SKIP_CLAUDE))"
 
     echo
     if (( EXIT_CODE == 0 )); then
@@ -307,15 +314,15 @@ run_deploy() {
     echo "==> Installing external-reviewer + reviewer-agent shims"
     bash "$REPO_ROOT/skills/project-setup/install-reviewer-agent.sh" --force
 
-    echo "==> Installing tasktool shim"
-    bash "$REPO_ROOT/tools/tasktool/install.sh" --force
-
     if git -C "$REPO_ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
         echo "==> Installing tasktool pre-commit hook"
         bash "$REPO_ROOT/tools/tasktool/install.sh" --hook --force
     else
         echo "==> Skipping pre-commit hook (not inside a git work tree)"
     fi
+
+    echo "==> Installing tasktool shim"
+    bash "$REPO_ROOT/tools/tasktool/install.sh" --force
 
     echo
     run_check

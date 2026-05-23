@@ -25,7 +25,25 @@ def _make_stamped_shim(path: Path, *, name: str, version: str, source_root: str,
     path.chmod(0o755)
 
 
-def _run_check(home: Path, source_root: Path, cwd: Path | None = None) -> subprocess.CompletedProcess:
+def _install_ok_caches(home: Path, source: Path) -> None:
+    for rel in (
+        ".codex/plugins/cache/superstar-dev/superstar/current",
+        ".claude/plugins/cache/superstar-dev/superstar/current",
+    ):
+        cache = home / rel
+        cache.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source / "VERSION", cache / "VERSION")
+
+
+def _run_check(
+    home: Path,
+    source_root: Path,
+    cwd: Path | None = None,
+    *,
+    install_caches: bool = True,
+) -> subprocess.CompletedProcess:
+    if install_caches:
+        _install_ok_caches(home, source_root)
     env = {
         "HOME": str(home),
         "SUPERSTAR_SOURCE_ROOT": str(source_root),
@@ -239,3 +257,31 @@ def test_check_hook_not_deployed_when_not_in_git(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stdout + result.stderr
     assert "NOT_DEPLOYED" in result.stdout
     assert "not in a git working tree" in result.stdout
+
+
+def test_check_exits_nonzero_on_missing_codex_cache(tmp_path: Path) -> None:
+    home = tmp_path / "home"; (home / ".local" / "bin").mkdir(parents=True)
+    source = tmp_path / "src"; source.mkdir()
+    (source / "VERSION").write_text("1.0.0\n")
+    _all_ok_shims(home, source)
+    claude_cache = home / ".claude/plugins/cache/superstar-dev/superstar/current"
+    claude_cache.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(source / "VERSION", claude_cache / "VERSION")
+    result = _run_check(home, source, install_caches=False)
+    assert result.returncode != 0
+    assert "codex-cache" in result.stdout
+    assert "MISSING_CACHE" in result.stdout
+
+
+def test_check_exits_nonzero_on_missing_claude_cache(tmp_path: Path) -> None:
+    home = tmp_path / "home"; (home / ".local" / "bin").mkdir(parents=True)
+    source = tmp_path / "src"; source.mkdir()
+    (source / "VERSION").write_text("1.0.0\n")
+    _all_ok_shims(home, source)
+    codex_cache = home / ".codex/plugins/cache/superstar-dev/superstar/current"
+    codex_cache.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(source / "VERSION", codex_cache / "VERSION")
+    result = _run_check(home, source, install_caches=False)
+    assert result.returncode != 0
+    assert "claude-cache" in result.stdout
+    assert "MISSING_CACHE" in result.stdout
