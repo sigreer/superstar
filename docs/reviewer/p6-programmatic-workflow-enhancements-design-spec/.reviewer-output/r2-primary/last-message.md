@@ -1,0 +1,35 @@
+1. Findings
+
+F1. Severity: blocking — RESOLVED. The spec now scopes the transient slice review block to slice-owned reviews only: plan and post-slice, with spec/phase reviews explicitly phase-owned and out of scope for S1 (`docs/specs/2026-05-23-P6-programmatic-workflow-enhancements-design.md:136-153`). AC 5 now tests `--kind plan --work-id <slice-id>` / `post-slice`, not slice spec review (`docs/specs/2026-05-23-P6-programmatic-workflow-enhancements-design.md:208`).
+
+F2. Severity: important — RESOLVED. Blocked-slice inference is now explicit: apply slice inference as if `status == in_progress`, annotate blocked output, and let `done` take precedence (`docs/specs/2026-05-23-P6-programmatic-workflow-enhancements-design.md:111-118`). AC 12 covers text and JSON output (`docs/specs/2026-05-23-P6-programmatic-workflow-enhancements-design.md:215`).
+
+F3. Severity: important — RESOLVED. The spec now states `tasktool set` no longer requires `--status`, defines non-empty mutating flag behavior, and lists conflicts / invalid row kinds (`docs/specs/2026-05-23-P6-programmatic-workflow-enhancements-design.md:79-86`). AC 11 covers the parser/validation cases (`docs/specs/2026-05-23-P6-programmatic-workflow-enhancements-design.md:214`).
+
+F4. Severity: minor — RESOLVED. The spec no longer claims an S1 slice row already exists; it says the P6 phase row exists and S1 is created during writing-plans (`docs/specs/2026-05-23-P6-programmatic-workflow-enhancements-design.md:200`). `docs/tasklist.json` matches that: `P6` exists with `"slices": []` (`docs/tasklist.json:300-313`).
+
+F5. Severity: blocking — Phase inference is incomplete for common child-slice status mixes. The phase rules cover “all ready,” “any in_progress,” and “all done,” but do not define what to infer when a phase has a mix such as done+ready, done+blocked, ready+blocked, or blocked-only children (`docs/specs/2026-05-23-P6-programmatic-workflow-enhancements-design.md:120-129`). The current model allows slice statuses `ready`, `in_progress`, `blocked`, and `done` (`tools/tasktool/model.py:8-12`), and blocked is slice-only but valid (`tools/tasktool/validate.py:83-86`). Without a total ordering/precedence rule, `tasktool infer-step <phase-id>`, `infer-step --all --diff`, and the S2 migration/backfill are under-specified for normal partially-completed phases.
+
+2. Open questions / assumptions
+
+- Should a phase infer `in_progress` whenever any child is `blocked`, or should phase output also carry a blocked overlay like slices?
+- For mixed `done + ready` with no active/blocked work, should the phase infer `in_progress` because the phase has begun, or remain `ready` until a child is currently active?
+
+3. Suggested document edits
+
+- In §3.3, make phase inference total across all child status combinations. For example, define precedence as `all done -> done`, `any in_progress or blocked or done -> in_progress`, otherwise `ready`, with any blocked annotation if desired.
+- Add an AC covering phase inference for mixed child states: all ready, one in_progress, one blocked, done+ready, and all done.
+
+4. Verification gaps / commands that should be run
+
+I ran:
+- `tools/tasktool/tasktool validate` → `ok`
+- `tools/tasktool/tasktool artifact status P6 --strict` → failed because `docs/specs/2026-05-23-P6-programmatic-workflow-enhancements-design.md` is referenced but not staged
+- `tools/tasktool/tasktool show P6` → shows `P6` ready with no slices
+
+Before accepting the next revision, run:
+- `tools/tasktool/tasktool artifact status P6 --strict`
+- `tools/tasktool/tasktool show P6`
+- A targeted read-through of the revised phase inference rules against `tools/tasktool/model.py` statuses.
+
+Overall verdict: revise

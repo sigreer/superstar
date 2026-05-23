@@ -1,0 +1,34 @@
+1. Findings
+
+F1. Severity: blocking — RESOLVED. The slice review block remains scoped to slice-owned reviews only: plan and post-slice. Spec and post-phase reviews are explicitly no-ops for this block (`docs/specs/2026-05-23-P6-programmatic-workflow-enhancements-design.md:138-155`).
+
+F2. Severity: important — RESOLVED. Blocked slice inference is now defined as an overlay on the computed workflow step, with text and JSON annotations, and `done` precedence is explicit (`docs/specs/2026-05-23-P6-programmatic-workflow-enhancements-design.md:111-118`).
+
+F3. Severity: important — RESOLVED. `tasktool set` argument-shape changes now cover non-status mutations, no-op rejection, mutually exclusive flags, review-field scope, and enum validation (`docs/specs/2026-05-23-P6-programmatic-workflow-enhancements-design.md:79-86`).
+
+F4. Severity: minor — RESOLVED. The spec no longer claims the S1 slice row already exists; it states only the P6 phase row is created now and S1 is created later (`docs/specs/2026-05-23-P6-programmatic-workflow-enhancements-design.md:202`). `docs/tasklist.json:300-313` matches that.
+
+F5. Severity: blocking — RESOLVED. Phase inference is now total over `{ready, in_progress, blocked, done}` and defines the prior ambiguous mixes: blocked children annotate `in_progress`, `done + ready` infers `in_progress`, and all-done takes precedence (`docs/specs/2026-05-23-P6-programmatic-workflow-enhancements-design.md:120-132`). AC 15 covers the required matrix (`docs/specs/2026-05-23-P6-programmatic-workflow-enhancements-design.md:220`).
+
+2. Open questions / assumptions
+
+No blocking open questions. One wording nit: the rationale at line 130 says “fully-closed phase always lands on `done` regardless of leftover non-`done` slices being added later,” but if non-done slices are added later the phase is no longer “all done” and rule 4 applies. The rules are clear; only the explanatory sentence is loose.
+
+3. Suggested document edits
+
+- Tighten line 130 to something like: “Rule 3 takes precedence over rule 4 so a phase whose current children are all closed always lands on `done`; if new non-done slices are later added, rule 4 will make it `in_progress` again.”
+- Optionally add an AC assertion that `infer-step --all --diff` ignores cross-cutting rows returning `n/a`, matching line 134.
+
+4. Verification gaps / commands that should be run
+
+I ran:
+- `tools/tasktool/tasktool validate` → `ok`
+- `tools/tasktool/tasktool show P6` → shows `P6` ready with no slices
+- `tools/tasktool/tasktool artifact status P6 --strict` → fails because the referenced spec artifact exists but has unstaged modifications
+
+Before closing the spec review gate, restage/register the final spec artifact and rerun:
+- `tools/tasktool/tasktool artifact status P6 --strict`
+- `tools/tasktool/tasktool show P6`
+
+Overall verdict: ready with small edits
+

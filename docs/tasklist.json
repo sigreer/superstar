@@ -288,14 +288,31 @@
         "docs/handoffs/2026-05-23-X22-cancelled-status-prompt.md",
         "docs/reviewer/x22-cancelled-status-plan"
       ],
-      "started": null,
-      "status": "ready",
-      "title": "Add cancelled terminal status to tasktool"
+      "started": "2026-05-23",
+      "status": "in_progress",
+      "title": "Add cancelled terminal status to tasktool",
+      "worktree_branch": "worktree-x22-add-cancelled-terminal-status-to",
+      "worktree_path": ".worktrees/worktree-x22-add-cancelled-terminal-status-to"
     }
   ],
   "last_reviewed": "2026-05-18",
   "north_star": "",
-  "phases": [],
+  "phases": [
+    {
+      "closed": null,
+      "created": "2026-05-23",
+      "id": "P6",
+      "notes": "",
+      "phase_reviewer_chain": "docs/reviewer/p6-programmatic-workflow-enhancements-design-spec",
+      "plan_path": null,
+      "planning_path": null,
+      "slices": [],
+      "spec_path": "docs/specs/2026-05-23-P6-programmatic-workflow-enhancements-design.md",
+      "started": null,
+      "status": "ready",
+      "title": "Programmatic Workflow Enhancements"
+    }
+  ],
   "project": "superstar",
   "schema_version": 1
 }

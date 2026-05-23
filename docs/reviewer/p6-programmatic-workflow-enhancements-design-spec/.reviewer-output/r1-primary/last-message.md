@@ -1,0 +1,41 @@
+1. Findings
+
+F1. Severity: blocking — Review block ownership conflicts with the current workflow model.
+The spec adds `review_active` / `review_stage` only to `Slice` and explicitly leaves phase-level review blocks out of scope (`docs/specs/2026-05-23-P6-programmatic-workflow-enhancements-design.md:63`, `:118`, `:219`), but the acceptance criterion targets “a slice with active spec review” (`:180`). In the current model, spec review is phase-level: `Phase` has `spec_path` / `phase_reviewer_chain`, while `Slice` has no `spec_path` (`tools/tasktool/model.py:36`, `:60`). The external-review skill also defines `spec` as the pre-plan stage, not a slice-specific stage (`skills/external-review/SKILL.md:18`). The bridge only requires `--work-id` for `post-slice` / `post-phase`, so it has no guaranteed slice ID to update during `spec` review (`skills/external-review/scripts/external-reviewer.py:1835`, `:2399`). Fix by either adding the phase review block in S1, or scoping the S1 review block to slice plan/post-slice review only and changing the acceptance criteria accordingly.
+
+F2. Severity: important — Blocked-slice inference is underspecified.
+The inference table only maps ratified ready/in_progress slices to `implement` (`docs/specs/2026-05-23-P6-programmatic-workflow-enhancements-design.md:96`), then says blocked slices should suffix the inferred step with `(blocked)` (`:102`). Current tasktool has `Status.BLOCKED` as a slice-only status (`tools/tasktool/model.py:8`, `tools/tasktool/validate.py:83`), but no rule says what base step a blocked, ratified slice should infer. Add explicit blocked handling, probably “infer from artifacts/planning as if status were ready, then carry `blocked: true`.”
+
+F3. Severity: important — `tasktool set` examples require a parser shape the spec does not call out.
+The spec and AC use `tasktool set <slice-id> --workflow-step plan` without `--status` (`docs/specs/2026-05-23-P6-programmatic-workflow-enhancements-design.md:76`, `:176`). Today `tasktool set` requires `--status` (`tools/tasktool/cli.py:88`) and `cmd_set` immediately coerces `Status(status)` (`tools/tasktool/commands.py:941`). The implementation can change this, but the spec should say `--status` becomes optional and define the allowed combinations/conflicts between status, workflow-step, clear-workflow-step, and review flags.
+
+F4. Severity: minor — The spec says `docs/tasklist.json` will contain a P6 phase row plus S1 slice row, but the current tasklist only has P6 with no slices.
+`docs/specs/2026-05-23-P6-programmatic-workflow-enhancements-design.md:172` lists “P6 phase row + S1 slice row.” The actual tasklist has `P6` with `"slices": []` (`docs/tasklist.json:300`). If S1 is meant to be the implementation unit, add the S1 row before planning; if S1 is only conceptual for now, change the file-touched note to avoid implying the work item already exists.
+
+2. Open questions / assumptions
+
+- Is spec review supposed to remain phase-owned for P6, with slice reviews beginning at plan/post-slice, or is P6 intentionally introducing slice-level spec review?
+- Should `review_active=false` be persisted as explicit JSON fields, or should default/false review fields be omitted like the existing worktree defaults?
+- Should `infer-step --all --diff` exit nonzero when drift is found? The spec says it exits 0 when none differ, but not what happens when differences exist.
+
+3. Suggested document edits
+
+- In §3.4, define the review block’s supported target kinds and how external-reviewer maps a review invocation to a tasktool ID.
+- In §3.2, specify `tasktool set` argument grouping: status-only, workflow-only, review-only, and invalid mixed cases.
+- In §3.3, add an explicit blocked-slice rule and clarify precedence for `status == done`.
+- In §3.8, adjust AC 5 to match the actual review owner, and add an AC for invalid combinations such as `--review-active false --review-stage passed`.
+
+4. Verification gaps / commands that should be run
+
+I ran:
+- `tools/tasktool/tasktool validate` → `ok`
+- `tools/tasktool/tasktool artifact status P6 --strict` → `artifact status: ok`
+- `git status --short docs/specs/2026-05-23-P6-programmatic-workflow-enhancements-design.md docs/tasklist.json` → spec added, tasklist modified
+
+Before accepting the revised spec, run:
+- `tools/tasktool/tasktool show P6`
+- `tools/tasktool/tasktool artifact status P6 --strict`
+- A targeted read-through of `skills/external-review/scripts/external-reviewer.py` after the ID-mapping decision is documented.
+
+Overall verdict: revise
+
