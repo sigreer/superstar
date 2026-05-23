@@ -8,6 +8,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 HOOK = REPO_ROOT / "hooks" / "todo-snapshot"
+HOOKS_CONFIG = REPO_ROOT / "hooks" / "hooks.json"
 
 
 def _run_hook(payload: dict, home: Path) -> subprocess.CompletedProcess:
@@ -72,3 +73,12 @@ def test_codex_update_plan_snapshot_shape(tmp_path: Path) -> None:
         {"content": "two", "status": "in_progress"},
         {"content": "three", "status": "pending"},
     ]
+
+
+def test_snapshot_hook_is_synchronous_for_codex() -> None:
+    config = json.loads(HOOKS_CONFIG.read_text(encoding="utf-8"))
+    post_tool_use = config["hooks"]["PostToolUse"][0]
+
+    assert post_tool_use["matcher"] == "TodoWrite|update_plan|functions.update_plan"
+    assert post_tool_use["hooks"][0]["command"].endswith(" todo-snapshot")
+    assert post_tool_use["hooks"][0]["async"] is False

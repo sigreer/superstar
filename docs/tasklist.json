@@ -269,6 +269,19 @@
       "started": "2026-05-21",
       "status": "done",
       "title": "Make spec and plan artifact handling transactional"
+    },
+    {
+      "closed": null,
+      "created": "2026-05-23",
+      "id": "X21",
+      "notes": "Root cause: the installed Codex current cache still had PostToolUse todo-snapshot registered with async=true, which Codex skips because async hooks are unsupported. Source hooks/hooks.json now has async=false with regression coverage, and live Codex current plus 6.6.5 cache copies were aligned to async=false. Verification: pytest -q scripts/tests/test_todo_snapshot_hook.py; tasktool validate --strict-format; scripts/deploy.sh --check; codex debug prompt-input warning grep returned no async-hook warning.",
+      "refs": [
+        "scripts/tests/test_todo_snapshot_hook.py",
+        "hooks/hooks.json"
+      ],
+      "started": "2026-05-23",
+      "status": "in_progress",
+      "title": "Fix Codex todo snapshot async hook registration"
     }
   ],
   "last_reviewed": "2026-05-18",
