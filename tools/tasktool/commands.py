@@ -2446,38 +2446,48 @@ def cmd_infer_step(
             sys.stdout.write(_format_single_text(qid, inferred, stored))
         return 0
 
-    # --all mode: iterate phases + slices.
-    rows: list[tuple[str, dict, str | None]] = []
+    # --all mode: iterate phases + slices + cross-cutting.
+    # Cross-cutting rows always emit step="n/a" and are never flagged as drift
+    # (spec §3.3 + AC 16).
+    rows: list[tuple[str, dict, str | None, bool]] = []
     for ph in p.phases:
         ph_inferred = _infer_step_for_phase(ph)
-        rows.append((ph.id, ph_inferred, _stored_step_for(ph)))
+        rows.append((ph.id, ph_inferred, _stored_step_for(ph), False))
         for s in ph.slices:
             qid = f"{ph.id}.{s.id}"
             s_inferred = _infer_step_for_slice(ph, s)
-            rows.append((qid, s_inferred, _stored_step_for(s)))
+            rows.append((qid, s_inferred, _stored_step_for(s), False))
+    for c in p.cross_cutting:
+        rows.append((c.id, {"step": "n/a", "blocked": False}, None, True))
 
-    # `stored=None` is opt-in — never counts as drift.
-    def _is_drift(inferred: dict, stored: str | None) -> bool:
+    # `stored=None` is opt-in — never counts as drift. Cross-cutting rows are
+    # never drift candidates regardless of stored value.
+    def _is_drift(inferred: dict, stored: str | None, is_cross: bool) -> bool:
+        if is_cross:
+            return False
         return stored is not None and stored != inferred["step"]
 
     if diff:
-        rows = [(qid, inf, stored) for (qid, inf, stored) in rows if _is_drift(inf, stored)]
+        rows = [
+            (qid, inf, stored, is_cross)
+            for (qid, inf, stored, is_cross) in rows
+            if _is_drift(inf, stored, is_cross)
+        ]
 
     if format == "json":
-        payload = [
-            {
+        for qid, inf, stored, is_cross in rows:
+            print(_json.dumps({
                 "id": qid,
                 "step": inf["step"],
                 "blocked": inf["blocked"],
                 "stored": stored,
-                "drift": _is_drift(inf, stored),
-            }
-            for (qid, inf, stored) in rows
-        ]
-        print(_json.dumps(payload))
+                "drift": _is_drift(inf, stored, is_cross),
+            }))
     else:
-        for qid, inf, stored in rows:
-            sys.stdout.write(_format_all_row(qid, inf, stored, _is_drift(inf, stored)))
+        for qid, inf, stored, is_cross in rows:
+            sys.stdout.write(
+                _format_all_row(qid, inf, stored, _is_drift(inf, stored, is_cross))
+            )
 
     if diff and rows:
         return 1

@@ -520,6 +520,26 @@ def test_infer_step_all_with_drift_uses_qualified_id_and_exits_one(tmp_project_w
     assert " S1 " not in r.stdout
 
 
+def test_infer_step_all_includes_cross_cutting_as_na(tmp_project_with_p6_s1_and_x1):
+    r = run_cli("--project-root", str(tmp_project_with_p6_s1_and_x1),
+                "infer-step", "--all", "--format", "json")
+    assert r.returncode == 0
+    lines = [json.loads(l) for l in r.stdout.strip().splitlines()]
+    cross = [row for row in lines if row["id"] == "X1"]
+    assert len(cross) == 1
+    assert cross[0]["step"] == "n/a"
+    assert cross[0].get("drift", False) is False
+
+
+def test_infer_step_diff_never_flags_cross(tmp_project_with_p6_s1_and_x1):
+    # Even if we try to drift, cross-cutting is never flagged.
+    r = run_cli("--project-root", str(tmp_project_with_p6_s1_and_x1),
+                "infer-step", "--all", "--diff")
+    # P6/P6.S1 don't drift (no workflow_step stored); X1 is excluded from drift; exit 0.
+    assert r.returncode == 0
+    assert "X1" not in r.stdout
+
+
 def test_infer_step_unknown_id_exits_two(tmp_project_with_p6_s1):
     r = run_cli("--project-root", str(tmp_project_with_p6_s1), "infer-step", "P9.S99")
     assert r.returncode == 2
