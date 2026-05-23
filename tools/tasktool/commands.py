@@ -1482,6 +1482,7 @@ def _item_one_line(prefix: str, item) -> str:
     return f"{prefix}  [{status_tag}]  {item.title}"
 
 def cmd_show(*, repo_root: Path, id: str) -> str:
+    from tasktool.model import extract_cancellation_reason
     p = _load(repo_root)
     qid, _container, item = _find_item(p, id)
     lines = [f"# {qid} — {item.title}", f"status: {item.status.value}"]
@@ -1529,6 +1530,11 @@ def cmd_show(*, repo_root: Path, id: str) -> str:
         lines.append("\nTasks:")
         for t in item.tasks:
             lines.append(_item_one_line(f"  {t.id}", t))
+    if item.status == Status.CANCELLED:
+        reason = extract_cancellation_reason(getattr(item, "notes", None))
+        if reason:
+            lines.insert(0, "")
+            lines.insert(0, f"**{reason}**")
     return "\n".join(lines) + "\n"
 
 def _phase_by_id(p: Project, phase_id: str) -> Phase:

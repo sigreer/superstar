@@ -1,9 +1,26 @@
 from __future__ import annotations
+import re
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Literal
 
 SCHEMA_VERSION = 1
+
+_CANCEL_LINE_RE = re.compile(r"^Cancelled \S+: .*$", re.M)
+
+
+def extract_cancellation_reason(notes: str | None) -> str | None:
+    """Return the first `Cancelled <ts>: <reason>` block from notes,
+    or the last non-empty line if the prefix isn't present, or None if notes is empty."""
+    if not notes:
+        return None
+    m = _CANCEL_LINE_RE.search(notes)
+    if m:
+        return m.group(0)
+    for line in reversed(notes.splitlines()):
+        if line.strip():
+            return line.strip()
+    return None
 
 class Status(str, Enum):
     READY = "ready"

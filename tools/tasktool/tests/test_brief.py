@@ -1,6 +1,7 @@
 from __future__ import annotations
+import re
 import unittest
-from tasktool.model import Project, Phase, Slice, Task, Status
+from tasktool.model import Project, Phase, Slice, Task, CrossCutting, Status
 from tasktool.brief import brief
 
 def _sample() -> Project:
@@ -36,6 +37,46 @@ class TestBrief(unittest.TestCase):
         self.assertIn("Slices:", out)
         self.assertIn("S1  [done]", out)
         self.assertIn("S2  [in_progress] started=2026-05-18", out)
+
+
+def _cancelled_slice_project(notes: str) -> Project:
+    p = Project(project="demo", last_reviewed="2026-05-23")
+    ph = Phase(id="P1", title="Phase 1", created="2026-05-17",
+               status=Status.IN_PROGRESS)
+    s = Slice(id="S1", title="Cancelled slice", created="2026-05-17",
+              status=Status.CANCELLED, closed="2026-05-24", notes=notes)
+    ph.slices.append(s)
+    p.phases.append(ph)
+    return p
+
+
+class TestBriefCancelledReason(unittest.TestCase):
+    def test_brief_surfaces_cancellation_reason_at_top(self):
+        notes = "Cancelled 2026-05-24T10:00:00: scope dropped"
+        out = brief(_cancelled_slice_project(notes), "P1.S1")
+        reason_pos = out.find("scope dropped")
+        first_section = re.search(r"^##? ", out, flags=re.M)
+        self.assertNotEqual(reason_pos, -1)
+        if first_section:
+            self.assertLess(reason_pos, first_section.start())
+
+    def test_brief_falls_back_to_last_notes_line_when_no_prefix(self):
+        # Notes that lack a `Cancelled <ts>: ` prefix line — fall back
+        # to the last non-empty line.
+        notes = "some earlier note\nlegacy last line"
+        out = brief(_cancelled_slice_project(notes), "P1.S1")
+        self.assertIn("legacy last line", out)
+        # And it leads — before the first section header.
+        reason_pos = out.find("legacy last line")
+        first_section = re.search(r"^##? ", out, flags=re.M)
+        self.assertNotEqual(reason_pos, -1)
+        if first_section:
+            self.assertLess(reason_pos, first_section.start())
+
+    def test_brief_no_reason_block_on_non_cancelled_rows(self):
+        # A normal (non-cancelled) slice should not gain a "Cancelled " block.
+        out = brief(_sample(), "P2.S2")
+        self.assertNotIn("Cancelled ", out)
 
 
 if __name__ == "__main__":

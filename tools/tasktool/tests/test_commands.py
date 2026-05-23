@@ -600,6 +600,40 @@ class SchedulingTests(unittest.TestCase):
         s1 = p.phases[0].slices[0]
         self.assertEqual(s1.tasks[0].status, Status.READY)
 
+    def test_brief_surfaces_cancellation_reason_for_active_cancelled_slice(self):
+        commands.cmd_cancel(
+            repo_root=self.t.root, id="P1.S1", reason="scope dropped",
+        )
+        out = commands.cmd_brief(repo_root=self.t.root, id="P1.S1")
+        self.assertIn("scope dropped", out)
+        reason_pos = out.find("scope dropped")
+        title_pos = out.find("# P1.S1")
+        self.assertNotEqual(reason_pos, -1)
+        self.assertNotEqual(title_pos, -1)
+        self.assertLess(reason_pos, title_pos)
+
+    def test_show_surfaces_reason_for_active_cancelled_x(self):
+        x_id = commands.cmd_create_cross(
+            repo_root=self.t.root, title="cross thing",
+        )
+        commands.cmd_cancel(
+            repo_root=self.t.root, id=x_id, reason="defer",
+            no_archive=True,
+        )
+        out = commands.cmd_show(repo_root=self.t.root, id=x_id)
+        self.assertIn("Cancelled ", out)
+        self.assertIn("defer", out)
+
+    def test_show_returns_not_found_for_archived_cancelled_x(self):
+        x_id = commands.cmd_create_cross(
+            repo_root=self.t.root, title="archive me",
+        )
+        # Default cancel auto-archives the cross-cutting row.
+        commands.cmd_cancel(repo_root=self.t.root, id=x_id, reason="defer")
+        with self.assertRaises(commands.CommandError) as ctx:
+            commands.cmd_show(repo_root=self.t.root, id=x_id)
+        self.assertIn("not found in active tasklist", str(ctx.exception))
+
     def test_phase_status_excludes_cancelled_phase(self):
         commands.cmd_cancel(
             repo_root=self.t.root, id="P1", reason="pivot", cascade=True,
