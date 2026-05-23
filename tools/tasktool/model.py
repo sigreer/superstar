@@ -10,6 +10,11 @@ class Status(str, Enum):
     IN_PROGRESS = "in_progress"
     BLOCKED = "blocked"
     DONE = "done"
+    CANCELLED = "cancelled"
+
+
+def is_terminal(status: Status) -> bool:
+    return status in (Status.DONE, Status.CANCELLED)
 
 class PlanningStatus(str, Enum):
     PROPOSED = "proposed"

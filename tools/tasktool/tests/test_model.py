@@ -2,14 +2,14 @@ from __future__ import annotations
 import unittest
 from tasktool.model import (
     Project, Phase, Slice, Task, CrossCutting, BlockedOn, Status,
-    PlanningStatus, ArchivedCrossCutting, SCHEMA_VERSION,
+    PlanningStatus, ArchivedCrossCutting, SCHEMA_VERSION, is_terminal,
 )
 
 class StatusTests(unittest.TestCase):
     def test_status_values(self):
         self.assertEqual(
             {s.value for s in Status},
-            {"ready", "in_progress", "blocked", "done"},
+            {"ready", "in_progress", "blocked", "done", "cancelled"},
         )
 
     def test_planning_status_values(self):
@@ -101,3 +101,15 @@ def test_cross_audit_fields_default_to_none_and_false():
     assert c.worktree_pruned_at is None
     assert c.worktree_prune_pending is False
     assert c.worktree_prune_pending_at is None
+
+
+def test_is_terminal_done_and_cancelled_only():
+    assert is_terminal(Status.DONE) is True
+    assert is_terminal(Status.CANCELLED) is True
+    assert is_terminal(Status.READY) is False
+    assert is_terminal(Status.IN_PROGRESS) is False
+    assert is_terminal(Status.BLOCKED) is False
+
+
+def test_cancelled_enum_value():
+    assert Status.CANCELLED.value == "cancelled"
