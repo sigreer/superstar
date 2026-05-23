@@ -1,0 +1,35 @@
+1. Findings
+
+F1. RESOLVED. Severity: blocking. The revised spec now requires both JSON-schema and semantic validation to reject `cancelled` tasks, including `_check_task()` and `validate_project()` tests (`docs/specs/2026-05-23-X22-cancelled-status-design.md:73-79`, `:224-225`, `:299-300`).
+
+F2. RESOLVED. Severity: important. The schedule contract now names the current fields and gives an exact before/after JSON and text shape, preserving `depends_on`, narrowing `waiting_on`, and adding `cancelled_deps` (`docs/specs/2026-05-23-X22-cancelled-status-design.md:175-211`).
+
+F3. RESOLVED. Severity: important. The spec now explicitly says `phase-status` is global and will not gain cancelled-dependency surfacing; cancelled-dep visibility lives in phase-scoped `schedule` (`docs/specs/2026-05-23-X22-cancelled-status-design.md:209-210`).
+
+F4. RESOLVED. Severity: important. The active-vs-archived `show`/`brief` behavior is now explicit: archived cancelled X rows keep the existing “not found in active tasklist” behavior, while active cancelled rows surface the reason (`docs/specs/2026-05-23-X22-cancelled-status-design.md:218-219`).
+
+F5. RESOLVED. Severity: minor. The notification requirement is now grounded in the existing notifier contract and removes the nonexistent status-specific audio cue requirement (`docs/specs/2026-05-23-X22-cancelled-status-design.md:227-235`).
+
+F6. Severity: important. The archive-phase notification path is still underspecified for cancelled phases. The spec requires `archive-phase` to preserve a cancelled phase’s actual status and skip the post-phase gate (`docs/specs/2026-05-23-X22-cancelled-status-design.md:129-136`), but the current implementation hard-codes a `Status.DONE` notification after archiving (`tools/tasktool/commands.py:1857`). If the implementation follows the spec as written, a cancelled phase archive can still emit a misleading “done” tasktool-status event even though cancelled work “never shipped.” Add an explicit requirement and test: archived cancelled phases either emit `status="cancelled"` or suppress the archive notification, but must not emit `done`.
+
+2. Open questions / assumptions
+
+- I assume cancellation itself should remain the lifecycle notification for cancelled rows, and archive-phase should not later contradict it with a done event.
+- The spec’s product decision to leave `phase-status` without cancelled-dependency rows is clear enough after this revision.
+
+3. Suggested document edits
+
+- Add an `archive-phase` notification bullet near the existing notification section: when archiving a cancelled phase, do not call `_notify_status(..., Status.DONE, ...)`; use the phase’s actual status or no notification.
+- Fix the stale terminal-audit table references for `cmd_close`: `commands.py:592` is `_start_item`, `commands.py:614` is `_archive_cross_at_root`, and current `cmd_close` is `commands.py:971-1009`. The prose already says `close` refuses cancelled rows, but the table should point implementers at the real pre-gate close path.
+
+4. Verification gaps / commands that should be run
+
+- Add a focused test for `archive-phase` on a cancelled phase asserting no `done` notifier event is emitted.
+- Keep the prior proposed implementation verification set:
+  - `python -m pytest tools/tasktool/tests/test_validate.py tools/tasktool/tests/test_commands.py tools/tasktool/tests/test_cli_integration.py -q`
+  - `python -m pytest tools/tasktool/tests/test_importer.py tools/tasktool/tests/test_render.py tools/tasktool/tests/test_brief.py tools/tasktool/tests/test_notify.py -q`
+  - `tools/tasktool/tasktool validate --strict-format`
+
+
+
+Overall verdict: revise

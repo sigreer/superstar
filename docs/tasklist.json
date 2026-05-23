@@ -275,6 +275,19 @@
       "started": "2026-05-21",
       "status": "done",
       "title": "Make spec and plan artifact handling transactional"
+    },
+    {
+      "closed": null,
+      "created": "2026-05-23",
+      "id": "X22",
+      "notes": "",
+      "refs": [
+        "docs/specs/2026-05-23-X22-cancelled-status-design.md",
+        "docs/reviewer/x22-cancelled-status-design-spec"
+      ],
+      "started": null,
+      "status": "ready",
+      "title": "Add cancelled terminal status to tasktool"
     }
   ],
   "last_reviewed": "2026-05-18",
