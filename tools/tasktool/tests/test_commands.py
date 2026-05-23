@@ -600,6 +600,28 @@ class SchedulingTests(unittest.TestCase):
         s1 = p.phases[0].slices[0]
         self.assertEqual(s1.tasks[0].status, Status.READY)
 
+    def test_phase_status_excludes_cancelled_phase(self):
+        commands.cmd_cancel(
+            repo_root=self.t.root, id="P1", reason="pivot", cascade=True,
+        )
+        out = commands.cmd_phase_status(repo_root=self.t.root, format="json")
+        data = json.loads(out)
+        open_phase_ids = {ph["id"] for ph in data["open_phases"]}
+        self.assertNotIn("P1", open_phase_ids)
+
+    def test_phase_status_excludes_cancelled_no_archive_cross(self):
+        x_id = commands.cmd_create_cross(
+            repo_root=self.t.root, title="X-thing",
+        )
+        commands.cmd_cancel(
+            repo_root=self.t.root, id=x_id, reason="dropped",
+            no_archive=True,
+        )
+        out = commands.cmd_phase_status(repo_root=self.t.root, format="json")
+        data = json.loads(out)
+        open_x_ids = {c["id"] for c in data["open_cross_cutting"]}
+        self.assertNotIn(x_id, open_x_ids)
+
 class ShortFormResolutionTests(unittest.TestCase):
     def setUp(self):
         self.t = _Tmp()

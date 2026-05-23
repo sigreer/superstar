@@ -481,6 +481,26 @@ def test_ad_hoc_lifecycle_full_flow_with_no_archive(tmp_path):
     assert xid in archived_ids
 
 
+def test_worktree_prune_accepts_cancelled_slice_without_force(project_with_worktree):
+    """X22: a clean worktree on a cancelled slice prunes without --force.
+
+    The terminal precondition that previously required Status.DONE now accepts
+    any terminal status (done OR cancelled).
+    """
+    repo, wt = project_with_worktree
+    # Merge the branch so guard 2 passes without --force.
+    _run(repo, "git", "merge", "--no-ff", "-q", "-m", "m",
+         "worktree-p1-s1-first-slice")
+    # Cancel the slice instead of closing it.
+    _tasktool(repo, "cancel", "P1.S1", "--reason", "dropped")
+    res = _tasktool(repo, "worktree", "prune", "P1.S1", check=False)
+    assert res.returncode == 0, (
+        f"expected prune to succeed for cancelled slice; "
+        f"stderr={res.stderr!r}, stdout={res.stdout!r}"
+    )
+    assert not wt.exists()
+
+
 def _extract_xid(listing: str, *, title_contains: str) -> str | None:
     import re
     for line in listing.splitlines():

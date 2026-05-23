@@ -1622,8 +1622,8 @@ def cmd_schedule(*, repo_root: Path, phase_id: str, format: str = "text") -> str
 
 def cmd_phase_status(*, repo_root: Path, recent: int = 3, format: str = "text") -> str:
     p = _load(repo_root)
-    open_cross = [c for c in p.cross_cutting if c.status != Status.DONE]
-    open_phases = [ph for ph in p.phases if ph.status != Status.DONE]
+    open_cross = [c for c in p.cross_cutting if not is_terminal(c.status)]
+    open_phases = [ph for ph in p.phases if not is_terminal(ph.status)]
     archived = p.archived_phases[-recent:] if recent > 0 else []
     if format == "json":
         import json as _j
@@ -2181,12 +2181,13 @@ def cmd_worktree_prune(
             )
         wt_path = (write_root / path_str).resolve()
 
-        # Guard 1: slice status is done (unless --force).
+        # Guard 1: slice status is terminal (done OR cancelled), unless --force.
         if not force:
-            if getattr(item, "status", None) != Status.DONE:
+            if not is_terminal(getattr(item, "status", None)):
                 raise CommandError(
                     f"{qid}: slice status is {item.status.value!r}; prune requires "
-                    f"'done' (run `tasktool close {qid}` first, or pass --force)"
+                    f"a terminal status (run `tasktool close {qid}` or "
+                    f"`tasktool cancel {qid}` first, or pass --force)"
                 )
 
             # Guard 2: branch merged into authoritative parent.
