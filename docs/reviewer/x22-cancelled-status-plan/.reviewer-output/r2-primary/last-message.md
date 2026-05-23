@@ -1,0 +1,46 @@
+1. Findings
+
+F1 — Severity: blocking — RESOLVED  
+The updated plan now includes `tools/tasktool/brief.py`, `cmd_show` changes, and Task 14 for cancellation-reason surfacing on active cancelled rows, including the archived-X not-found behavior (`docs/plans/2026-05-23-X22-cancelled-status.md:1221-1331`).
+
+F2 — Severity: important — RESOLVED  
+Task 2 now includes an instance-level `jsonschema.validate()` rejection test for a raw task row with `status: "cancelled"` (`docs/plans/2026-05-23-X22-cancelled-status.md:161-178`).
+
+F3 — Severity: important — RESOLVED  
+Task 9 now adds a direct `cmd_set(..., status="cancelled")` rejection test and an implementation branch with a `tasktool cancel` hint before normal status mutation (`docs/plans/2026-05-23-X22-cancelled-status.md:848-853`, `:917-926`).
+
+F4 — Severity: important — RESOLVED  
+Task 7 and Task 8 now assert cancellation notifier calls for direct slice/X cancellation and cascaded phase cancellation, including exact once-per-row coverage (`docs/plans/2026-05-23-X22-cancelled-status.md:569-583`, `:751-764`).
+
+F6 — Severity: important  
+The plan still misses spec-required `Status.DONE` audit sites for `phase-status` and worktree prune. The spec’s terminal/open mapping explicitly requires `phase-status` open lists to use `not is_terminal()` and worktree prune to allow terminal cancelled slices (`docs/specs/2026-05-23-X22-cancelled-status-design.md:155-175`). Current code has both strict-DONE sites (`tools/tasktool/commands.py:1523-1527`, `:2067-2073`), but the plan’s file/task coverage only calls out schedule/ready/list/show/archive guards and never adds tests or implementation steps for either (`docs/plans/2026-05-23-X22-cancelled-status.md:20-29`, `:809-829`, `:1060-1132`). This leaves cancelled `--no-archive` X rows and cancelled phases appearing in “open” status reports, and cancelled slice worktrees requiring `--force` to prune despite being terminal.
+
+F5 — Severity: minor  
+The final smoke test no longer mutates the authoritative tracker, but the command block is not executable against the current CLI. The plan uses `--root` after `python3 -m tasktool` and after the `init` subcommand (`docs/plans/2026-05-23-X22-cancelled-status.md:1412-1417`), while the parser exposes only the global `--project-root` option (`tools/tasktool/cli.py:34-43`, `:59-64`). The fallback note mentions `tasktool init` maybe lacking `--root`, but the whole smoke block should use `--project-root "$SMOKE"` before the subcommand, or `cd "$SMOKE"` consistently.
+
+2. Open questions / assumptions
+
+None. I treated the spec’s terminal-vs-open mapping table as binding because it says the plan must walk every row or justify deviation.
+
+3. Suggested document edits
+
+Add a small task before final verification, or extend Task 12/Task 9, to cover:
+- `cmd_phase_status`: tests proving cancelled active phases and cancelled `--no-archive` X rows do not appear in `open_phases` / `open_cross_cutting`, for both text and JSON if feasible.
+- `cmd_worktree_prune`: tests proving a cancelled slice with a clean merged worktree can be pruned without `--force`.
+- Implementation notes replacing those two strict `Status.DONE` checks with `is_terminal()`.
+
+Patch the smoke block to either:
+- `PYTHONPATH="$PWD/tools" python3 -m tasktool --project-root "$SMOKE" init --project smoke`, etc.; or
+- `cd "$SMOKE"` once and run the commands without root flags.
+
+4. Verification gaps / commands that should be run
+
+Add these targeted gates to the plan’s verification section:
+
+```bash
+PYTHONPATH=tools python3 -m pytest tools/tasktool/tests/test_commands.py -q -k "phase_status or worktree_prune or cancelled"
+PYTHONPATH=tools python3 -m pytest tools/tasktool/tests/test_cli_integration.py -q -k cancel
+```
+
+Overall verdict: revise
+

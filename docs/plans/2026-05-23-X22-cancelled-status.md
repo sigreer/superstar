@@ -1,0 +1,1529 @@
+# X22 — `cancelled` Terminal Status Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superstar:subagent-driven-development (recommended) or superstar:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Add `cancelled` as a fifth, terminal status (peer of `done`) to tasktool — applicable to slices, cross-cutting items, and phases (not tasks) — wired through schema, validation, render, importer, lifecycle commands, dependency reporting, and the `tasklist-discipline` skill.
+
+**Architecture:** One new enum value (`Status.CANCELLED`) plus a single `is_terminal()` helper that every "is this row open vs finished?" call site routes through. A dedicated `tasktool cancel <id> --reason "…"` verb is the only sanctioned entry point. Cancellation never satisfies a `depends_on`; `schedule` grows a `cancelled_deps` field and `ready-slices` omits downstream slices with cancelled deps. `archive-cross` and `archive-phase` are loosened to accept terminal-not-done, but their notifiers and archive markdown writers must preserve the real status (no coercion to `done`). Tasks are explicitly excluded at both schema and semantic layers; `list --open` additionally suppresses child tasks of terminal parents to prevent leaks.
+
+**Tech Stack:** Python 3 (tasktool), pytest, JSON Schema, argparse CLI.
+
+**Spec:** `docs/specs/2026-05-23-X22-cancelled-status-design.md`
+**Tasktool row:** `X22` (cross-cutting)
+
+---
+
+## File Structure
+
+**Modified:**
+
+- `tools/tasktool/model.py` — add `Status.CANCELLED`, `is_terminal()` helper
+- `tools/tasktool/schema_gen.py` — split shared status enum into four scope-specific enums
+- `tools/tasktool/serialize.py` — no real change (Status enum drives it); confirm
+- `tools/tasktool/validate.py` — terminal-aware date requirement; explicit task rejection
+- `tools/tasktool/render.py` — `🚫` emoji; closed-date branch
+- `tools/tasktool/importer.py` — `🚫` round-trip
+- `tools/tasktool/brief.py` — surface cancellation reason for active cancelled rows
+- `tools/tasktool/commands.py` — `cmd_cancel`, guard updates across lifecycle-adjacent commands, `_archive_cross_at_root` precondition, `archive-phase` notify fix, `cmd_schedule` `cancelled_deps`, `cmd_ready_slices` filter, `cmd_list` child-task suppression, `cmd_show` cancellation-reason surfacing
+- `tools/tasktool/cli.py` — `cancel` subcommand parser
+- `skills/tasklist-discipline/SKILL.md` — skill prose: status enum, daily commands, red flags
+
+**New:** *(test files added inline alongside existing tests; no brand-new modules)*
+
+**Tests (added cases in existing files):**
+
+- `tools/tasktool/tests/test_model.py` — `is_terminal()`
+- `tools/tasktool/tests/test_schema_gen.py` — four-enum split
+- `tools/tasktool/tests/test_serialize.py` — round-trip
+- `tools/tasktool/tests/test_validate.py` — task rejection + terminal date rules
+- `tools/tasktool/tests/test_render.py` — emoji + date
+- `tools/tasktool/tests/test_importer.py` — round-trip emoji
+- `tools/tasktool/tests/test_commands.py` — `cmd_cancel` happy paths, rejections, cascade, archive-phase notify, schedule/ready-slices, list suppression
+- `tools/tasktool/tests/test_cli_integration.py` — CLI parser + end-to-end `tasktool cancel`
+- `tools/tasktool/tests/test_notify.py` — `cancelled` event emission
+
+---
+
+## Pre-flight
+
+- [ ] **Step 0a: Confirm row exists**
+
+```bash
+tools/tasktool/tasktool show X22
+```
+
+Expected: prints the X22 stub with `status: ready` and the spec/reviewer refs.
+
+- [ ] **Step 0b: Start the lifecycle row**
+
+```bash
+tools/tasktool/tasktool start X22
+```
+
+Expected: prints `X22` and flips status to `in_progress`. (Worktree handling per the operator's isolation preference — see `[[using-git-worktrees]]` if running from a shared `main` checkout.)
+
+- [ ] **Step 0c: Survey baseline**
+
+```bash
+python3 -m pytest tools/tasktool/tests/ -q
+```
+
+Expected: all tests pass against current `main`. Record the test count; we'll re-check at the end.
+
+---
+
+## Task 1 — Add `Status.CANCELLED` + `is_terminal()` helper
+
+**Files:**
+- Modify: `tools/tasktool/model.py`
+- Modify: `tools/tasktool/tests/test_model.py` (or create one minimal addition)
+
+- [ ] **Step 1.1: Write failing test for `is_terminal()`**
+
+Add to `tools/tasktool/tests/test_model.py` (create if missing):
+
+```python
+from tasktool.model import Status, is_terminal
+
+def test_is_terminal_done_and_cancelled_only():
+    assert is_terminal(Status.DONE) is True
+    assert is_terminal(Status.CANCELLED) is True
+    assert is_terminal(Status.READY) is False
+    assert is_terminal(Status.IN_PROGRESS) is False
+    assert is_terminal(Status.BLOCKED) is False
+
+def test_cancelled_enum_value():
+    assert Status.CANCELLED.value == "cancelled"
+```
+
+- [ ] **Step 1.2: Run test — verify it fails**
+
+```bash
+PYTHONPATH=tools python3 -m pytest tools/tasktool/tests/test_model.py -q
+```
+
+Expected: `AttributeError: CANCELLED` (or ImportError on `is_terminal`).
+
+- [ ] **Step 1.3: Implement**
+
+In `tools/tasktool/model.py`, extend the `Status` enum and add a module-level helper:
+
+```python
+class Status(str, Enum):
+    READY = "ready"
+    IN_PROGRESS = "in_progress"
+    BLOCKED = "blocked"
+    DONE = "done"
+    CANCELLED = "cancelled"
+
+
+def is_terminal(status: Status) -> bool:
+    return status in (Status.DONE, Status.CANCELLED)
+```
+
+- [ ] **Step 1.4: Run test — verify it passes**
+
+```bash
+PYTHONPATH=tools python3 -m pytest tools/tasktool/tests/test_model.py -q
+```
+
+Expected: all green.
+
+- [ ] **Step 1.5: Commit**
+
+```bash
+git add tools/tasktool/model.py tools/tasktool/tests/test_model.py
+git commit -m "X22: add Status.CANCELLED and is_terminal helper"
+```
+
+---
+
+## Task 2 — Split JSON-schema enums (four scopes)
+
+**Files:**
+- Modify: `tools/tasktool/schema_gen.py`
+- Modify: `tools/tasktool/tests/test_schema_gen.py`
+
+- [ ] **Step 2.1: Write failing tests**
+
+Add to `tools/tasktool/tests/test_schema_gen.py`:
+
+```python
+import pytest
+from tasktool.schema_gen import build_schema
+
+def test_task_status_enum_rejects_cancelled():
+    schema = build_schema()
+    task_status = schema["$defs"]["task"]["properties"]["status"]["enum"]
+    assert "cancelled" not in task_status
+    assert task_status == ["ready", "in_progress", "done"]
+
+def test_raw_task_with_cancelled_status_fails_jsonschema_validation():
+    """Instance-level gate, not just enum introspection."""
+    import jsonschema
+    schema = build_schema()
+    bad = {
+        "project": "t", "schema_version": 1, "phases": [{
+            "id": "P1", "title": "p", "created": "2026-05-23",
+            "slices": [{
+                "id": "S1", "title": "s", "created": "2026-05-23",
+                "tasks": [{
+                    "id": "T1", "title": "t", "created": "2026-05-23",
+                    "status": "cancelled",
+                }],
+            }],
+        }],
+    }
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(bad, schema)
+
+def test_phase_and_cross_status_enums_include_cancelled():
+    schema = build_schema()
+    phase_status = schema["$defs"]["phase"]["properties"]["status"]["enum"]
+    cross_status = schema["$defs"]["cross"]["properties"]["status"]["enum"]
+    assert "cancelled" in phase_status
+    assert "cancelled" in cross_status
+
+def test_slice_status_enum_includes_cancelled_and_blocked():
+    schema = build_schema()
+    slice_status = schema["$defs"]["slice"]["properties"]["status"]["enum"]
+    assert set(slice_status) == {"ready", "in_progress", "blocked", "done", "cancelled"}
+```
+
+(Adjust `$defs` keys to whatever `build_schema()` actually emits — the existing tests in `test_schema_gen.py` will show the shape.)
+
+- [ ] **Step 2.2: Run — verify fail**
+
+```bash
+PYTHONPATH=tools python3 -m pytest tools/tasktool/tests/test_schema_gen.py -q
+```
+
+Expected: failures referencing missing `cancelled` in slice/phase/cross enums.
+
+- [ ] **Step 2.3: Implement**
+
+Replace lines 8–9 of `tools/tasktool/schema_gen.py`:
+
+```python
+def build_schema() -> dict:
+    task_status_enum  = ["ready", "in_progress", "done"]
+    phase_status_enum = ["ready", "in_progress", "done", "cancelled"]
+    cross_status_enum = ["ready", "in_progress", "done", "cancelled"]
+    slice_status_enum = ["ready", "in_progress", "blocked", "done", "cancelled"]
+    planning_status_enum = ["proposed", "ratified", "superseded"]
+```
+
+Then update the four downstream references (currently `non_blocked_status_enum` reused for task/phase/cross):
+
+- Task status reference → `task_status_enum`
+- Slice status reference → `slice_status_enum` (already pointed there; unchanged)
+- Phase status reference → `phase_status_enum`
+- Cross-cutting status reference → `cross_status_enum`
+
+Delete `non_blocked_status_enum`.
+
+- [ ] **Step 2.4: Run — verify pass**
+
+```bash
+PYTHONPATH=tools python3 -m pytest tools/tasktool/tests/test_schema_gen.py -q
+```
+
+Expected: green.
+
+- [ ] **Step 2.5: Commit**
+
+```bash
+git add tools/tasktool/schema_gen.py tools/tasktool/tests/test_schema_gen.py
+git commit -m "X22: split status enums into four scope-specific variants"
+```
+
+---
+
+## Task 3 — Validation: terminal date + explicit task rejection
+
+**Files:**
+- Modify: `tools/tasktool/validate.py`
+- Modify: `tools/tasktool/tests/test_validate.py`
+
+- [ ] **Step 3.1: Write failing tests**
+
+Add to `tools/tasktool/tests/test_validate.py`:
+
+```python
+import pytest
+from tasktool.model import Status, Task, Slice, Phase, CrossCutting, Project
+from tasktool.validate import validate_project, ValidationError
+
+def _proj_with_phase(phase):
+    return Project(project="t", phases=[phase])
+
+def test_cancelled_slice_requires_closed_date():
+    s = Slice(id="S1", title="s", created="2026-05-23", status=Status.CANCELLED)
+    p = Phase(id="P1", title="p", created="2026-05-23", slices=[s])
+    with pytest.raises(ValidationError, match="cancelled.*closed"):
+        validate_project(_proj_with_phase(p))
+
+def test_cancelled_slice_with_closed_passes():
+    s = Slice(id="S1", title="s", created="2026-05-23", started="2026-05-23",
+              status=Status.CANCELLED, closed="2026-05-23")
+    p = Phase(id="P1", title="p", created="2026-05-23", slices=[s])
+    validate_project(_proj_with_phase(p))  # must not raise
+
+def test_cancelled_task_rejected_semantically():
+    t = Task(id="T1", title="t", created="2026-05-23",
+             status=Status.CANCELLED, closed="2026-05-23")
+    s = Slice(id="S1", title="s", created="2026-05-23", tasks=[t])
+    p = Phase(id="P1", title="p", created="2026-05-23", slices=[s])
+    with pytest.raises(ValidationError, match="cancel.*task"):
+        validate_project(_proj_with_phase(p))
+
+def test_cancelled_phase_requires_closed():
+    p = Phase(id="P1", title="p", created="2026-05-23", status=Status.CANCELLED)
+    with pytest.raises(ValidationError, match="cancelled.*closed"):
+        validate_project(Project(project="t", phases=[p]))
+
+def test_cancelled_cross_requires_closed():
+    c = CrossCutting(id="X1", title="x", created="2026-05-23",
+                     status=Status.CANCELLED)
+    with pytest.raises(ValidationError, match="cancelled.*closed"):
+        validate_project(Project(project="t", cross_cutting=[c]))
+```
+
+- [ ] **Step 3.2: Run — verify fail**
+
+```bash
+PYTHONPATH=tools python3 -m pytest tools/tasktool/tests/test_validate.py -q
+```
+
+Expected: failures (task rejection missing; cancelled paths don't require `closed`).
+
+- [ ] **Step 3.3: Implement**
+
+In `tools/tasktool/validate.py`, change four "status=done requires closed date" sites (currently lines 73, 87, 121, 134) to use `is_terminal()`. Import `is_terminal` from `model`. For the task site only, add an explicit cancelled rejection before the terminal check:
+
+```python
+# task check (around line 69)
+def _check_task(t: Task, scope: str) -> None:
+    if t.status == Status.CANCELLED:
+        raise ValidationError(
+            f"{scope}: cancelled is not a valid task status; cancel the parent slice instead"
+        )
+    if is_terminal(t.status):
+        _require(t.closed is not None,
+                 f"{scope}: status={t.status.value} requires closed date")
+    _check_dates(t.created, t.started, t.closed, scope)
+```
+
+For the slice/phase/cross checks (lines ~87/121/134), generalise:
+
+```python
+if is_terminal(s.status):
+    _require(s.closed is not None,
+             f"{scope}: status={s.status.value} requires closed date")
+```
+
+(Repeat for phase and cross-cutting with the appropriate variable names.)
+
+- [ ] **Step 3.4: Run — verify pass**
+
+```bash
+PYTHONPATH=tools python3 -m pytest tools/tasktool/tests/test_validate.py -q
+```
+
+Expected: green.
+
+- [ ] **Step 3.5: Commit**
+
+```bash
+git add tools/tasktool/validate.py tools/tasktool/tests/test_validate.py
+git commit -m "X22: validate cancelled requires closed date; reject on tasks"
+```
+
+---
+
+## Task 4 — Render: emoji + closed-date branch
+
+**Files:**
+- Modify: `tools/tasktool/render.py`
+- Modify: `tools/tasktool/tests/test_render.py`
+
+- [ ] **Step 4.1: Write failing tests**
+
+Add to `tools/tasktool/tests/test_render.py`:
+
+```python
+from tasktool.model import Status, Slice, Phase, CrossCutting
+from tasktool.render import STATUS_EMOJI, render_phase  # adjust to whatever the file exports
+
+def test_cancelled_emoji_present():
+    assert STATUS_EMOJI[Status.CANCELLED] == "🚫"
+
+def test_cancelled_slice_renders_with_closed_date():
+    s = Slice(id="S1", title="dropped", created="2026-05-23",
+              status=Status.CANCELLED, closed="2026-05-23")
+    p = Phase(id="P1", title="p", created="2026-05-23", slices=[s])
+    out = render_phase(p)  # adjust to actual API
+    assert "🚫" in out
+    assert "2026-05-23" in out
+```
+
+- [ ] **Step 4.2: Run — verify fail**
+
+```bash
+PYTHONPATH=tools python3 -m pytest tools/tasktool/tests/test_render.py -q
+```
+
+- [ ] **Step 4.3: Implement**
+
+In `tools/tasktool/render.py`:
+
+```python
+STATUS_EMOJI = {
+    Status.READY: "🔵",       # keep existing values
+    Status.IN_PROGRESS: "🟡",  # keep existing values
+    Status.BLOCKED: "⛔",      # keep existing values
+    Status.DONE: "✅",
+    Status.CANCELLED: "🚫",
+}
+```
+
+Then extend the closed-date emit branches at the existing `Status.DONE and s.closed` check (line 12) and the equivalent at line 28 to fire for any terminal status with a closed date:
+
+```python
+if is_terminal(s.status) and s.closed:
+    ...
+```
+
+Import `is_terminal` from `tasktool.model`.
+
+- [ ] **Step 4.4: Run — verify pass**
+
+```bash
+PYTHONPATH=tools python3 -m pytest tools/tasktool/tests/test_render.py -q
+```
+
+- [ ] **Step 4.5: Commit**
+
+```bash
+git add tools/tasktool/render.py tools/tasktool/tests/test_render.py
+git commit -m "X22: render 🚫 emoji and closed date for cancelled rows"
+```
+
+---
+
+## Task 5 — Importer round-trip
+
+**Files:**
+- Modify: `tools/tasktool/importer.py`
+- Modify: `tools/tasktool/tests/test_importer.py`
+
+- [ ] **Step 5.1: Write failing test**
+
+```python
+from tasktool.importer import EMOJI_TO_STATUS
+from tasktool.model import Status
+
+def test_cancelled_emoji_roundtrip():
+    assert EMOJI_TO_STATUS["🚫"] == Status.CANCELLED
+```
+
+If the importer parses dated tags after emoji (the existing `Status.DONE` branches at importer.py:103 and :152), add a focused parse test using a fixture line like `🚫 P1.S1 — title [2026-05-23]` asserting the resulting slice has `status=CANCELLED, closed="2026-05-23"`.
+
+- [ ] **Step 5.2: Run — verify fail**
+
+```bash
+PYTHONPATH=tools python3 -m pytest tools/tasktool/tests/test_importer.py -q
+```
+
+- [ ] **Step 5.3: Implement**
+
+Update `EMOJI_TO_STATUS` at importer.py:29:
+
+```python
+EMOJI_TO_STATUS = {
+    "🔵": Status.READY,
+    "🟡": Status.IN_PROGRESS,
+    "⛔": Status.BLOCKED,
+    "✅": Status.DONE,
+    "🚫": Status.CANCELLED,
+}
+```
+
+Generalize the date-extraction branches at lines 103 and 152 from `if status is Status.DONE` to `if is_terminal(status)` so cancelled dated tags also extract the date.
+
+- [ ] **Step 5.4: Run — verify pass**
+
+```bash
+PYTHONPATH=tools python3 -m pytest tools/tasktool/tests/test_importer.py -q
+```
+
+- [ ] **Step 5.5: Commit**
+
+```bash
+git add tools/tasktool/importer.py tools/tasktool/tests/test_importer.py
+git commit -m "X22: importer round-trips 🚫 ↔ Status.CANCELLED"
+```
+
+---
+
+## Task 6 — Notification path (`tasktool-status cancelled`)
+
+**Files:**
+- Modify: `tools/tasktool/tests/test_notify.py`
+
+The notifier currently constructs `<id> <status>: <title>` generically — no code change is needed beyond confirming the path. The spec only requires that the *call site* (added in Task 7) passes `status="cancelled"` once per cancellation.
+
+- [ ] **Step 6.1: Write test for generic dispatch with cancelled status**
+
+```python
+def test_tasktool_status_cancelled_dispatches():
+    # Use whatever helper the existing tests use to invoke notify.py
+    # and assert the resulting event payload includes status == "cancelled"
+    # and the title prefix is the row title (not mutated).
+    ...
+```
+
+Pattern this off whatever idiom `test_notify.py` already uses. If the existing test suite is integration-style, this test simply asserts the event message format `X22 cancelled: <title>` is produced.
+
+- [ ] **Step 6.2: Run — verify pass**
+
+The path already works for an arbitrary status string — this test mostly pins existing behaviour for the new value.
+
+```bash
+PYTHONPATH=tools python3 -m pytest tools/tasktool/tests/test_notify.py -q
+```
+
+- [ ] **Step 6.3: Commit**
+
+```bash
+git add tools/tasktool/tests/test_notify.py
+git commit -m "X22: pin tasktool-status cancelled notification format"
+```
+
+---
+
+## Task 7 — `cmd_cancel` core: slices and cross-cutting (no cascade)
+
+**Files:**
+- Modify: `tools/tasktool/commands.py`
+- Modify: `tools/tasktool/cli.py`
+- Modify: `tools/tasktool/tests/test_commands.py`
+- Modify: `tools/tasktool/tests/test_cli_integration.py`
+
+- [ ] **Step 7.1: Write failing tests**
+
+Add to `tools/tasktool/tests/test_commands.py`:
+
+```python
+import datetime as _dt
+import pytest
+from tasktool.commands import cmd_cancel, CommandError
+from tasktool.model import Status
+
+# Use whatever project-loading fixture the existing tests use.
+
+def test_cancel_slice_stamps_status_closed_and_audit_note(fresh_repo):
+    # Pre: a phase P1 with slice S1 in status ready, with empty notes.
+    cmd_cancel(repo_root=fresh_repo, id="P1.S1", reason="scope dropped")
+    s = _load_slice(fresh_repo, "P1.S1")
+    assert s.status == Status.CANCELLED
+    assert s.closed == _dt.date.today().isoformat()
+    assert "Cancelled " in s.notes
+    assert "scope dropped" in s.notes
+
+def test_cancel_requires_reason(fresh_repo):
+    with pytest.raises(CommandError, match="--reason"):
+        cmd_cancel(repo_root=fresh_repo, id="P1.S1", reason=None)
+    with pytest.raises(CommandError, match="--reason"):
+        cmd_cancel(repo_root=fresh_repo, id="P1.S1", reason="")
+    with pytest.raises(CommandError, match="--reason"):
+        cmd_cancel(repo_root=fresh_repo, id="P1.S1", reason="   ")
+
+def test_cancel_rejects_task_id(fresh_repo):
+    with pytest.raises(CommandError, match="cancel does not apply to tasks"):
+        cmd_cancel(repo_root=fresh_repo, id="P1.S1.T1", reason="x")
+
+def test_cancel_rejects_already_terminal(fresh_repo_with_done_slice):
+    with pytest.raises(CommandError, match="already"):
+        cmd_cancel(repo_root=fresh_repo_with_done_slice, id="P1.S1", reason="x")
+
+def test_cancel_cross_auto_archives(fresh_repo_with_cross):
+    cmd_cancel(repo_root=fresh_repo_with_cross, id="X1", reason="superseded")
+    p = _load(fresh_repo_with_cross)
+    assert all(c.id != "X1" for c in p.cross_cutting)
+    assert any(a.id == "X1" for a in p.archived_cross_cutting)
+    # Archive file content must record status=cancelled
+    archive_path = next(a for a in p.archived_cross_cutting if a.id == "X1").archived_path
+    assert "status: cancelled" in (fresh_repo_with_cross / archive_path).read_text()
+
+def test_cancel_cross_no_archive_keeps_visible(fresh_repo_with_cross):
+    cmd_cancel(repo_root=fresh_repo_with_cross, id="X1", reason="defer", no_archive=True)
+    p = _load(fresh_repo_with_cross)
+    x = next(c for c in p.cross_cutting if c.id == "X1")
+    assert x.status == Status.CANCELLED
+
+def test_cancel_no_archive_rejected_for_slice(fresh_repo):
+    with pytest.raises(CommandError, match="--no-archive"):
+        cmd_cancel(repo_root=fresh_repo, id="P1.S1", reason="x", no_archive=True)
+
+def test_cancel_slice_emits_cancelled_notification_once(fresh_repo, captured_notifications):
+    cmd_cancel(repo_root=fresh_repo, id="P1.S1", reason="x")
+    events = [e for e in captured_notifications() if e["qid"] == "P1.S1"]
+    assert len(events) == 1
+    assert events[0]["status"] == "cancelled"
+    assert events[0]["kind"] == "slice"
+
+def test_cancel_cross_emits_cancelled_notification_once(fresh_repo_with_cross, captured_notifications):
+    cmd_cancel(repo_root=fresh_repo_with_cross, id="X1", reason="x")
+    events = [e for e in captured_notifications() if e["qid"] == "X1"]
+    assert len(events) == 1
+    assert events[0]["status"] == "cancelled"
+    assert events[0]["kind"] == "cross"
+
+def test_cancel_cascade_rejected_for_slice(fresh_repo):
+    with pytest.raises(CommandError, match="--cascade"):
+        cmd_cancel(repo_root=fresh_repo, id="P1.S1", reason="x", cascade=True)
+```
+
+Add to `tools/tasktool/tests/test_cli_integration.py`:
+
+```python
+def test_cli_cancel_slice(tmp_repo):
+    out, rc = run_tasktool(tmp_repo, "cancel", "P1.S1", "--reason", "dropped")
+    assert rc == 0
+    # status round-trip
+    show, _ = run_tasktool(tmp_repo, "show", "P1.S1")
+    assert "cancelled" in show
+```
+
+- [ ] **Step 7.2: Run — verify fail**
+
+```bash
+PYTHONPATH=tools python3 -m pytest tools/tasktool/tests/test_commands.py tools/tasktool/tests/test_cli_integration.py -q
+```
+
+Expected: `ImportError: cmd_cancel` (and CLI command-not-found).
+
+- [ ] **Step 7.3: Implement `cmd_cancel` (slice + cross only for now)**
+
+Add to `tools/tasktool/commands.py` near `cmd_close`:
+
+```python
+def cmd_cancel(
+    *, repo_root: Path, id: str, reason: str | None,
+    cascade: bool = False, no_archive: bool = False,
+) -> None:
+    if reason is None or not reason.strip():
+        raise CommandError(f"{id}: cancel requires --reason")
+    reason = reason.strip()
+
+    kind = parse_id(id)[0]
+    if kind == "task":
+        raise CommandError(
+            f"{id}: cancel does not apply to tasks; cancel the parent slice instead"
+        )
+    if cascade and kind != "phase":
+        raise CommandError(f"{id}: --cascade is only valid for phase ids")
+    if no_archive and kind != "cross":
+        raise CommandError(f"{id}: --no-archive is only valid for cross-cutting ids")
+
+    with _write_context(repo_root) as write_root:
+        p = _load(write_root)
+        qid, _container, item = _find_item(p, id)
+        if is_terminal(item.status):
+            raise CommandError(f"{qid} is already {item.status.value}; cannot cancel")
+
+        if kind == "phase":
+            # cascade handling deferred to Task 8
+            raise CommandError(f"{qid}: phase cancel not yet implemented")
+
+        _stamp_cancellation(item, reason, suffix=None)
+
+        archive_path: Path | None = None
+        if kind == "cross" and not no_archive:
+            archive_path, _ = _archive_cross_at_root(write_root, p, item)
+        _save(write_root, p)
+        if archive_path is not None:
+            _git_stage(write_root, archive_path)
+        _notify_status(qid=qid, kind=kind, status=item.status, title=item.title)
+
+
+def _stamp_cancellation(item, reason: str, *, suffix: str | None) -> None:
+    ts = _dt.datetime.now().isoformat(timespec="seconds")
+    line = f"Cancelled {ts}: {reason}"
+    if suffix:
+        line += f" ({suffix})"
+    item.notes = (item.notes + "\n" + line).strip() if item.notes else line
+    item.status = Status.CANCELLED
+    item.closed = _today()
+```
+
+Import `is_terminal` from `tasktool.model`.
+
+Wire the CLI in `tools/tasktool/cli.py` (after the `p_close` block, around line 140):
+
+```python
+p_cancel = sub.add_parser("cancel")
+p_cancel.add_argument("id")
+p_cancel.add_argument("--reason", required=True)
+p_cancel.add_argument("--cascade", action="store_true")
+p_cancel.add_argument("--no-archive", action="store_true")
+```
+
+Dispatch in the main command-dispatch table. The existing dispatcher uses the local variable `root` (not `repo_root`) and imports the `commands` module, so the line is:
+
+```python
+elif args.cmd == "cancel":
+    commands.cmd_cancel(repo_root=root, id=args.id, reason=args.reason,
+                        cascade=args.cascade, no_archive=args.no_archive)
+```
+
+Update `_archive_cross_at_root` (`commands.py:608`–) to accept terminal status (will be fully handled in Task 10; for now relax `!= DONE` to `not is_terminal(...)` and pass the actual status to the archive writer so this task's cross-cutting test passes):
+
+```python
+def _archive_cross_at_root(write_root, p, item):
+    if not is_terminal(item.status):
+        raise CommandError(f"{item.id}: cannot archive non-terminal cross-cutting")
+    # ... existing body but emit item.status.value in archive markdown ...
+```
+
+- [ ] **Step 7.4: Run — verify pass**
+
+```bash
+PYTHONPATH=tools python3 -m pytest tools/tasktool/tests/test_commands.py tools/tasktool/tests/test_cli_integration.py -q
+```
+
+The phase-cancel test should still fail with "not yet implemented" — that's fine; it'll be addressed in Task 8.
+
+- [ ] **Step 7.5: Commit**
+
+```bash
+git add tools/tasktool/commands.py tools/tasktool/cli.py \
+        tools/tasktool/tests/test_commands.py tools/tasktool/tests/test_cli_integration.py
+git commit -m "X22: cmd_cancel for slices and cross-cutting"
+```
+
+---
+
+## Task 8 — Phase cancellation + `--cascade`
+
+**Files:**
+- Modify: `tools/tasktool/commands.py`
+- Modify: `tools/tasktool/tests/test_commands.py`
+
+- [ ] **Step 8.1: Write failing tests**
+
+Append to `test_commands.py`:
+
+```python
+def test_cancel_phase_refuses_with_open_slices(fresh_repo_phase_with_open_slice):
+    with pytest.raises(CommandError, match="open"):
+        cmd_cancel(repo_root=fresh_repo_phase_with_open_slice,
+                   id="P1", reason="pivoting")
+
+def test_cancel_phase_succeeds_when_all_slices_terminal(fresh_repo_phase_all_terminal):
+    # P1 has S1 done, S2 cancelled
+    cmd_cancel(repo_root=fresh_repo_phase_all_terminal, id="P1", reason="rollup")
+    p = _load(fresh_repo_phase_all_terminal)
+    ph = next(x for x in p.phases if x.id == "P1")
+    assert ph.status == Status.CANCELLED
+    # Done child slices untouched
+    s1 = next(s for s in ph.slices if s.id == "S1")
+    assert s1.status == Status.DONE
+
+def test_cancel_phase_cascade_cancels_open_leaves_done(fresh_repo_phase_mixed):
+    # P1 has S1 done, S2 ready, S3 in_progress
+    cmd_cancel(repo_root=fresh_repo_phase_mixed,
+               id="P1", reason="pivot", cascade=True)
+    p = _load(fresh_repo_phase_mixed)
+    ph = next(x for x in p.phases if x.id == "P1")
+    assert ph.status == Status.CANCELLED
+    s1 = next(s for s in ph.slices if s.id == "S1")
+    s2 = next(s for s in ph.slices if s.id == "S2")
+    s3 = next(s for s in ph.slices if s.id == "S3")
+    assert s1.status == Status.DONE
+    assert s2.status == Status.CANCELLED
+    assert s3.status == Status.CANCELLED
+    # Cascaded children carry the suffix
+    assert "(cascaded from P1)" in s2.notes
+    assert "(cascaded from P1)" in s3.notes
+
+def test_cancel_phase_cascade_notifies_each_cascaded_child_and_phase(
+    fresh_repo_phase_mixed, captured_notifications
+):
+    cmd_cancel(repo_root=fresh_repo_phase_mixed, id="P1",
+               reason="pivot", cascade=True)
+    events = captured_notifications()
+    # Exactly one event per cascaded child (S2, S3) plus the phase itself,
+    # all with status="cancelled". S1 (done) must not emit a cancel event.
+    ids_with_cancel = sorted(
+        e["qid"] for e in events if e["status"] == "cancelled"
+    )
+    assert ids_with_cancel == ["P1", "P1.S2", "P1.S3"]
+    assert not any(e["qid"] == "P1.S1" and e["status"] == "cancelled" for e in events)
+```
+
+- [ ] **Step 8.2: Run — verify fail**
+
+```bash
+PYTHONPATH=tools python3 -m pytest tools/tasktool/tests/test_commands.py -q -k cancel_phase
+```
+
+- [ ] **Step 8.3: Implement**
+
+Replace the `if kind == "phase":` branch in `cmd_cancel`:
+
+```python
+if kind == "phase":
+    open_slices = [s for s in item.slices if not is_terminal(s.status)]
+    if open_slices and not cascade:
+        ids = ", ".join(s.id for s in open_slices)
+        raise CommandError(
+            f"{qid}: phase has open slices ({ids}); use --cascade to cancel them"
+        )
+    for s in open_slices:
+        _stamp_cancellation(s, reason, suffix=f"cascaded from {qid}")
+        _notify_status(qid=f"{qid}.{s.id}", kind="slice",
+                       status=s.status, title=s.title)
+    _stamp_cancellation(item, reason, suffix=None)
+    _save(write_root, p)
+    _notify_status(qid=qid, kind="phase", status=item.status, title=item.title)
+    return
+```
+
+- [ ] **Step 8.4: Run — verify pass**
+
+```bash
+PYTHONPATH=tools python3 -m pytest tools/tasktool/tests/test_commands.py -q
+```
+
+- [ ] **Step 8.5: Commit**
+
+```bash
+git add tools/tasktool/commands.py tools/tasktool/tests/test_commands.py
+git commit -m "X22: phase cancel with --cascade; leaves done slices untouched"
+```
+
+---
+
+## Task 9 — Lifecycle-adjacent guards on cancelled rows
+
+**Files:**
+- Modify: `tools/tasktool/commands.py`
+- Modify: `tools/tasktool/tests/test_commands.py`
+
+Guards required (per the spec's lifecycle-adjacent command table):
+
+| Command | Behavior |
+|---|---|
+| `cmd_set` (all statuses) | Refuse if current status is `cancelled` |
+| `cmd_close` | Refuse if current status is `cancelled` |
+| `_start_item` | Refuse on any terminal status (use `is_terminal()`) |
+| `cmd_block` / `cmd_unblock` | Refuse if cancelled |
+| `cmd_deps` (add/remove) | Refuse if cancelled |
+| `cmd_ratify` | Refuse if cancelled |
+| `cmd_note` with `--replace` | Refuse if cancelled (with hint pointing to `--append`) |
+| `cmd_note` with `--append` | Allow |
+| `cmd_ref` (add/remove) | Allow |
+| `cmd_title` | Allow |
+| Set choices in CLI | **Do not** add `cancelled` to `p_set` `--status` choices |
+
+- [ ] **Step 9.1: Write failing tests**
+
+```python
+import pytest
+from tasktool.commands import (cmd_close, cmd_set, cmd_block, cmd_unblock,
+                               cmd_deps, cmd_ratify, cmd_note, cmd_ref, cmd_title,
+                               cmd_start, CommandError)
+
+def test_cmd_close_refuses_cancelled(fresh_repo_cancelled_slice):
+    with pytest.raises(CommandError, match="cancelled"):
+        cmd_close(repo_root=fresh_repo_cancelled_slice, id="P1.S1")
+
+def test_cmd_set_refuses_cancelled(fresh_repo_cancelled_slice):
+    for new in ("ready", "in_progress", "done"):
+        with pytest.raises(CommandError, match="cancelled"):
+            cmd_set(repo_root=fresh_repo_cancelled_slice, id="P1.S1", status=new)
+
+def test_cmd_set_refuses_status_cancelled_with_hint(fresh_repo):
+    """Defense in depth: even though CLI choices exclude 'cancelled',
+    cmd_set called programmatically with status='cancelled' must error
+    and point operators at `tasktool cancel`."""
+    with pytest.raises(CommandError, match="tasktool cancel"):
+        cmd_set(repo_root=fresh_repo, id="P1.S1", status="cancelled")
+
+def test_cmd_start_refuses_cancelled(fresh_repo_cancelled_slice):
+    with pytest.raises(CommandError, match="cancelled"):
+        cmd_start(repo_root=fresh_repo_cancelled_slice, id="P1.S1")
+
+def test_cmd_block_unblock_refuses_cancelled(fresh_repo_cancelled_slice):
+    with pytest.raises(CommandError, match="cancelled"):
+        cmd_block(repo_root=fresh_repo_cancelled_slice, slice_id="P1.S1", on="P1.S2")
+    with pytest.raises(CommandError, match="cancelled"):
+        cmd_unblock(repo_root=fresh_repo_cancelled_slice, slice_id="P1.S1")
+
+def test_cmd_deps_refuses_cancelled(fresh_repo_cancelled_slice):
+    with pytest.raises(CommandError, match="cancelled"):
+        cmd_deps(repo_root=fresh_repo_cancelled_slice, slice_id="P1.S1", add="P1.S2")
+    with pytest.raises(CommandError, match="cancelled"):
+        cmd_deps(repo_root=fresh_repo_cancelled_slice, slice_id="P1.S1", remove="P1.S2")
+
+def test_cmd_ratify_refuses_cancelled(fresh_repo_cancelled_slice):
+    with pytest.raises(CommandError, match="cancelled"):
+        cmd_ratify(repo_root=fresh_repo_cancelled_slice, slice_id="P1.S1", status="ratified")
+
+def test_cmd_note_replace_refuses_cancelled(fresh_repo_cancelled_slice):
+    with pytest.raises(CommandError, match="--append"):
+        cmd_note(repo_root=fresh_repo_cancelled_slice, id="P1.S1", replace="overwrite")
+
+def test_cmd_note_append_allowed_on_cancelled(fresh_repo_cancelled_slice):
+    cmd_note(repo_root=fresh_repo_cancelled_slice, id="P1.S1", append="post-mortem note")
+    s = _load_slice(fresh_repo_cancelled_slice, "P1.S1")
+    assert "post-mortem note" in s.notes
+
+def test_cmd_ref_allowed_on_cancelled(fresh_repo_cancelled_slice):
+    cmd_ref(repo_root=fresh_repo_cancelled_slice, id="P1.S1", add="docs/foo.md")
+    s = _load_slice(fresh_repo_cancelled_slice, "P1.S1")
+    assert "docs/foo.md" in s.refs
+
+def test_cmd_title_allowed_on_cancelled(fresh_repo_cancelled_slice):
+    cmd_title(repo_root=fresh_repo_cancelled_slice, id="P1.S1", new="new title")
+    s = _load_slice(fresh_repo_cancelled_slice, "P1.S1")
+    assert s.title == "new title"
+```
+
+- [ ] **Step 9.2: Run — verify fail**
+
+```bash
+PYTHONPATH=tools python3 -m pytest tools/tasktool/tests/test_commands.py -q -k cancelled
+```
+
+- [ ] **Step 9.3: Implement**
+
+Define one helper at the top of `commands.py`:
+
+```python
+def _refuse_if_cancelled(qid: str, item, command: str) -> None:
+    if item.status == Status.CANCELLED:
+        raise CommandError(
+            f"{qid}: cannot {command} a cancelled row"
+            + (" — use note --append" if command == "replace notes" else "")
+        )
+```
+
+Call it from the top of each affected command, after `_find_item`:
+
+- `cmd_close` (just before the existing kind dispatch): `_refuse_if_cancelled(qid, item, "close")`
+- `cmd_set`:
+  - First, **reject the input string `"cancelled"` explicitly** at the top, regardless of the current row status:
+    ```python
+    if status == "cancelled":
+        raise CommandError(
+            f"{id}: cannot set status=cancelled directly; use `tasktool cancel <id> --reason \"...\"`"
+        )
+    ```
+    This is the defense-in-depth guard the spec requires (`docs/specs/2026-05-23-X22-cancelled-status-design.md:98-100`). It must fire even if a future contributor widens the argparse `choices` list.
+  - Then `_refuse_if_cancelled(qid, item, "set")` (refuses any mutation of an already-cancelled row).
+- `_start_item`: replace the `== Status.DONE` check with `if is_terminal(item.status): raise CommandError(f"{qid} is already {item.status.value}")`. (This also covers cancelled.)
+- `cmd_block`, `cmd_unblock`, `cmd_deps`, `cmd_ratify`: `_refuse_if_cancelled(...)`.
+- `cmd_note`: if `replace` is provided AND status is cancelled → raise with the hint; allow `append` unconditionally.
+
+- [ ] **Step 9.4: Run — verify pass**
+
+```bash
+PYTHONPATH=tools python3 -m pytest tools/tasktool/tests/test_commands.py -q
+```
+
+- [ ] **Step 9.5: Commit**
+
+```bash
+git add tools/tasktool/commands.py tools/tasktool/tests/test_commands.py
+git commit -m "X22: guard lifecycle commands against cancelled rows"
+```
+
+---
+
+## Task 10 — `archive-cross` status preservation
+
+**Files:**
+- Modify: `tools/tasktool/commands.py`
+- Modify: `tools/tasktool/tests/test_commands.py`
+
+`_archive_cross_at_root` was loosened in Task 7 to accept any terminal status; this task ensures the archive markdown writer faithfully records the status (no coercion to `done`), and that explicit `tasktool archive-cross` on a `cancel --no-archive`-created row works.
+
+- [ ] **Step 10.1: Write failing tests**
+
+```python
+def test_archive_cross_after_cancel_no_archive_preserves_status(fresh_repo_with_cross):
+    cmd_cancel(repo_root=fresh_repo_with_cross, id="X1", reason="defer", no_archive=True)
+    cmd_archive_cross(repo_root=fresh_repo_with_cross, id="X1")
+    p = _load(fresh_repo_with_cross)
+    archived = next(a for a in p.archived_cross_cutting if a.id == "X1")
+    body = (fresh_repo_with_cross / archived.archived_path).read_text()
+    assert "status: cancelled" in body
+    assert "status: done" not in body
+```
+
+- [ ] **Step 10.2: Run — verify fail (or pass if Task 7's writer already preserves status)**
+
+```bash
+PYTHONPATH=tools python3 -m pytest tools/tasktool/tests/test_commands.py -q -k archive_cross
+```
+
+- [ ] **Step 10.3: Implement**
+
+In the archive markdown writer inside (or invoked by) `_archive_cross_at_root`, replace any literal `done` in the frontmatter/heading with `item.status.value`. Also confirm `cmd_archive_cross` invokes the same writer and accepts a `cancelled` source row (i.e. its precondition is `is_terminal`).
+
+- [ ] **Step 10.4: Run — verify pass**
+
+```bash
+PYTHONPATH=tools python3 -m pytest tools/tasktool/tests/test_commands.py -q
+```
+
+- [ ] **Step 10.5: Commit**
+
+```bash
+git add tools/tasktool/commands.py tools/tasktool/tests/test_commands.py
+git commit -m "X22: archive-cross preserves cancelled status in archive markdown"
+```
+
+---
+
+## Task 11 — `archive-phase`: cancelled support + notify fix
+
+**Files:**
+- Modify: `tools/tasktool/commands.py`
+- Modify: `tools/tasktool/tests/test_commands.py`
+
+- [ ] **Step 11.1: Write failing tests**
+
+```python
+def test_archive_phase_accepts_cancelled_phase_skipping_gate(fresh_repo_cancelled_phase):
+    # P1 has status cancelled; slices all terminal; no reviewer chain
+    cmd_archive_phase(repo_root=fresh_repo_cancelled_phase, id="P1")
+    p = _load(fresh_repo_cancelled_phase)
+    assert any(a.id == "P1" for a in p.archived_phases)
+
+def test_archive_phase_refuses_cancelled_phase_with_open_slices(fresh_repo_phase_mixed):
+    # P1 status cancelled (somehow) but a slice is still ready
+    # Simulate by hand-crafting fixture
+    with pytest.raises(CommandError, match="open"):
+        cmd_archive_phase(repo_root=fresh_repo_phase_mixed, id="P1")
+
+def test_archive_phase_notifier_uses_real_status_for_cancelled(
+    fresh_repo_cancelled_phase, captured_notifications
+):
+    cmd_archive_phase(repo_root=fresh_repo_cancelled_phase, id="P1")
+    events = captured_notifications()
+    archive_events = [e for e in events if e["qid"] == "P1"]
+    assert archive_events, "expected an archive event"
+    assert archive_events[-1]["status"] == "cancelled"
+    assert all(e["status"] != "done" for e in archive_events)
+```
+
+- [ ] **Step 11.2: Run — verify fail**
+
+```bash
+PYTHONPATH=tools python3 -m pytest tools/tasktool/tests/test_commands.py -q -k archive_phase
+```
+
+- [ ] **Step 11.3: Implement**
+
+In `cmd_archive_phase` around `commands.py:1795-1857`:
+
+1. Replace `open_slices = [s for s in phase.slices if s.status != Status.DONE]` with `open_slices = [s for s in phase.slices if not is_terminal(s.status)]`.
+2. The current code stamps `phase.status = Status.DONE` unconditionally at `:1804-1805`. Change to: only stamp `DONE` when the phase wasn't already `cancelled`. Keep `closed` stamping for both (cancelled phases should already have `closed` from their cancellation).
+3. The post-phase review gate check (whatever helper enforces it) must be bypassed when `phase.status == Status.CANCELLED`. Add a note line to `phase.notes` recording the bypass: `Phase cancelled; post-phase review gate skipped`.
+4. Change the final `_notify_status(..., status=Status.DONE, ...)` at `commands.py:1857` to use the phase's actual status: `_notify_status(qid=phase_id, kind="phase", status=phase.status, title=phase.title)`.
+
+- [ ] **Step 11.4: Run — verify pass**
+
+```bash
+PYTHONPATH=tools python3 -m pytest tools/tasktool/tests/test_commands.py -q
+```
+
+- [ ] **Step 11.5: Commit**
+
+```bash
+git add tools/tasktool/commands.py tools/tasktool/tests/test_commands.py
+git commit -m "X22: archive-phase accepts cancelled phases; notifies real status"
+```
+
+---
+
+## Task 12 — `schedule` `cancelled_deps` + `ready-slices` filter
+
+**Files:**
+- Modify: `tools/tasktool/commands.py`
+- Modify: `tools/tasktool/tests/test_commands.py`
+
+- [ ] **Step 12.1: Write failing tests**
+
+```python
+def test_schedule_emits_cancelled_deps(fresh_repo_schedule_fixture):
+    # P1: S1 cancelled (depends_on=[]), S2 ready (depends_on=["P1.S1"])
+    out = cmd_schedule(repo_root=fresh_repo_schedule_fixture, phase_id="P1", format="json")
+    rows = json.loads(out)
+    s2 = next(r for r in rows if r["id"] == "P1.S2")
+    assert s2["cancelled_deps"] == ["P1.S1"]
+    assert s2["waiting_on"] == []
+    assert s2["ready"] is False
+
+def test_schedule_text_includes_cancelled_deps(fresh_repo_schedule_fixture):
+    out = cmd_schedule(repo_root=fresh_repo_schedule_fixture, phase_id="P1", format="text")
+    assert "cancelled_deps=P1.S1" in out
+
+def test_ready_slices_omits_slice_with_cancelled_dep(fresh_repo_schedule_fixture):
+    out = cmd_ready_slices(repo_root=fresh_repo_schedule_fixture, phase_id="P1")
+    assert "P1.S2" not in out
+```
+
+- [ ] **Step 12.2: Run — verify fail**
+
+```bash
+PYTHONPATH=tools python3 -m pytest tools/tasktool/tests/test_commands.py -q -k "schedule or ready_slices"
+```
+
+- [ ] **Step 12.3: Implement**
+
+In `commands.py` near `_done_slice_ids` (line 1456):
+
+```python
+def _cancelled_slice_ids(phase) -> set[str]:
+    return {f"{phase.id}.{s.id}" for s in phase.slices if s.status == Status.CANCELLED}
+```
+
+`_done_slice_ids` stays unchanged (strict `== Status.DONE`).
+
+Modify `cmd_schedule` (around `commands.py:1488-1521`):
+
+```python
+def cmd_schedule(*, repo_root: Path, phase_id: str, format: str = "text") -> str:
+    p = _load(repo_root)
+    phase = _phase_by_id(p, phase_id)
+    done = _done_slice_ids(phase)
+    cancelled = _cancelled_slice_ids(phase)
+    rows = []
+    for s in phase.slices:
+        waiting_on = [dep for dep in s.depends_on if dep not in done and dep not in cancelled]
+        cancelled_deps = [dep for dep in s.depends_on if dep in cancelled]
+        ready = _is_slice_ready_for_work(phase, s) and not cancelled_deps
+        rows.append({
+            "id": f"{phase.id}.{s.id}",
+            "status": s.status.value,
+            "planning_status": s.planning_status.value,
+            "parallel_group": s.parallel_group,
+            "depends_on": s.depends_on,
+            "waiting_on": waiting_on,
+            "cancelled_deps": cancelled_deps,
+            "ready": ready,
+            "title": s.title,
+        })
+    if format == "json":
+        ...
+    # text path: extend the per-slice format string
+    lines.append(
+        f"{row['id']}  [{row['status']}/{row['planning_status']}]  "
+        f"group={group}  {ready}  deps={deps}  waiting_on={waits}  "
+        f"cancelled_deps={cancelled_str}  {row['title']}"
+    )
+```
+
+In `_is_slice_ready_for_work` (or wherever ready-slices computes its set), require both `waiting_on` empty and `cancelled_deps` empty. The cleanest fix: have `_is_slice_ready_for_work` also consult `_cancelled_slice_ids` and return `False` when any dep is cancelled.
+
+- [ ] **Step 12.4: Run — verify pass**
+
+```bash
+PYTHONPATH=tools python3 -m pytest tools/tasktool/tests/test_commands.py -q
+```
+
+- [ ] **Step 12.5: Commit**
+
+```bash
+git add tools/tasktool/commands.py tools/tasktool/tests/test_commands.py
+git commit -m "X22: schedule emits cancelled_deps; ready-slices respects them"
+```
+
+---
+
+> **Note on `cmd_show`:** Task 13 leaves `cmd_show` unchanged with respect to *task suppression* (it still emits child task rows verbatim). Task 14 separately adds a leading cancellation-reason block to `cmd_show` for cancelled rows; those two changes are orthogonal and target different parts of the function.
+
+## Task 13 — Open-status reports + worktree prune (terminal-aware)
+
+Covers three `Status.DONE` audit sites identified in the spec:
+
+1. `cmd_list` child-task suppression on terminal parents (`commands.py:1571-1604`).
+2. `cmd_phase_status` open-phase / open-cross-cutting filters (`commands.py:1523-1527`) — cancelled phases and cancelled `--no-archive` X rows must not appear in the "open" sections.
+3. `cmd_worktree_prune` terminal check (`commands.py:2067-2073`) — a cancelled slice with a clean, merged worktree must prune without `--force`.
+
+**Files:**
+- Modify: `tools/tasktool/commands.py`
+- Modify: `tools/tasktool/tests/test_commands.py`
+
+- [ ] **Step 13.1: Write failing tests**
+
+```python
+def test_list_open_omits_child_tasks_of_cancelled_slice(fresh_repo_with_open_task):
+    # P1.S1 has a ready task T1
+    cmd_cancel(repo_root=fresh_repo_with_open_task, id="P1.S1", reason="x")
+    out = cmd_list(repo_root=fresh_repo_with_open_task, open_only=True)
+    assert "P1.S1.T1" not in out
+
+def test_list_open_omits_child_tasks_of_cascaded_phase(fresh_repo_phase_with_tasks):
+    cmd_cancel(repo_root=fresh_repo_phase_with_tasks, id="P1",
+               reason="pivot", cascade=True)
+    out = cmd_list(repo_root=fresh_repo_phase_with_tasks, open_only=True)
+    for slice_id in ("S1", "S2"):
+        for task_id in ("T1", "T2"):
+            assert f"P1.{slice_id}.{task_id}" not in out
+
+def test_show_slice_still_emits_child_tasks_after_cancel(fresh_repo_with_open_task):
+    cmd_cancel(repo_root=fresh_repo_with_open_task, id="P1.S1", reason="x")
+    out = cmd_show(repo_root=fresh_repo_with_open_task, id="P1.S1")
+    assert "P1.S1.T1" in out  # show still emits child tasks unchanged
+```
+
+- [ ] **Step 13.2: Run — verify fail**
+
+```bash
+PYTHONPATH=tools python3 -m pytest tools/tasktool/tests/test_commands.py -q -k "list_open or show_slice_still"
+```
+
+- [ ] **Step 13.3: Implement**
+
+In `cmd_list` (`commands.py:1571-1604`), modify the iteration that emits task rows. Locate the inner loop that walks `slice.tasks` and add a guard:
+
+```python
+for ph in p.phases:
+    for s in ph.slices:
+        # When --open and the parent slice is terminal, skip its tasks
+        if open_only and is_terminal(s.status):
+            continue
+        for t in s.tasks:
+            if open_only and t.status == Status.DONE:
+                continue
+            ...
+```
+
+(Adjust to the existing loop structure; the intent is "if `--open` and parent slice is terminal, do not yield child task rows".)
+
+`cmd_show` is unchanged — it always emits full slice contents regardless of status.
+
+- [ ] **Step 13.4: Run — verify pass**
+
+```bash
+PYTHONPATH=tools python3 -m pytest tools/tasktool/tests/test_commands.py -q
+```
+
+- [ ] **Step 13.5: Commit list-suppression**
+
+```bash
+git add tools/tasktool/commands.py tools/tasktool/tests/test_commands.py
+git commit -m "X22: list --open suppresses child tasks of terminal parents"
+```
+
+- [ ] **Step 13.6: Write failing tests for `phase-status` and `worktree-prune`**
+
+```python
+def test_phase_status_excludes_cancelled_phase(fresh_repo_with_cancelled_phase):
+    out = cmd_phase_status(repo_root=fresh_repo_with_cancelled_phase, format="json")
+    data = json.loads(out)
+    assert all(ph["id"] != "P1" for ph in data["open_phases"])
+
+def test_phase_status_excludes_cancelled_no_archive_cross(fresh_repo_with_cancelled_no_archive_x):
+    out = cmd_phase_status(repo_root=fresh_repo_with_cancelled_no_archive_x, format="json")
+    data = json.loads(out)
+    assert all(c["id"] != "X1" for c in data["open_cross_cutting"])
+
+def test_worktree_prune_accepts_cancelled_slice_without_force(fresh_repo_cancelled_slice_with_clean_worktree):
+    # No --force needed; the prune should succeed because the slice is terminal.
+    cmd_worktree_prune(repo_root=fresh_repo_cancelled_slice_with_clean_worktree,
+                       id="P1.S1")
+    # Verify the worktree fields were cleared
+    s = _load_slice(fresh_repo_cancelled_slice_with_clean_worktree, "P1.S1")
+    assert s.worktree_path is None
+```
+
+- [ ] **Step 13.7: Run — verify fail**
+
+```bash
+PYTHONPATH=tools python3 -m pytest tools/tasktool/tests/test_commands.py -q -k "phase_status or worktree_prune"
+```
+
+- [ ] **Step 13.8: Implement**
+
+`commands.py:1525-1526` (in `cmd_phase_status`):
+
+```python
+open_cross = [c for c in p.cross_cutting if not is_terminal(c.status)]
+open_phases = [ph for ph in p.phases if not is_terminal(ph.status)]
+```
+
+`commands.py:2067-2073` (in `cmd_worktree_prune` — exact symbol may differ; locate the terminal check that today compares `!= Status.DONE`):
+
+```python
+if not is_terminal(item.status) and not force:
+    raise CommandError(...)
+```
+
+- [ ] **Step 13.9: Run — verify pass**
+
+```bash
+PYTHONPATH=tools python3 -m pytest tools/tasktool/tests/test_commands.py -q
+```
+
+- [ ] **Step 13.10: Commit**
+
+```bash
+git add tools/tasktool/commands.py tools/tasktool/tests/test_commands.py
+git commit -m "X22: phase-status and worktree-prune treat cancelled as terminal"
+```
+
+---
+
+## Task 14 — `brief` / `show` surface cancellation reason
+
+**Files:**
+- Modify: `tools/tasktool/brief.py`
+- Modify: `tools/tasktool/commands.py` (`cmd_show`)
+- Modify: `tools/tasktool/tests/test_brief.py`
+- Modify: `tools/tasktool/tests/test_commands.py` (cmd_show cases)
+
+The spec requires that active cancelled rows surface the cancellation reason at the top of `brief` and `show` output, by scanning `notes` for the first line starting `Cancelled <ISO-ts>: ` and emitting that block; falling back to the last non-empty notes line if the prefix isn't present. Archived X rows are unaffected — `_find_item` still returns the "not found in active tasklist" error for them.
+
+- [ ] **Step 14.1: Write failing tests**
+
+Add to `tools/tasktool/tests/test_brief.py`. Note: `tasktool.brief.brief` accepts `(project, qid)`; for repo-root convenience use `cmd_brief`. The tests below use `cmd_brief` since it matches the existing test style:
+
+```python
+import re
+from tasktool.commands import cmd_brief
+
+def test_brief_surfaces_cancellation_reason_at_top(fresh_repo_cancelled_slice_with_reason):
+    out = cmd_brief(repo_root=fresh_repo_cancelled_slice_with_reason, id="P1.S1")
+    # Reason must appear before the first generic section header
+    reason_pos = out.find("scope dropped")
+    first_section = re.search(r"^##? ", out, flags=re.M)
+    assert reason_pos != -1
+    if first_section:
+        assert reason_pos < first_section.start()
+
+def test_brief_falls_back_to_last_notes_line_when_no_prefix(fresh_repo_cancelled_slice_legacy_notes):
+    """Row cancelled via raw edit; no `Cancelled <ts>:` prefix line."""
+    out = cmd_brief(repo_root=fresh_repo_cancelled_slice_legacy_notes, id="P1.S1")
+    assert "legacy last line" in out
+
+def test_brief_no_reason_block_on_non_cancelled_rows(fresh_repo):
+    out = cmd_brief(repo_root=fresh_repo, id="P1.S1")
+    assert "Cancelled " not in out
+```
+
+Add to `tools/tasktool/tests/test_commands.py`:
+
+```python
+def test_show_surfaces_reason_for_active_cancelled_x(fresh_repo_cancelled_x_no_archive):
+    out = cmd_show(repo_root=fresh_repo_cancelled_x_no_archive, id="X1")
+    assert "Cancelled " in out
+    assert "defer" in out
+
+def test_show_returns_not_found_for_archived_cancelled_x(fresh_repo_with_cross):
+    cmd_cancel(repo_root=fresh_repo_with_cross, id="X1", reason="defer")  # auto-archives
+    with pytest.raises(CommandError, match="not found in active tasklist"):
+        cmd_show(repo_root=fresh_repo_with_cross, id="X1")
+```
+
+- [ ] **Step 14.2: Run — verify fail**
+
+```bash
+PYTHONPATH=tools python3 -m pytest tools/tasktool/tests/test_brief.py tools/tasktool/tests/test_commands.py -q -k "cancel or surfac"
+```
+
+- [ ] **Step 14.3: Implement reason-extraction helper**
+
+Add to `tools/tasktool/model.py` (or a small new helper module, whichever the existing code idiom favors):
+
+```python
+import re
+_CANCEL_LINE_RE = re.compile(r"^Cancelled \S+: .*$", re.M)
+
+def extract_cancellation_reason(notes: str | None) -> str | None:
+    """Return the first `Cancelled <ts>: <reason>` block from notes,
+    or the last non-empty line if the prefix isn't present, or None if notes is empty."""
+    if not notes:
+        return None
+    m = _CANCEL_LINE_RE.search(notes)
+    if m:
+        return m.group(0)
+    for line in reversed(notes.splitlines()):
+        if line.strip():
+            return line.strip()
+    return None
+```
+
+- [ ] **Step 14.4: Wire into `brief`**
+
+In `tools/tasktool/brief.py`, at the top of the per-row rendering for slices, phases, and cross-cutting (whichever code paths `brief()` exercises), check `is_terminal(row.status) and row.status == Status.CANCELLED`. If true, emit a "Cancelled:" block at the top:
+
+```python
+from tasktool.model import Status, is_terminal, extract_cancellation_reason
+
+if row.status == Status.CANCELLED:
+    reason = extract_cancellation_reason(row.notes)
+    if reason:
+        out_lines.insert(0, f"**{reason}**")
+        out_lines.insert(1, "")
+```
+
+(Adjust to the actual structure of `brief.py` — the goal is a leading reason block, before generic section headers.)
+
+- [ ] **Step 14.5: Wire into `cmd_show`**
+
+In `cmd_show` (`commands.py:1399-1437` area), apply the same leading-block emission for cancelled rows.
+
+- [ ] **Step 14.6: Run — verify pass**
+
+```bash
+PYTHONPATH=tools python3 -m pytest tools/tasktool/tests/test_brief.py tools/tasktool/tests/test_commands.py -q
+```
+
+- [ ] **Step 14.7: Commit**
+
+```bash
+git add tools/tasktool/brief.py tools/tasktool/commands.py tools/tasktool/model.py \
+        tools/tasktool/tests/test_brief.py tools/tasktool/tests/test_commands.py
+git commit -m "X22: brief and show surface cancellation reason for active rows"
+```
+
+---
+
+## Task 15 — Skill prose update (`tasklist-discipline`)
+
+**Files:**
+- Modify: `skills/tasklist-discipline/SKILL.md`
+
+- [ ] **Step 15.1: Update the status enum line**
+
+Find the line in the conceptual-model section that reads:
+
+> Status enum: `ready | in_progress | blocked | done`. Only slices may take `blocked` …
+
+Replace with:
+
+> Status enum: `ready | in_progress | blocked | done | cancelled`. Only slices may take `blocked`. `cancelled` is a terminal status (peer of `done`) recording work that was intentionally not shipped — cancelled, deferred, abandoned, superseded. It is set only via `tasktool cancel <id> --reason "…"`; the `set` verb does not accept it. Tasks cannot be `cancelled`; cancel the parent slice instead.
+
+- [ ] **Step 15.2: Add `tasktool cancel` to the daily-commands code block**
+
+After the `tasktool close` lines, insert:
+
+```sh
+tools/tasktool/tasktool cancel <id> --reason "<text>"           # terminate without shipping
+tools/tasktool/tasktool cancel <phase-id> --reason "…" --cascade  # cancel a phase + its open slices
+tools/tasktool/tasktool cancel <x-id> --reason "…" --no-archive   # keep cancelled X visible
+```
+
+- [ ] **Step 15.3: Add a Cancellation subsection**
+
+After the "Gating concepts" section, add:
+
+````markdown
+## Cancellation
+
+- `tasktool cancel <id> --reason "<text>"` is the only sanctioned path. Applies to phases, slices, and cross-cutting items. Tasks cannot be cancelled — cancel the parent slice.
+- The reason is required and is recorded in `notes` as `Cancelled <ISO-ts>: <reason>` (and `(cascaded from <phase-id>)` for child slices cancelled via `--cascade`).
+- Cancellation **bypasses** the post-slice and post-phase external-review gates — cancelled work never shipped.
+- A cancelled slice does **not** satisfy a downstream `depends_on`. `tasktool schedule <phase-id>` emits `cancelled_deps` for affected slices; `ready-slices` omits them. Cancel the downstream too or remove the dependency.
+- Cancelled cross-cutting items auto-archive by default. Use `--no-archive` to keep the cancelled row visible in the active list; archive later with `archive-cross`.
+- Phase cancellation refuses if any slice is still open. Use `--cascade` to cancel open slices in one call; already-done slices are never touched.
+- Edits on cancelled rows: `note --append`, `ref`, and `title` are allowed (post-mortem context); `set`, `close`, `start`, `block`, `unblock`, `deps`, `ratify`, and `note --replace` are refused.
+````
+
+- [ ] **Step 15.4: Add a Red-flags row**
+
+In the existing red-flags table, add:
+
+```markdown
+| "I'll mark this slice `done` to make it disappear." | Use `cancel`, not `close`. `done` is a lie if the work never shipped — and `close` runs the post-slice review gate, which is meaningless on cancelled work. |
+```
+
+- [ ] **Step 15.5: Commit**
+
+```bash
+git add skills/tasklist-discipline/SKILL.md
+git commit -m "X22: document cancelled status in tasklist-discipline skill"
+```
+
+---
+
+## Task 16 — Final wiring: version bump + acceptance verification
+
+- [ ] **Step 16.1: Full test sweep**
+
+```bash
+PYTHONPATH=tools python3 -m pytest tools/tasktool/tests/ -q
+tools/tasktool/tasktool validate --strict-format
+```
+
+Expected: all tests pass; validate reports OK.
+
+- [ ] **Step 16.2: Smoke-test on an isolated fixture repo**
+
+Do **not** mutate the authoritative tracker for verification. Use a temporary, throwaway repo so the smoke test leaves no archive noise behind:
+
+```bash
+SMOKE=$(mktemp -d)
+git -C "$SMOKE" init -q
+PYTHONPATH="$PWD/tools" python3 -m tasktool --project-root "$SMOKE" init --project smoke
+PYTHONPATH="$PWD/tools" python3 -m tasktool --project-root "$SMOKE" create cross --title "Smoke cancel"
+# Capture the printed X-id; for a fresh init it will be X1
+PYTHONPATH="$PWD/tools" python3 -m tasktool --project-root "$SMOKE" cancel X1 --reason "smoke"
+# Auto-archive path: confirm the row left active and landed in archived_cross_cutting
+PYTHONPATH="$PWD/tools" python3 -m tasktool --project-root "$SMOKE" list --open
+# Verify the archive markdown stores status: cancelled
+grep -R "status: cancelled" "$SMOKE/docs/archived-tasks/" | head -5
+rm -rf "$SMOKE"
+```
+
+Expected:
+- `list --open` after cancel does not show `X1`.
+- The archive grep prints exactly one line containing `status: cancelled` for `X1`'s archive markdown.
+
+(`--project-root` is the global option; it must appear **before** the subcommand. If a future CLI removes it, fall back to `cd "$SMOKE"` once and drop the flag. The point is to keep the smoke test off the authoritative tracker.)
+
+- [ ] **Step 16.3: Ask the operator about the version bump**
+
+Per `CLAUDE.md`, ship-affecting changes prompt a version-bump question. Ask:
+
+> Bump the version before this commit? (current: <X.Y.Z> → patch <X.Y.(Z+1)> / minor <X.(Y+1).0> / no bump)
+
+If yes, run `./scripts/bump-version.sh <new-version>` and commit it in its own commit titled `Bump Superstar to <new-version>`.
+
+- [ ] **Step 16.4: Close X22**
+
+```bash
+tools/tasktool/tasktool close X22 --note "cancelled status shipped"
+```
+
+The cross-cutting close path does not require external review.
+
+- [ ] **Step 16.5: Final commit (if any pending changes)**
+
+```bash
+git status
+# If clean, nothing more to do. Otherwise:
+git add -A
+git commit -m "X22: close cross-cutting"
+```
+
+---
+
+## Verification commands (single block)
+
+```bash
+PYTHONPATH=tools python3 -m pytest tools/tasktool/tests/ -q
+PYTHONPATH=tools python3 -m pytest tools/tasktool/tests/test_commands.py -q -k "phase_status or worktree_prune or cancelled"
+PYTHONPATH=tools python3 -m pytest tools/tasktool/tests/test_cli_integration.py -q -k cancel
+tools/tasktool/tasktool validate --strict-format
+tools/tasktool/tasktool show X22
+```
+
+All must succeed before declaring the work done.
