@@ -28,6 +28,24 @@ class NotifyTests(unittest.TestCase):
         self.assertEqual(event["type"], "tasktool-status")
         self.assertEqual(event["message"], "P1.S2 in progress: Queued slice")
 
+    def test_tasktool_status_cancelled_dispatches(self):
+        with tempfile.TemporaryDirectory() as td:
+            log = Path(td) / "notify.jsonl"
+            with patch.dict(
+                os.environ,
+                {"SUPERSTAR_NOTIFY_DISABLE": "0", "SUPERSTAR_NOTIFY_DRY_RUN": "1", "SUPERSTAR_NOTIFY_LOG": str(log)},
+            ):
+                notify.notify_tasktool_status(
+                    work_id="P1.S2",
+                    kind="slice",
+                    status="cancelled",
+                    title="Abandoned slice",
+                )
+            event = json.loads(log.read_text(encoding="utf-8"))
+        self.assertEqual(event["type"], "tasktool-status")
+        self.assertEqual(event["status"], "cancelled")
+        self.assertEqual(event["message"], "P1.S2 cancelled: Abandoned slice")
+
     def test_agent_ding_style_detects_codex(self):
         with tempfile.TemporaryDirectory() as td:
             log = Path(td) / "notify.jsonl"
