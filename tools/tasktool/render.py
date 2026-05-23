@@ -42,7 +42,8 @@ def render_project(p: Project) -> str:
     if p.north_star:
         lines += ["## North Star", "", p.north_star, ""]
     for ph in p.phases:
-        lines.append(f"## {ph.id} — {ph.title} {_non_slice_emoji(ph.status)}{_phase_tag(ph)}")
+        phase_step = f" step=`{ph.workflow_step.value}`" if getattr(ph, "workflow_step", None) is not None else ""
+        lines.append(f"## {ph.id} — {ph.title} {_non_slice_emoji(ph.status)}{_phase_tag(ph)}{phase_step}")
         lines.append("")
         if ph.started:
             lines.append(f"Started: {ph.started}.")
@@ -61,10 +62,14 @@ def render_project(p: Project) -> str:
             dep_part = f" Depends on: {', '.join(s.depends_on)}." if s.depends_on else ""
             group_part = f" Group: `{s.parallel_group}`." if s.parallel_group else ""
             planning_part = f" Planning: `{s.planning_status.value}`."
+            step_part = f" step=`{s.workflow_step.value}`." if s.workflow_step is not None else ""
             lines.append(
                 f"- {STATUS_EMOJI[s.status]} **{s.id}**{_slice_tag(s)} — "
-                f"{title}.{_started_part(s)}{planning_part}{group_part}{dep_part}{plan_part}"
+                f"{title}.{_started_part(s)}{planning_part}{group_part}{dep_part}{plan_part}{step_part}"
             )
+            if s.review_active:
+                stage = s.review_stage.value if s.review_stage is not None else "unknown"
+                lines.append(f"  review: {stage}")
         lines.append("")
     if p.cross_cutting:
         lines += ["## Cross-cutting (`X*`)", ""]

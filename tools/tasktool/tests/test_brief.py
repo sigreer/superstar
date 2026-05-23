@@ -1,7 +1,23 @@
 from __future__ import annotations
+import os
+import subprocess
+import sys
 import unittest
+from pathlib import Path
 from tasktool.model import Project, Phase, Slice, Task, Status
 from tasktool.brief import brief
+
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+_PKG_DIR = _REPO_ROOT / "tools"
+
+
+def _run_cli(*args: str) -> subprocess.CompletedProcess[str]:
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(_PKG_DIR) + os.pathsep + env.get("PYTHONPATH", "")
+    return subprocess.run(
+        [sys.executable, "-m", "tasktool", *args],
+        capture_output=True, text=True, cwd=_REPO_ROOT, env=env, check=True,
+    )
 
 def _sample() -> Project:
     p = Project(project="demo", last_reviewed="2026-05-18")
@@ -36,6 +52,20 @@ class TestBrief(unittest.TestCase):
         self.assertIn("Slices:", out)
         self.assertIn("S1  [done]", out)
         self.assertIn("S2  [in_progress] started=2026-05-18", out)
+
+
+def test_brief_includes_workflow_step_when_set(tmp_project_with_p6_s1):
+    _run_cli("--project-root", str(tmp_project_with_p6_s1),
+             "set", "P6.S1", "--workflow-step", "implement")
+    out = _run_cli("--project-root", str(tmp_project_with_p6_s1),
+                   "brief", "P6.S1").stdout
+    assert "implement" in out
+
+
+def test_brief_omits_review_block_when_inactive(tmp_project_with_p6_s1):
+    out = _run_cli("--project-root", str(tmp_project_with_p6_s1),
+                   "brief", "P6.S1").stdout
+    assert "review_active" not in out
 
 
 if __name__ == "__main__":

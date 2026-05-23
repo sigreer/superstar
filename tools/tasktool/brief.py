@@ -51,8 +51,15 @@ def brief(p: Project, qid: str) -> str:
         assert isinstance(item, Slice)
         ph = _phase_for(p, qid)
         assert ph is not None
-        lines.append(f"# {qid} — {item.title}")
+        step_suffix = f" [step: {item.workflow_step.value}]" if item.workflow_step is not None else ""
+        lines.append(f"# {qid} — {item.title}{step_suffix}")
         lines.append(f"status: {item.status.value}")
+        if item.workflow_step is not None:
+            lines.append(f"workflow_step: {item.workflow_step.value}")
+        if item.review_active:
+            stage = item.review_stage.value if item.review_stage is not None else "unknown"
+            lines.append(f"review_active: true")
+            lines.append(f"review_stage: {stage}")
         if item.started:
             lines.append(f"started: {item.started}")
         if item.plan_path:
@@ -79,8 +86,11 @@ def brief(p: Project, qid: str) -> str:
                 lines.append(f"  {t.id}  [{t.status.value}]  {t.title}")
     elif kind == "phase":
         assert isinstance(item, Phase)
-        lines.append(f"# {qid} — {item.title}")
+        step_suffix = f" [step: {item.workflow_step.value}]" if getattr(item, "workflow_step", None) is not None else ""
+        lines.append(f"# {qid} — {item.title}{step_suffix}")
         lines.append(f"status: {item.status.value}")
+        if getattr(item, "workflow_step", None) is not None:
+            lines.append(f"workflow_step: {item.workflow_step.value}")
         if item.started:
             lines.append(f"started: {item.started}")
         if item.spec_path:

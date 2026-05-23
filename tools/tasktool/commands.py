@@ -1504,6 +1504,13 @@ def cmd_show(*, repo_root: Path, id: str) -> str:
     p = _load(repo_root)
     qid, _container, item = _find_item(p, id)
     lines = [f"# {qid} — {item.title}", f"status: {item.status.value}"]
+    _ws = getattr(item, "workflow_step", None)
+    if _ws is not None:
+        lines.append(f"workflow_step: {_ws.value}")
+    if getattr(item, "review_active", False):
+        _stage = getattr(item, "review_stage", None)
+        lines.append("review_active: true")
+        lines.append(f"review_stage: {_stage.value if _stage is not None else 'unknown'}")
     if getattr(item, "started", None):
         lines.append(f"started: {item.started}")
     if getattr(item, "closed", None):

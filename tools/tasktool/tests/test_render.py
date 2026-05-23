@@ -1,5 +1,9 @@
 from __future__ import annotations
+import os
+import subprocess
+import sys
 import unittest
+from pathlib import Path
 from tasktool.model import (
     ArchivedCrossCutting,
     Project,
@@ -10,6 +14,18 @@ from tasktool.model import (
     BlockedOn,
 )
 from tasktool.render import render_project
+
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+_PKG_DIR = _REPO_ROOT / "tools"
+
+
+def _run_cli(*args: str) -> subprocess.CompletedProcess[str]:
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(_PKG_DIR) + os.pathsep + env.get("PYTHONPATH", "")
+    return subprocess.run(
+        [sys.executable, "-m", "tasktool", *args],
+        capture_output=True, text=True, cwd=_REPO_ROOT, env=env, check=True,
+    )
 
 class TestRender(unittest.TestCase):
     def test_basic_render(self):
@@ -84,6 +100,26 @@ class TestRender(unittest.TestCase):
         self.assertNotIn("**X2**", active_section)
         self.assertIn("**X2**", archived_section)
         self.assertIn("docs/archived-tasks/X2-archived-cross.md", archived_section)
+
+
+def test_render_omits_review_block_when_inactive(tmp_project_with_p6_s1):
+    out = _run_cli("--project-root", str(tmp_project_with_p6_s1), "render").stdout
+    assert "review_active" not in out
+    assert "applying_fixes" not in out
+
+
+def test_render_shows_review_block_when_active(tmp_project_with_p6_s1):
+    _run_cli("--project-root", str(tmp_project_with_p6_s1),
+             "set", "P6.S1", "--review-active", "true", "--review-stage", "awaiting_response")
+    out = _run_cli("--project-root", str(tmp_project_with_p6_s1), "render").stdout
+    assert "awaiting_response" in out
+
+
+def test_render_shows_workflow_step_glyph(tmp_project_with_p6_s1):
+    _run_cli("--project-root", str(tmp_project_with_p6_s1),
+             "set", "P6.S1", "--workflow-step", "plan")
+    out = _run_cli("--project-root", str(tmp_project_with_p6_s1), "render").stdout
+    assert "plan" in out
 
 
 if __name__ == "__main__":
