@@ -1,6 +1,6 @@
 {
   "name": "superstar",
-  "version": "6.6.3",
+  "version": "6.6.4",
   "type": "module",
   "main": ".opencode/plugins/superstar.js"
 }

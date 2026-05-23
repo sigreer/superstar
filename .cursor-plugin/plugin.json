@@ -2,7 +2,7 @@
   "name": "superstar",
   "displayName": "Superstar",
   "description": "Core skills library: TDD, debugging, collaboration patterns, and proven techniques",
-  "version": "6.6.3",
+  "version": "6.6.4",
   "author": {
     "name": "Simon Greer",
     "email": "simon@sidewayssystems.co.uk"
