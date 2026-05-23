@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Literal
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 class Status(str, Enum):
     READY = "ready"
@@ -15,6 +15,23 @@ class PlanningStatus(str, Enum):
     PROPOSED = "proposed"
     RATIFIED = "ratified"
     SUPERSEDED = "superseded"
+
+class SliceWorkflowStep(str, Enum):
+    SPEC = "spec"
+    PLAN = "plan"
+    IMPLEMENT = "implement"
+    DONE = "done"
+
+class PhaseWorkflowStep(str, Enum):
+    SPEC = "spec"
+    READY = "ready"
+    IN_PROGRESS = "in_progress"
+    DONE = "done"
+
+class ReviewStage(str, Enum):
+    AWAITING_RESPONSE = "awaiting_response"
+    APPLYING_FIXES = "applying_fixes"
+    PASSED = "passed"
 
 @dataclass(slots=True)
 class BlockedOn:
@@ -47,6 +64,9 @@ class Slice:
     plan_path: str | None = None
     refs: list[str] = field(default_factory=list)
     notes: str = ""
+    workflow_step: SliceWorkflowStep | None = None
+    review_active: bool = False
+    review_stage: ReviewStage | None = None
     reviewer_chain: str | None = None
     tasks: list[Task] = field(default_factory=list)
     worktree_path: str | None = None
@@ -69,6 +89,7 @@ class Phase:
     planning_path: str | None = None
     phase_reviewer_chain: str | None = None
     notes: str = ""
+    workflow_step: PhaseWorkflowStep | None = None
     slices: list[Slice] = field(default_factory=list)
 
 @dataclass(slots=True)

@@ -316,23 +316,28 @@
           "notes": "",
           "parallel_group": null,
           "plan_path": "docs/plans/2026-05-23-P6.S1-workflow-step-field.md",
-          "planning_status": "proposed",
+          "planning_status": "ratified",
           "refs": [
             "docs/plans/2026-05-23-P6.S1-workflow-step-field.md",
             "docs/handoffs/2026-05-23-P6.S1-workflow-step-field-prompt.md",
             "docs/reviewer/p6-s1-workflow-step-field-plan"
           ],
+          "review_active": false,
+          "review_stage": null,
           "reviewer_chain": "docs/reviewer/p6-s1-workflow-step-field-plan",
-          "started": null,
-          "status": "ready",
+          "started": "2026-05-24",
+          "status": "in_progress",
           "tasks": [],
-          "title": "Add workflow_step field, transient review block, and read-only infer-step"
+          "title": "Add workflow_step field, transient review block, and read-only infer-step",
+          "workflow_step": null,
+          "worktree_in_place": true
         }
       ],
       "spec_path": "docs/specs/2026-05-23-P6-programmatic-workflow-enhancements-design.md",
       "started": null,
       "status": "ready",
-      "title": "Programmatic Workflow Enhancements"
+      "title": "Programmatic Workflow Enhancements",
+      "workflow_step": null
     }
   ],
   "project": "superstar",

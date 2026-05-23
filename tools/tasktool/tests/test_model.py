@@ -101,3 +101,57 @@ def test_cross_audit_fields_default_to_none_and_false():
     assert c.worktree_pruned_at is None
     assert c.worktree_prune_pending is False
     assert c.worktree_prune_pending_at is None
+
+
+from tasktool.model import (
+    Slice, Phase, SCHEMA_VERSION,
+    SliceWorkflowStep, PhaseWorkflowStep, ReviewStage,
+)
+
+
+def test_schema_version_is_2():
+    assert SCHEMA_VERSION == 2
+
+
+def test_slice_has_workflow_step_default_none():
+    s = Slice(id="S1", title="t", created="2026-05-23")
+    assert s.workflow_step is None
+    assert s.review_active is False
+    assert s.review_stage is None
+
+
+def test_phase_has_workflow_step_default_none():
+    p = Phase(id="P6", title="t", created="2026-05-23")
+    assert p.workflow_step is None
+
+
+def test_slice_accepts_workflow_step_enum():
+    s = Slice(
+        id="S1", title="t", created="2026-05-23",
+        workflow_step=SliceWorkflowStep.PLAN,
+        review_active=True,
+        review_stage=ReviewStage.AWAITING_RESPONSE,
+    )
+    assert s.workflow_step is SliceWorkflowStep.PLAN
+    assert s.review_active is True
+    assert s.review_stage is ReviewStage.AWAITING_RESPONSE
+
+
+def test_phase_accepts_workflow_step_enum():
+    p = Phase(
+        id="P6", title="t", created="2026-05-23",
+        workflow_step=PhaseWorkflowStep.READY,
+    )
+    assert p.workflow_step is PhaseWorkflowStep.READY
+
+
+def test_slice_workflow_step_values():
+    assert {e.value for e in SliceWorkflowStep} == {"spec", "plan", "implement", "done"}
+
+
+def test_phase_workflow_step_values():
+    assert {e.value for e in PhaseWorkflowStep} == {"spec", "ready", "in_progress", "done"}
+
+
+def test_review_stage_values():
+    assert {e.value for e in ReviewStage} == {"awaiting_response", "applying_fixes", "passed"}
