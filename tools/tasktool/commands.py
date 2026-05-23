@@ -1877,17 +1877,26 @@ def _cmd_archive_phase_at_root(
     phase = next((ph for ph in p.phases if ph.id == phase_id), None)
     if phase is None:
         raise CommandError(f"phase {phase_id} not found")
-    open_slices = [s.id for s in phase.slices if s.status != Status.DONE]
+    open_slices = [s.id for s in phase.slices if not is_terminal(s.status)]
     if open_slices:
         raise CommandError(
             f"phase {phase_id} has open slices: {', '.join(open_slices)}"
         )
-    if skip_review_gate:
-        print(f"warning: review gate skipped for {phase_id}", file=_sys.stderr)
-    _apply_review_gate(invocation_root, phase, phase_id, "phase",
-                       reviewer_chain, skip_review_gate)
-    if phase.status != Status.DONE:
+    if phase.status == Status.CANCELLED:
+        # Cancelled phases bypass the post-phase reviewer gate; record the skip.
+        skip_note = "Phase cancelled; post-phase review gate skipped"
+        phase.notes = (
+            phase.notes + "\n" + skip_note if phase.notes else skip_note
+        )
+    else:
+        if skip_review_gate:
+            print(f"warning: review gate skipped for {phase_id}", file=_sys.stderr)
+        _apply_review_gate(invocation_root, phase, phase_id, "phase",
+                           reviewer_chain, skip_review_gate)
+    if not is_terminal(phase.status):
         phase.status = Status.DONE
+        phase.closed = phase.closed or _today()
+    else:
         phase.closed = phase.closed or _today()
 
     slug = _slugify(phase.title)
@@ -1939,7 +1948,7 @@ def _cmd_archive_phase_at_root(
     archive_path.write_text(summary_text, encoding="utf-8")
     _save(write_root, p)
     _git_stage(write_root, archive_path)
-    _notify_status(qid=phase_id, kind="phase", status=Status.DONE, title=phase.title)
+    _notify_status(qid=phase_id, kind="phase", status=phase.status, title=phase.title)
 
 def cmd_brief(*, repo_root: Path, id: str) -> str:
     from tasktool.brief import brief as _brief

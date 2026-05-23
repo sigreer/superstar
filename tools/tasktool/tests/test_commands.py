@@ -752,6 +752,122 @@ class ArchivePhaseTests(unittest.TestCase):
         finally:
             t.cleanup()
 
+    def test_archive_phase_accepts_cancelled_phase_skipping_gate(self):
+        t = _Tmp()
+        try:
+            commands.cmd_init(repo_root=t.root, project="demo")
+            pid = commands.cmd_create_phase(repo_root=t.root, title="cancelled phase")
+            commands.cmd_create_slice(repo_root=t.root, phase_id=pid, title="S1")
+            # Cancel the phase (cascades the single open slice).
+            commands.cmd_cancel(
+                repo_root=t.root, id=pid, reason="pivoting", cascade=True
+            )
+            # No reviewer chain, no skip flag — cancelled phase must bypass gate.
+            commands.cmd_archive_phase(repo_root=t.root, phase_id=pid)
+            p = load_project(t.root / "docs" / "tasklist.json")
+            self.assertTrue(any(a.id == pid for a in p.archived_phases))
+            self.assertFalse(any(ph.id == pid for ph in p.phases))
+            # Archive markdown records cancelled status, not done.
+            arch_path = t.root / next(
+                a for a in p.archived_phases if a.id == pid
+            ).archived_path
+            body = arch_path.read_text(encoding="utf-8")
+            self.assertIn("status: cancelled", body)
+            self.assertNotIn("status: done", body)
+            # Skip-note appended to phase notes (persisted in archive JSON).
+            self.assertIn(
+                "Phase cancelled; post-phase review gate skipped", body
+            )
+        finally:
+            t.cleanup()
+
+    def test_archive_phase_refuses_cancelled_phase_with_open_slices(self):
+        t = _Tmp()
+        try:
+            commands.cmd_init(repo_root=t.root, project="demo")
+            pid = commands.cmd_create_phase(repo_root=t.root, title="cancelled phase")
+            commands.cmd_create_slice(repo_root=t.root, phase_id=pid, title="S1")
+            # Hand-craft inconsistent state: phase cancelled but a slice still
+            # in a non-terminal status. Edit the on-disk tasklist directly.
+            from tasktool.serialize import dumps_canonical
+            path = t.root / "docs" / "tasklist.json"
+            p = load_project(path)
+            phase = next(ph for ph in p.phases if ph.id == pid)
+            phase.status = Status.CANCELLED
+            phase.closed = _dt.date.today().isoformat()
+            # Slice S1 is still status=ready (default) — open.
+            path.write_text(dumps_canonical(p), encoding="utf-8")
+            with self.assertRaises(commands.CommandError) as cm:
+                commands.cmd_archive_phase(repo_root=t.root, phase_id=pid)
+            self.assertIn("open", str(cm.exception).lower())
+        finally:
+            t.cleanup()
+
+    def test_archive_phase_notifier_uses_real_status_for_cancelled(self):
+        t = _Tmp()
+        try:
+            commands.cmd_init(repo_root=t.root, project="demo")
+            pid = commands.cmd_create_phase(repo_root=t.root, title="cancelled phase")
+            commands.cmd_create_slice(repo_root=t.root, phase_id=pid, title="S1")
+            commands.cmd_cancel(
+                repo_root=t.root, id=pid, reason="pivoting", cascade=True
+            )
+            log = t.root / "notify.jsonl"
+            with patch.dict(
+                os.environ,
+                {
+                    "SUPERSTAR_NOTIFY_DISABLE": "0",
+                    "SUPERSTAR_NOTIFY_DRY_RUN": "1",
+                    "SUPERSTAR_NOTIFY_LOG": str(log),
+                },
+            ):
+                commands.cmd_archive_phase(repo_root=t.root, phase_id=pid)
+            events = [
+                json.loads(line)
+                for line in log.read_text(encoding="utf-8").splitlines()
+            ]
+            archive_events = [e for e in events if e["id"] == pid]
+            self.assertTrue(archive_events, "expected an archive event for the phase")
+            self.assertEqual(archive_events[-1]["status"], "cancelled")
+            self.assertTrue(all(e["status"] != "done" for e in archive_events))
+        finally:
+            t.cleanup()
+
+    def test_archive_phase_done_phase_still_emits_done_notification(self):
+        # Regression guard: non-cancelled phase must continue to notify done.
+        t = _Tmp()
+        try:
+            commands.cmd_init(repo_root=t.root, project="demo")
+            pid = commands.cmd_create_phase(repo_root=t.root, title="done phase")
+            sid = commands.cmd_create_slice(repo_root=t.root, phase_id=pid, title="S1")
+            commands.cmd_start(repo_root=t.root, id=f"{pid}.{sid}")
+            commands.cmd_close(
+                repo_root=t.root, id=f"{pid}.{sid}", skip_review_gate=True,
+            )
+            log = t.root / "notify.jsonl"
+            with patch.dict(
+                os.environ,
+                {
+                    "SUPERSTAR_NOTIFY_DISABLE": "0",
+                    "SUPERSTAR_NOTIFY_DRY_RUN": "1",
+                    "SUPERSTAR_NOTIFY_LOG": str(log),
+                },
+            ):
+                commands.cmd_archive_phase(
+                    repo_root=t.root, phase_id=pid, skip_review_gate=True,
+                )
+            events = [
+                json.loads(line)
+                for line in log.read_text(encoding="utf-8").splitlines()
+            ]
+            archive_events = [
+                e for e in events if e["id"] == pid and e["kind"] == "phase"
+            ]
+            self.assertTrue(archive_events, "expected a phase notify event")
+            self.assertEqual(archive_events[-1]["status"], "done")
+        finally:
+            t.cleanup()
+
 
 import datetime as _dt
 
