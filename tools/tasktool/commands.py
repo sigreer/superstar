@@ -1668,11 +1668,17 @@ def cmd_phase_status(*, repo_root: Path, recent: int = 3, format: str = "text") 
         lines.append("  none")
     return "\n".join(lines) + "\n"
 
-def _iter_items(p: Project):
+def _iter_items(p: Project, *, suppress_children_of_terminal: bool = False):
     for ph in p.phases:
         yield ("phase", ph.id, ph)
         for s in ph.slices:
             yield ("slice", f"{ph.id}.{s.id}", s)
+            if suppress_children_of_terminal and is_terminal(s.status):
+                # Containment rule: when reporting only open work, skip the
+                # child tasks of a terminal (done/cancelled) parent slice.
+                # Their statuses are not mutated; cmd_show still emits them
+                # verbatim.
+                continue
             for t in s.tasks:
                 yield ("task", f"{ph.id}.{s.id}.{t.id}", t)
     for c in p.cross_cutting:
@@ -1695,7 +1701,9 @@ def cmd_list(
     else:
         status_filter = None
     rows: list[tuple[str, str, str, str]] = []
-    for item_kind, qid, item in _iter_items(p):
+    for item_kind, qid, item in _iter_items(
+        p, suppress_children_of_terminal=open_only,
+    ):
         if phase and not qid.startswith(phase):
             continue
         if kind and item_kind != kind:

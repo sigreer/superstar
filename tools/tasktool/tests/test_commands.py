@@ -537,6 +537,69 @@ class SchedulingTests(unittest.TestCase):
         out = commands.cmd_ready_slices(repo_root=self.t.root, phase_id="P1")
         self.assertNotIn("P1.S2", out)
 
+    def test_list_open_omits_child_tasks_of_cancelled_slice(self):
+        # Add a ready task under P1.S1, then cancel the slice.
+        commands.cmd_create_task(
+            repo_root=self.t.root, slice_id="P1.S1", title="ready task",
+        )
+        out_before = commands.cmd_list(
+            repo_root=self.t.root, open_only=True, format="json",
+        )
+        rows_before = json.loads(out_before)
+        self.assertTrue(
+            any(r["id"] == "P1.S1.T1" for r in rows_before),
+            f"expected P1.S1.T1 ready before cancel: {rows_before}",
+        )
+        commands.cmd_cancel(
+            repo_root=self.t.root, id="P1.S1", reason="dropped",
+        )
+        out_after = commands.cmd_list(
+            repo_root=self.t.root, open_only=True, format="json",
+        )
+        rows_after = json.loads(out_after)
+        ids_after = {r["id"] for r in rows_after}
+        self.assertNotIn(
+            "P1.S1.T1", ids_after,
+            f"child task should be suppressed under cancelled parent: {rows_after}",
+        )
+        # And the cancelled slice itself is not "open".
+        self.assertNotIn("P1.S1", ids_after)
+
+    def test_list_open_omits_child_tasks_of_cascaded_phase(self):
+        # Add a task under each slice, then cascade-cancel the phase.
+        commands.cmd_create_task(
+            repo_root=self.t.root, slice_id="P1.S1", title="t-a",
+        )
+        commands.cmd_create_task(
+            repo_root=self.t.root, slice_id="P1.S2", title="t-b",
+        )
+        commands.cmd_cancel(
+            repo_root=self.t.root, id="P1", reason="pivot", cascade=True,
+        )
+        out = commands.cmd_list(
+            repo_root=self.t.root, open_only=True, format="json",
+        )
+        rows = json.loads(out)
+        ids = {r["id"] for r in rows}
+        self.assertNotIn("P1.S1.T1", ids)
+        self.assertNotIn("P1.S2.T1", ids)
+
+    def test_show_slice_still_emits_child_tasks_after_cancel(self):
+        commands.cmd_create_task(
+            repo_root=self.t.root, slice_id="P1.S1", title="kept task",
+        )
+        commands.cmd_cancel(
+            repo_root=self.t.root, id="P1.S1", reason="dropped",
+        )
+        out = commands.cmd_show(repo_root=self.t.root, id="P1.S1")
+        # Cancelled slice still surfaces child tasks via show.
+        self.assertIn("T1", out)
+        self.assertIn("kept task", out)
+        # Child task status was not mutated: it remains "ready" (pre-cancel).
+        p = load_project(self.t.root / "docs/tasklist.json")
+        s1 = p.phases[0].slices[0]
+        self.assertEqual(s1.tasks[0].status, Status.READY)
+
 class ShortFormResolutionTests(unittest.TestCase):
     def setUp(self):
         self.t = _Tmp()
