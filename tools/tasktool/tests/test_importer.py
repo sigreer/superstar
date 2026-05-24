@@ -1,7 +1,7 @@
 from __future__ import annotations
 import unittest
 from pathlib import Path
-from tasktool.importer import parse_tasklist_md
+from tasktool.importer import parse_tasklist_md, EMOJI_TO_STATUS
 from tasktool.model import Status
 
 PHASE_HEADER = """\
@@ -117,6 +117,45 @@ class TestImporterSlices(unittest.TestCase):
             any("unrecognised tag on slice S5" in w and "`WAT lol`" in w for w in r.warnings),
             f"expected unrecognised-tag warning, got {r.warnings!r}",
         )
+
+
+class TestImporterCancelled(unittest.TestCase):
+    def test_cancelled_emoji_roundtrip(self):
+        self.assertEqual(EMOJI_TO_STATUS["🚫"], Status.CANCELLED)
+
+    def test_cancelled_slice_parsing(self):
+        text = (
+            "## P2 — Demo 🚧 `IN PROGRESS`\n\n"
+            "- 🚫 **S6** `CANCELLED 2026-05-23` — abandoned work.\n"
+        )
+        r = parse_tasklist_md(text)
+        slices = r.project.phases[0].slices
+        self.assertEqual(len(slices), 1)
+        self.assertEqual(slices[0].id, "S6")
+        self.assertEqual(slices[0].status, Status.CANCELLED)
+        self.assertEqual(slices[0].closed, "2026-05-23")
+        self.assertIsNone(slices[0].blocked_on)
+
+    def test_cancelled_phase_header_parsing(self):
+        text = "## P3 — Scrapped 🚫 `CANCELLED 2026-05-23`\n"
+        r = parse_tasklist_md(text)
+        self.assertEqual(len(r.project.phases), 1)
+        ph = r.project.phases[0]
+        self.assertEqual(ph.id, "P3")
+        self.assertEqual(ph.status, Status.CANCELLED)
+        self.assertEqual(ph.closed, "2026-05-23")
+
+    def test_cancelled_cross_parsing(self):
+        text = (
+            "## Cross-cutting (`X*`)\n\n"
+            "- 🚫 **X9** `CANCELLED 2026-05-23` — dropped cross item.\n"
+        )
+        r = parse_tasklist_md(text)
+        self.assertEqual(len(r.project.cross_cutting), 1)
+        c = r.project.cross_cutting[0]
+        self.assertEqual(c.id, "X9")
+        self.assertEqual(c.status, Status.CANCELLED)
+        self.assertEqual(c.closed, "2026-05-23")
 
 
 CROSS_AND_NOISE = """\

@@ -74,6 +74,20 @@ class CliEndToEndTests(unittest.TestCase):
         finally:
             t.cleanup()
 
+    def test_cancel_slice_via_cli(self):
+        t = _CliTmp()
+        try:
+            self.assertEqual(run_cli("init", "--project", "demo", cwd=t.root).returncode, 0)
+            run_cli("create", "phase", "--title", "P", cwd=t.root)
+            run_cli("create", "slice", "P1", "--title", "S1", cwd=t.root)
+            r = run_cli("cancel", "P1.S1", "--reason", "dropped", cwd=t.root)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            r = run_cli("show", "P1.S1", cwd=t.root)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertIn("cancelled", r.stdout)
+        finally:
+            t.cleanup()
+
     def test_validate_exits_zero_on_fresh_init(self):
         t = _CliTmp()
         try:

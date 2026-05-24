@@ -5,8 +5,10 @@ import json
 from tasktool.model import SCHEMA_VERSION
 
 def build_schema() -> dict:
-    slice_status_enum = ["ready", "in_progress", "blocked", "done"]
-    non_blocked_status_enum = ["ready", "in_progress", "done"]
+    task_status_enum = ["ready", "in_progress", "done"]
+    phase_status_enum = ["ready", "in_progress", "done", "cancelled"]
+    cross_status_enum = ["ready", "in_progress", "done", "cancelled"]
+    slice_status_enum = ["ready", "in_progress", "blocked", "done", "cancelled"]
     planning_status_enum = ["proposed", "ratified", "superseded"]
     date_str = {"type": "string", "pattern": r"^\d{4}-\d{2}-\d{2}$"}
     nullable_date = {"oneOf": [date_str, {"type": "null"}]}
@@ -32,7 +34,7 @@ def build_schema() -> dict:
             "title": {"type": "string"},
             "created": date_str,
             "started": nullable_date,
-            "status": {"enum": non_blocked_status_enum},
+            "status": {"enum": task_status_enum},
             "closed": nullable_date,
             "refs": {"type": "array", "items": {"type": "string"}},
             "notes": {"type": "string"},
@@ -84,7 +86,7 @@ def build_schema() -> dict:
             "title": {"type": "string"},
             "created": date_str,
             "started": nullable_date,
-            "status": {"enum": non_blocked_status_enum},
+            "status": {"enum": phase_status_enum},
             "closed": nullable_date,
             "spec_path": {"oneOf": [{"type": "string"}, {"type": "null"}]},
             "plan_path": {"oneOf": [{"type": "string"}, {"type": "null"}]},
@@ -107,7 +109,7 @@ def build_schema() -> dict:
             "title": {"type": "string"},
             "created": date_str,
             "started": nullable_date,
-            "status": {"enum": non_blocked_status_enum},
+            "status": {"enum": cross_status_enum},
             "closed": nullable_date,
             "refs": {"type": "array", "items": {"type": "string"}},
             "notes": {"type": "string"},

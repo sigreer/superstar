@@ -13,7 +13,7 @@ from tasktool.model import (
     Status,
     BlockedOn,
 )
-from tasktool.render import render_project
+from tasktool.render import render_project, STATUS_EMOJI
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 _PKG_DIR = _REPO_ROOT / "tools"
@@ -120,6 +120,33 @@ def test_render_shows_workflow_step_glyph(tmp_project_with_p6_s1):
              "set", "P6.S1", "--workflow-step", "plan")
     out = _run_cli("--project-root", str(tmp_project_with_p6_s1), "render").stdout
     assert "plan" in out
+
+
+class TestCancelledRendering(unittest.TestCase):
+    def test_cancelled_emoji_present(self):
+        self.assertEqual(STATUS_EMOJI[Status.CANCELLED], "🚫")
+
+    def test_cancelled_slice_renders_with_closed_date(self):
+        p = Project(project="demo")
+        ph = Phase(id="P1", title="p", created="2026-05-23")
+        ph.slices.append(Slice(
+            id="S1", title="dropped", created="2026-05-23",
+            status=Status.CANCELLED, closed="2026-05-23",
+        ))
+        p.phases.append(ph)
+        out = render_project(p)
+        self.assertIn("🚫", out)
+        self.assertIn("2026-05-23", out)
+
+    def test_cancelled_phase_renders_with_closed_date(self):
+        p = Project(project="demo")
+        p.phases.append(Phase(
+            id="P1", title="dropped phase", created="2026-05-23",
+            status=Status.CANCELLED, closed="2026-05-23",
+        ))
+        out = render_project(p)
+        self.assertIn("🚫", out)
+        self.assertIn("2026-05-23", out)
 
 
 if __name__ == "__main__":

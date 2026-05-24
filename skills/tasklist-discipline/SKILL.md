@@ -42,7 +42,9 @@ IDs are assigned at birth and **never renumbered**. The `tasktool create` family
 Archived X IDs are still reserved, so a new cross-cutting item will not reuse an ID that has moved to `archived_cross_cutting`.
 Commands run against an archived X-id report a may-already-be-archived hint because archive files are evidence, not part of the active tasklist workflow surface.
 
-Status enum: `ready | in_progress | blocked | done`. Only slices may take `blocked` (and only via `tasktool block <slice-id> --on …`). Emoji are a render concern; `tasktool render` and `tasktool brief` handle that. `tasktool start <slice-id>` is the normal way to enter `in_progress`; `tasktool set <id> --status in_progress` is a compatibility alias for older plans and ad-hoc rows. `tasktool unblock <slice-id> --resume` resumes through the same lifecycle path and stamps `started` when needed. `done` requires `closed`; the CLI stamps it.
+Status enum: `ready | in_progress | blocked | done | cancelled`. Only slices may take `blocked`. `cancelled` is a terminal status (peer of `done`) recording work that was intentionally not shipped — cancelled, deferred, abandoned, superseded. It is set only via `tasktool cancel <id> --reason "…"`; the `set` verb does not accept it. Tasks cannot be `cancelled`; cancel the parent slice instead.
+
+`blocked` is only set via `tasktool block <slice-id> --on …`. Emoji are a render concern; `tasktool render` and `tasktool brief` handle that. `tasktool start <slice-id>` is the normal way to enter `in_progress`; `tasktool set <id> --status in_progress` is a compatibility alias for older plans and ad-hoc rows. `tasktool unblock <slice-id> --resume` resumes through the same lifecycle path and stamps `started` when needed. `done` requires `closed`; the CLI stamps it.
 
 Phase planning uses separate scheduling metadata. `planning_path` points at the phase-scoped planning/design document. `depends_on` records planned slice sequencing; it is not the same as runtime `blocked_on`. `planning_status` is `proposed | ratified | superseded`, and `parallel_group` names slices intended to be planned or executed together.
 
@@ -70,6 +72,9 @@ tools/tasktool/tasktool phase-status
 tools/tasktool/tasktool close <slice-id>      # enforces post-slice review gate
 tools/tasktool/tasktool close <x-id>          # closes and archives cross-cutting by default
 tools/tasktool/tasktool close <x-id> --no-archive
+tools/tasktool/tasktool cancel <id> --reason "<text>"           # terminate without shipping
+tools/tasktool/tasktool cancel <phase-id> --reason "…" --cascade  # cancel a phase + its open slices
+tools/tasktool/tasktool cancel <x-id> --reason "…" --no-archive   # keep cancelled X visible
 tools/tasktool/tasktool archive-cross <x-id>  # archive a done visible cross-cutting item
 tools/tasktool/tasktool archive-phase <phase-id>  # enforces post-phase review gate
 tools/tasktool/tasktool validate              # full validation
@@ -85,6 +90,16 @@ Run `tools/tasktool/tasktool --help` (or `tools/tasktool/tasktool <cmd> --help`)
 - **`--skip-review-gate`** exists for emergencies and is recorded in the slice/phase `notes` with a timestamp. Use it only when the operator has explicitly chosen to bypass.
 
 See `[[external-review]]` for how to drive the reviewer.
+
+## Cancellation
+
+- `tasktool cancel <id> --reason "<text>"` is the only sanctioned path. Applies to phases, slices, and cross-cutting items. Tasks cannot be cancelled — cancel the parent slice.
+- The reason is required and is recorded in `notes` as `Cancelled <ISO-ts>: <reason>` (and `(cascaded from <phase-id>)` for child slices cancelled via `--cascade`).
+- Cancellation **bypasses** the post-slice and post-phase external-review gates — cancelled work never shipped.
+- A cancelled slice does **not** satisfy a downstream `depends_on`. `tasktool schedule <phase-id>` emits `cancelled_deps` for affected slices; `ready-slices` omits them. Cancel the downstream too or remove the dependency.
+- Cancelled cross-cutting items auto-archive by default. Use `--no-archive` to keep the cancelled row visible in the active list; archive later with `archive-cross`.
+- Phase cancellation refuses if any slice is still open. Use `--cascade` to cancel open slices in one call; already-done slices are never touched.
+- Edits on cancelled rows: `note --append`, `ref`, and `title` are allowed (post-mortem context); `set`, `close`, `start`, `block`, `unblock`, `deps`, `ratify`, and `note --replace` are refused.
 
 ## Hand-edits are an emergency path, not a workflow
 
@@ -157,6 +172,7 @@ The external-reviewer script writes a small transient block (`review_active`, `r
 |---------|---------|
 | "I'll just edit `docs/tasklist.json` by hand quickly." | The hook will refuse non-canonical bytes; `tasktool` is faster than fighting the hook. Use the CLI. |
 | "I'll mark the slice `done` with `set` instead of `close` to skip the review gate." | `tasktool set --status done` routes through the same gate as `close`. The gate cannot be bypassed by reaching for a different subcommand. |
+| "I'll mark this slice `done` to make it disappear." | Use `cancel`, not `close`. `done` is a lie if the work never shipped — and `close` runs the post-slice review gate, which is meaningless on cancelled work. |
 | "I'll commit the spec now and add the row after." | The pre-commit hook rejects orphan spec/plan filenames. Allocate first. |
 | "`tasktool` says the verdict isn't ready, but the reviewer comments look fine." | Re-read the verdict line. `revise` is `revise`. If the reviewer chain is mis-parsed, fix the chain; do not pass `--skip-review-gate` casually. |
 | "I'll bring back `docs/TASKLIST.md` for readability." | The hook refuses commits that touch it. Use `tasktool render` if you want markdown. |

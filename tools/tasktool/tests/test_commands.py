@@ -516,6 +516,146 @@ class SchedulingTests(unittest.TestCase):
         self.assertIn("Open phases", out)
         self.assertIn("P1", out)
 
+    def test_schedule_emits_cancelled_deps(self):
+        commands.cmd_cancel(repo_root=self.t.root, id="P1.S1", reason="dropped")
+        out = commands.cmd_schedule(
+            repo_root=self.t.root, phase_id="P1", format="json"
+        )
+        rows = json.loads(out)
+        s2 = next(r for r in rows if r["id"] == "P1.S2")
+        self.assertEqual(s2["cancelled_deps"], ["P1.S1"])
+        self.assertEqual(s2["waiting_on"], [])
+        self.assertFalse(s2["ready"])
+
+    def test_schedule_text_includes_cancelled_deps(self):
+        commands.cmd_cancel(repo_root=self.t.root, id="P1.S1", reason="dropped")
+        out = commands.cmd_schedule(repo_root=self.t.root, phase_id="P1")
+        self.assertIn("cancelled_deps=P1.S1", out)
+
+    def test_ready_slices_omits_slice_with_cancelled_dep(self):
+        commands.cmd_cancel(repo_root=self.t.root, id="P1.S1", reason="dropped")
+        out = commands.cmd_ready_slices(repo_root=self.t.root, phase_id="P1")
+        self.assertNotIn("P1.S2", out)
+
+    def test_list_open_omits_child_tasks_of_cancelled_slice(self):
+        # Add a ready task under P1.S1, then cancel the slice.
+        commands.cmd_create_task(
+            repo_root=self.t.root, slice_id="P1.S1", title="ready task",
+        )
+        out_before = commands.cmd_list(
+            repo_root=self.t.root, open_only=True, format="json",
+        )
+        rows_before = json.loads(out_before)
+        self.assertTrue(
+            any(r["id"] == "P1.S1.T1" for r in rows_before),
+            f"expected P1.S1.T1 ready before cancel: {rows_before}",
+        )
+        commands.cmd_cancel(
+            repo_root=self.t.root, id="P1.S1", reason="dropped",
+        )
+        out_after = commands.cmd_list(
+            repo_root=self.t.root, open_only=True, format="json",
+        )
+        rows_after = json.loads(out_after)
+        ids_after = {r["id"] for r in rows_after}
+        self.assertNotIn(
+            "P1.S1.T1", ids_after,
+            f"child task should be suppressed under cancelled parent: {rows_after}",
+        )
+        # And the cancelled slice itself is not "open".
+        self.assertNotIn("P1.S1", ids_after)
+
+    def test_list_open_omits_child_tasks_of_cascaded_phase(self):
+        # Add a task under each slice, then cascade-cancel the phase.
+        commands.cmd_create_task(
+            repo_root=self.t.root, slice_id="P1.S1", title="t-a",
+        )
+        commands.cmd_create_task(
+            repo_root=self.t.root, slice_id="P1.S2", title="t-b",
+        )
+        commands.cmd_cancel(
+            repo_root=self.t.root, id="P1", reason="pivot", cascade=True,
+        )
+        out = commands.cmd_list(
+            repo_root=self.t.root, open_only=True, format="json",
+        )
+        rows = json.loads(out)
+        ids = {r["id"] for r in rows}
+        self.assertNotIn("P1.S1.T1", ids)
+        self.assertNotIn("P1.S2.T1", ids)
+
+    def test_show_slice_still_emits_child_tasks_after_cancel(self):
+        commands.cmd_create_task(
+            repo_root=self.t.root, slice_id="P1.S1", title="kept task",
+        )
+        commands.cmd_cancel(
+            repo_root=self.t.root, id="P1.S1", reason="dropped",
+        )
+        out = commands.cmd_show(repo_root=self.t.root, id="P1.S1")
+        # Cancelled slice still surfaces child tasks via show.
+        self.assertIn("T1", out)
+        self.assertIn("kept task", out)
+        # Child task status was not mutated: it remains "ready" (pre-cancel).
+        p = load_project(self.t.root / "docs/tasklist.json")
+        s1 = p.phases[0].slices[0]
+        self.assertEqual(s1.tasks[0].status, Status.READY)
+
+    def test_brief_surfaces_cancellation_reason_for_active_cancelled_slice(self):
+        commands.cmd_cancel(
+            repo_root=self.t.root, id="P1.S1", reason="scope dropped",
+        )
+        out = commands.cmd_brief(repo_root=self.t.root, id="P1.S1")
+        self.assertIn("scope dropped", out)
+        reason_pos = out.find("scope dropped")
+        title_pos = out.find("# P1.S1")
+        self.assertNotEqual(reason_pos, -1)
+        self.assertNotEqual(title_pos, -1)
+        self.assertLess(reason_pos, title_pos)
+
+    def test_show_surfaces_reason_for_active_cancelled_x(self):
+        x_id = commands.cmd_create_cross(
+            repo_root=self.t.root, title="cross thing",
+        )
+        commands.cmd_cancel(
+            repo_root=self.t.root, id=x_id, reason="defer",
+            no_archive=True,
+        )
+        out = commands.cmd_show(repo_root=self.t.root, id=x_id)
+        self.assertIn("Cancelled ", out)
+        self.assertIn("defer", out)
+
+    def test_show_returns_not_found_for_archived_cancelled_x(self):
+        x_id = commands.cmd_create_cross(
+            repo_root=self.t.root, title="archive me",
+        )
+        # Default cancel auto-archives the cross-cutting row.
+        commands.cmd_cancel(repo_root=self.t.root, id=x_id, reason="defer")
+        with self.assertRaises(commands.CommandError) as ctx:
+            commands.cmd_show(repo_root=self.t.root, id=x_id)
+        self.assertIn("not found in active tasklist", str(ctx.exception))
+
+    def test_phase_status_excludes_cancelled_phase(self):
+        commands.cmd_cancel(
+            repo_root=self.t.root, id="P1", reason="pivot", cascade=True,
+        )
+        out = commands.cmd_phase_status(repo_root=self.t.root, format="json")
+        data = json.loads(out)
+        open_phase_ids = {ph["id"] for ph in data["open_phases"]}
+        self.assertNotIn("P1", open_phase_ids)
+
+    def test_phase_status_excludes_cancelled_no_archive_cross(self):
+        x_id = commands.cmd_create_cross(
+            repo_root=self.t.root, title="X-thing",
+        )
+        commands.cmd_cancel(
+            repo_root=self.t.root, id=x_id, reason="dropped",
+            no_archive=True,
+        )
+        out = commands.cmd_phase_status(repo_root=self.t.root, format="json")
+        data = json.loads(out)
+        open_x_ids = {c["id"] for c in data["open_cross_cutting"]}
+        self.assertNotIn(x_id, open_x_ids)
+
 class ShortFormResolutionTests(unittest.TestCase):
     def setUp(self):
         self.t = _Tmp()
@@ -752,7 +892,512 @@ class ArchivePhaseTests(unittest.TestCase):
         finally:
             t.cleanup()
 
+    def test_archive_phase_accepts_cancelled_phase_skipping_gate(self):
+        t = _Tmp()
+        try:
+            commands.cmd_init(repo_root=t.root, project="demo")
+            pid = commands.cmd_create_phase(repo_root=t.root, title="cancelled phase")
+            commands.cmd_create_slice(repo_root=t.root, phase_id=pid, title="S1")
+            # Cancel the phase (cascades the single open slice).
+            commands.cmd_cancel(
+                repo_root=t.root, id=pid, reason="pivoting", cascade=True
+            )
+            # No reviewer chain, no skip flag — cancelled phase must bypass gate.
+            commands.cmd_archive_phase(repo_root=t.root, phase_id=pid)
+            p = load_project(t.root / "docs" / "tasklist.json")
+            self.assertTrue(any(a.id == pid for a in p.archived_phases))
+            self.assertFalse(any(ph.id == pid for ph in p.phases))
+            # Archive markdown records cancelled status, not done.
+            arch_path = t.root / next(
+                a for a in p.archived_phases if a.id == pid
+            ).archived_path
+            body = arch_path.read_text(encoding="utf-8")
+            self.assertIn("status: cancelled", body)
+            self.assertNotIn("status: done", body)
+            # Skip-note appended to phase notes (persisted in archive JSON).
+            self.assertIn(
+                "Phase cancelled; post-phase review gate skipped", body
+            )
+        finally:
+            t.cleanup()
 
+    def test_archive_phase_refuses_cancelled_phase_with_open_slices(self):
+        t = _Tmp()
+        try:
+            commands.cmd_init(repo_root=t.root, project="demo")
+            pid = commands.cmd_create_phase(repo_root=t.root, title="cancelled phase")
+            commands.cmd_create_slice(repo_root=t.root, phase_id=pid, title="S1")
+            # Hand-craft inconsistent state: phase cancelled but a slice still
+            # in a non-terminal status. Edit the on-disk tasklist directly.
+            from tasktool.serialize import dumps_canonical
+            path = t.root / "docs" / "tasklist.json"
+            p = load_project(path)
+            phase = next(ph for ph in p.phases if ph.id == pid)
+            phase.status = Status.CANCELLED
+            phase.closed = _dt.date.today().isoformat()
+            # Slice S1 is still status=ready (default) — open.
+            path.write_text(dumps_canonical(p), encoding="utf-8")
+            with self.assertRaises(commands.CommandError) as cm:
+                commands.cmd_archive_phase(repo_root=t.root, phase_id=pid)
+            self.assertIn("open", str(cm.exception).lower())
+        finally:
+            t.cleanup()
+
+    def test_archive_phase_notifier_uses_real_status_for_cancelled(self):
+        t = _Tmp()
+        try:
+            commands.cmd_init(repo_root=t.root, project="demo")
+            pid = commands.cmd_create_phase(repo_root=t.root, title="cancelled phase")
+            commands.cmd_create_slice(repo_root=t.root, phase_id=pid, title="S1")
+            commands.cmd_cancel(
+                repo_root=t.root, id=pid, reason="pivoting", cascade=True
+            )
+            log = t.root / "notify.jsonl"
+            with patch.dict(
+                os.environ,
+                {
+                    "SUPERSTAR_NOTIFY_DISABLE": "0",
+                    "SUPERSTAR_NOTIFY_DRY_RUN": "1",
+                    "SUPERSTAR_NOTIFY_LOG": str(log),
+                },
+            ):
+                commands.cmd_archive_phase(repo_root=t.root, phase_id=pid)
+            events = [
+                json.loads(line)
+                for line in log.read_text(encoding="utf-8").splitlines()
+            ]
+            archive_events = [e for e in events if e["id"] == pid]
+            self.assertTrue(archive_events, "expected an archive event for the phase")
+            self.assertEqual(archive_events[-1]["status"], "cancelled")
+            self.assertTrue(all(e["status"] != "done" for e in archive_events))
+        finally:
+            t.cleanup()
+
+    def test_archive_phase_done_phase_still_emits_done_notification(self):
+        # Regression guard: non-cancelled phase must continue to notify done.
+        t = _Tmp()
+        try:
+            commands.cmd_init(repo_root=t.root, project="demo")
+            pid = commands.cmd_create_phase(repo_root=t.root, title="done phase")
+            sid = commands.cmd_create_slice(repo_root=t.root, phase_id=pid, title="S1")
+            commands.cmd_start(repo_root=t.root, id=f"{pid}.{sid}")
+            commands.cmd_close(
+                repo_root=t.root, id=f"{pid}.{sid}", skip_review_gate=True,
+            )
+            log = t.root / "notify.jsonl"
+            with patch.dict(
+                os.environ,
+                {
+                    "SUPERSTAR_NOTIFY_DISABLE": "0",
+                    "SUPERSTAR_NOTIFY_DRY_RUN": "1",
+                    "SUPERSTAR_NOTIFY_LOG": str(log),
+                },
+            ):
+                commands.cmd_archive_phase(
+                    repo_root=t.root, phase_id=pid, skip_review_gate=True,
+                )
+            events = [
+                json.loads(line)
+                for line in log.read_text(encoding="utf-8").splitlines()
+            ]
+            archive_events = [
+                e for e in events if e["id"] == pid and e["kind"] == "phase"
+            ]
+            self.assertTrue(archive_events, "expected a phase notify event")
+            self.assertEqual(archive_events[-1]["status"], "done")
+        finally:
+            t.cleanup()
+
+
+import datetime as _dt
+
+
+class CancelTests(unittest.TestCase):
+    def setUp(self):
+        self.t = _Tmp()
+        commands.cmd_init(repo_root=self.t.root, project="demo")
+        commands.cmd_create_phase(repo_root=self.t.root, title="P1")
+        commands.cmd_create_slice(repo_root=self.t.root, phase_id="P1", title="S1")
+        commands.cmd_create_slice(repo_root=self.t.root, phase_id="P1", title="S2")
+        commands.cmd_create_task(repo_root=self.t.root, slice_id="P1.S1", title="T1")
+
+    def tearDown(self):
+        self.t.cleanup()
+
+    def _slice(self, qid="P1.S1"):
+        p = load_project(self.t.root / "docs/tasklist.json")
+        phase_id, slice_id = qid.split(".")
+        ph = next(x for x in p.phases if x.id == phase_id)
+        return next(s for s in ph.slices if s.id == slice_id)
+
+    def test_cancel_slice_stamps_status_closed_and_audit_note(self):
+        commands.cmd_cancel(
+            repo_root=self.t.root, id="P1.S1", reason="scope dropped"
+        )
+        s = self._slice()
+        self.assertEqual(s.status, Status.CANCELLED)
+        self.assertEqual(s.closed, _dt.date.today().isoformat())
+        self.assertIn("Cancelled ", s.notes)
+        self.assertIn("scope dropped", s.notes)
+
+    def test_cancel_requires_reason_none(self):
+        with self.assertRaisesRegex(commands.CommandError, "--reason"):
+            commands.cmd_cancel(repo_root=self.t.root, id="P1.S1", reason=None)
+
+    def test_cancel_requires_reason_empty(self):
+        with self.assertRaisesRegex(commands.CommandError, "--reason"):
+            commands.cmd_cancel(repo_root=self.t.root, id="P1.S1", reason="")
+
+    def test_cancel_requires_reason_whitespace(self):
+        with self.assertRaisesRegex(commands.CommandError, "--reason"):
+            commands.cmd_cancel(repo_root=self.t.root, id="P1.S1", reason="   ")
+
+    def test_cancel_rejects_task_id(self):
+        with self.assertRaisesRegex(
+            commands.CommandError, "cancel does not apply to tasks"
+        ):
+            commands.cmd_cancel(
+                repo_root=self.t.root, id="P1.S1.T1", reason="x"
+            )
+
+    def test_cancel_rejects_already_terminal(self):
+        # Mark P1.S1 cancelled first, then try again.
+        commands.cmd_cancel(repo_root=self.t.root, id="P1.S1", reason="first")
+        with self.assertRaisesRegex(commands.CommandError, "already"):
+            commands.cmd_cancel(repo_root=self.t.root, id="P1.S1", reason="second")
+
+    def test_cancel_no_archive_rejected_for_slice(self):
+        with self.assertRaisesRegex(commands.CommandError, "--no-archive"):
+            commands.cmd_cancel(
+                repo_root=self.t.root, id="P1.S1", reason="x", no_archive=True
+            )
+
+    def test_cancel_cascade_rejected_for_slice(self):
+        with self.assertRaisesRegex(commands.CommandError, "--cascade"):
+            commands.cmd_cancel(
+                repo_root=self.t.root, id="P1.S1", reason="x", cascade=True
+            )
+
+    def test_cancel_clears_review_state(self):
+        # Drive the slice into a state with active review and a workflow_step set,
+        # then cancel; review fields must clear, workflow_step must remain.
+        commands.cmd_set(
+            self.t.root, id="P1.S1",
+            workflow_step="implement",
+            review_active=True,
+            review_stage="awaiting_response",
+        )
+        commands.cmd_cancel(repo_root=self.t.root, id="P1.S1", reason="dropped")
+        s = self._slice()
+        self.assertEqual(s.status, Status.CANCELLED)
+        self.assertFalse(s.review_active)
+        self.assertIsNone(s.review_stage)
+        # workflow_step is informative on cancelled rows and must survive.
+        self.assertIsNotNone(s.workflow_step)
+        self.assertEqual(s.workflow_step.value, "implement")
+
+    def test_cancel_slice_emits_cancelled_notification_once(self):
+        log = self.t.root / "notify.jsonl"
+        with patch.dict(
+            os.environ,
+            {
+                "SUPERSTAR_NOTIFY_DISABLE": "0",
+                "SUPERSTAR_NOTIFY_DRY_RUN": "1",
+                "SUPERSTAR_NOTIFY_LOG": str(log),
+            },
+        ):
+            commands.cmd_cancel(repo_root=self.t.root, id="P1.S1", reason="x")
+        events = [
+            json.loads(line) for line in log.read_text(encoding="utf-8").splitlines()
+        ]
+        cancel_events = [e for e in events if e["id"] == "P1.S1" and e["status"] == "cancelled"]
+        self.assertEqual(len(cancel_events), 1)
+
+
+class CancelCrossTests(unittest.TestCase):
+    def setUp(self):
+        self.t = _Tmp()
+        commands.cmd_init(repo_root=self.t.root, project="demo")
+        commands.cmd_create_cross(repo_root=self.t.root, title="cross item")
+
+    def tearDown(self):
+        self.t.cleanup()
+
+    def test_cancel_cross_auto_archives_with_status_cancelled(self):
+        commands.cmd_cancel(repo_root=self.t.root, id="X1", reason="superseded")
+        p = load_project(self.t.root / "docs/tasklist.json")
+        self.assertTrue(all(c.id != "X1" for c in p.cross_cutting))
+        archived = next(a for a in p.archived_cross_cutting if a.id == "X1")
+        text = (self.t.root / archived.archived_path).read_text(encoding="utf-8")
+        self.assertIn("status: cancelled", text)
+
+    def test_cancel_cross_no_archive_keeps_visible(self):
+        commands.cmd_cancel(
+            repo_root=self.t.root, id="X1", reason="defer", no_archive=True
+        )
+        p = load_project(self.t.root / "docs/tasklist.json")
+        x = next(c for c in p.cross_cutting if c.id == "X1")
+        self.assertEqual(x.status, Status.CANCELLED)
+        self.assertEqual(p.archived_cross_cutting, [])
+
+    def test_archive_cross_after_cancel_no_archive_preserves_status(self):
+        commands.cmd_cancel(
+            repo_root=self.t.root, id="X1", reason="defer", no_archive=True
+        )
+        commands.cmd_archive_cross(repo_root=self.t.root, id="X1")
+        p = load_project(self.t.root / "docs/tasklist.json")
+        self.assertTrue(all(c.id != "X1" for c in p.cross_cutting))
+        archived = next(a for a in p.archived_cross_cutting if a.id == "X1")
+        body = (self.t.root / archived.archived_path).read_text(encoding="utf-8")
+        self.assertIn("status: cancelled", body)
+        self.assertNotIn("status: done", body)
+
+    def test_cancel_cross_emits_cancelled_notification_once(self):
+        log = self.t.root / "notify.jsonl"
+        with patch.dict(
+            os.environ,
+            {
+                "SUPERSTAR_NOTIFY_DISABLE": "0",
+                "SUPERSTAR_NOTIFY_DRY_RUN": "1",
+                "SUPERSTAR_NOTIFY_LOG": str(log),
+            },
+        ):
+            commands.cmd_cancel(repo_root=self.t.root, id="X1", reason="x")
+        events = [
+            json.loads(line) for line in log.read_text(encoding="utf-8").splitlines()
+        ]
+        cancel_events = [e for e in events if e["id"] == "X1" and e["status"] == "cancelled"]
+        self.assertEqual(len(cancel_events), 1)
+
+
+class CancelPhaseTests(unittest.TestCase):
+    def setUp(self):
+        self.t = _Tmp()
+        commands.cmd_init(repo_root=self.t.root, project="demo")
+        commands.cmd_create_phase(repo_root=self.t.root, title="P1")
+        commands.cmd_create_slice(repo_root=self.t.root, phase_id="P1", title="S1")
+        commands.cmd_create_slice(repo_root=self.t.root, phase_id="P1", title="S2")
+        commands.cmd_create_slice(repo_root=self.t.root, phase_id="P1", title="S3")
+
+    def tearDown(self):
+        self.t.cleanup()
+
+    def _phase(self):
+        p = load_project(self.t.root / "docs/tasklist.json")
+        return next(x for x in p.phases if x.id == "P1")
+
+    def _slice(self, sid):
+        ph = self._phase()
+        return next(s for s in ph.slices if s.id == sid)
+
+    def _close_slice(self, sid):
+        commands.cmd_start(repo_root=self.t.root, id=f"P1.{sid}")
+        commands.cmd_close(
+            repo_root=self.t.root, id=f"P1.{sid}", skip_review_gate=True
+        )
+
+    def test_cancel_phase_refuses_with_open_slices(self):
+        with self.assertRaisesRegex(commands.CommandError, "open"):
+            commands.cmd_cancel(repo_root=self.t.root, id="P1", reason="pivoting")
+
+    def test_cancel_phase_refuses_lists_open_slice_ids(self):
+        # Close S1 so only S2/S3 are open; error should list them.
+        self._close_slice("S1")
+        with self.assertRaisesRegex(commands.CommandError, "S2.*S3"):
+            commands.cmd_cancel(repo_root=self.t.root, id="P1", reason="pivot")
+
+    def test_cancel_phase_succeeds_when_all_slices_terminal(self):
+        # S1 done, S2 cancelled, S3 cancelled -> phase cancels without --cascade.
+        self._close_slice("S1")
+        commands.cmd_cancel(repo_root=self.t.root, id="P1.S2", reason="dropped")
+        commands.cmd_cancel(repo_root=self.t.root, id="P1.S3", reason="dropped")
+        commands.cmd_cancel(repo_root=self.t.root, id="P1", reason="rollup")
+        ph = self._phase()
+        self.assertEqual(ph.status, Status.CANCELLED)
+        self.assertEqual(ph.closed, _dt.date.today().isoformat())
+        # Done child untouched
+        s1 = self._slice("S1")
+        self.assertEqual(s1.status, Status.DONE)
+
+    def test_cancel_phase_cascade_cancels_open_leaves_done(self):
+        # S1 done, S2 ready, S3 in_progress
+        self._close_slice("S1")
+        commands.cmd_start(repo_root=self.t.root, id="P1.S3")
+        s1_closed_before = self._slice("S1").closed
+        commands.cmd_cancel(
+            repo_root=self.t.root, id="P1", reason="pivot", cascade=True
+        )
+        ph = self._phase()
+        s1 = self._slice("S1")
+        s2 = self._slice("S2")
+        s3 = self._slice("S3")
+        self.assertEqual(ph.status, Status.CANCELLED)
+        self.assertEqual(s1.status, Status.DONE)
+        self.assertEqual(s1.closed, s1_closed_before)
+        self.assertEqual(s2.status, Status.CANCELLED)
+        self.assertEqual(s3.status, Status.CANCELLED)
+        self.assertIn("(cascaded from P1)", s2.notes)
+        self.assertIn("(cascaded from P1)", s3.notes)
+        self.assertEqual(s2.closed, _dt.date.today().isoformat())
+        self.assertEqual(s3.closed, _dt.date.today().isoformat())
+
+    def test_cancel_phase_cascade_notifies_each_cascaded_child_and_phase(self):
+        self._close_slice("S1")
+        log = self.t.root / "notify.jsonl"
+        with patch.dict(
+            os.environ,
+            {
+                "SUPERSTAR_NOTIFY_DISABLE": "0",
+                "SUPERSTAR_NOTIFY_DRY_RUN": "1",
+                "SUPERSTAR_NOTIFY_LOG": str(log),
+            },
+        ):
+            commands.cmd_cancel(
+                repo_root=self.t.root, id="P1", reason="pivot", cascade=True
+            )
+        events = [
+            json.loads(line) for line in log.read_text(encoding="utf-8").splitlines()
+        ]
+        ids_with_cancel = sorted(
+            e["id"] for e in events if e["status"] == "cancelled"
+        )
+        self.assertEqual(ids_with_cancel, ["P1", "P1.S2", "P1.S3"])
+        # The done slice S1 must NOT emit a cancel event.
+        self.assertFalse(
+            any(e["id"] == "P1.S1" and e["status"] == "cancelled" for e in events)
+        )
+
+
+class CancelledRowGuardTests(unittest.TestCase):
+    """Lifecycle-adjacent commands must refuse to mutate cancelled rows
+    (except note --append, ref add/remove, and title)."""
+
+    def setUp(self):
+        self.t = _Tmp()
+        commands.cmd_init(repo_root=self.t.root, project="demo")
+        commands.cmd_create_phase(repo_root=self.t.root, title="P1")
+        commands.cmd_create_slice(repo_root=self.t.root, phase_id="P1", title="S1")
+        commands.cmd_create_slice(repo_root=self.t.root, phase_id="P1", title="S2")
+        commands.cmd_cancel(
+            repo_root=self.t.root, id="P1.S1", reason="scope dropped"
+        )
+
+    def tearDown(self):
+        self.t.cleanup()
+
+    def _slice(self, qid="P1.S1"):
+        p = load_project(self.t.root / "docs/tasklist.json")
+        phase_id, slice_id = qid.split(".")
+        ph = next(x for x in p.phases if x.id == phase_id)
+        return next(s for s in ph.slices if s.id == slice_id)
+
+    def test_cmd_close_refuses_cancelled(self):
+        with self.assertRaisesRegex(commands.CommandError, "cancelled"):
+            commands.cmd_close(
+                repo_root=self.t.root, id="P1.S1", skip_review_gate=True
+            )
+
+    def test_cmd_set_refuses_cancelled_for_all_new_statuses(self):
+        for new in ("ready", "in_progress", "done"):
+            with self.assertRaisesRegex(commands.CommandError, "cancelled"):
+                commands.cmd_set(
+                    repo_root=self.t.root, id="P1.S1", status=new,
+                    skip_review_gate=True,
+                )
+
+    def test_cmd_set_refuses_status_cancelled_with_hint(self):
+        # Defense in depth: even on a non-cancelled row, status="cancelled"
+        # must be rejected and point at `tasktool cancel`.
+        with self.assertRaisesRegex(commands.CommandError, "tasktool cancel"):
+            commands.cmd_set(
+                repo_root=self.t.root, id="P1.S2", status="cancelled",
+            )
+
+    def test_cmd_start_refuses_cancelled(self):
+        with self.assertRaisesRegex(commands.CommandError, "cancelled"):
+            commands.cmd_start(repo_root=self.t.root, id="P1.S1")
+
+    def test_cmd_block_refuses_cancelled(self):
+        with self.assertRaisesRegex(commands.CommandError, "cancelled"):
+            commands.cmd_block(
+                repo_root=self.t.root, slice_id="P1.S1", on="P1.S2"
+            )
+
+    def test_cmd_unblock_refuses_cancelled(self):
+        with self.assertRaisesRegex(commands.CommandError, "cancelled"):
+            commands.cmd_unblock(repo_root=self.t.root, slice_id="P1.S1")
+
+    def test_cmd_deps_add_refuses_cancelled(self):
+        with self.assertRaisesRegex(commands.CommandError, "cancelled"):
+            commands.cmd_deps(
+                repo_root=self.t.root, slice_id="P1.S1", add="P1.S2"
+            )
+
+    def test_cmd_deps_remove_refuses_cancelled(self):
+        with self.assertRaisesRegex(commands.CommandError, "cancelled"):
+            commands.cmd_deps(
+                repo_root=self.t.root, slice_id="P1.S1", remove="P1.S2"
+            )
+
+    def test_cmd_ratify_refuses_cancelled(self):
+        with self.assertRaisesRegex(commands.CommandError, "cancelled"):
+            commands.cmd_ratify(
+                repo_root=self.t.root, slice_id="P1.S1", status="ratified"
+            )
+
+    def test_cmd_note_replace_refuses_cancelled_with_append_hint(self):
+        with self.assertRaisesRegex(commands.CommandError, "--append"):
+            commands.cmd_note(
+                repo_root=self.t.root, id="P1.S1", replace="overwrite"
+            )
+
+    def test_cmd_note_append_allowed_on_cancelled(self):
+        commands.cmd_note(
+            repo_root=self.t.root, id="P1.S1", append="post-mortem note"
+        )
+        s = self._slice("P1.S1")
+        self.assertIn("post-mortem note", s.notes)
+
+    def test_cmd_ref_add_allowed_on_cancelled(self):
+        commands.cmd_ref(
+            repo_root=self.t.root, id="P1.S1", add="docs/foo.md"
+        )
+        s = self._slice("P1.S1")
+        self.assertIn("docs/foo.md", s.refs)
+
+    def test_cmd_ref_remove_allowed_on_cancelled(self):
+        commands.cmd_ref(
+            repo_root=self.t.root, id="P1.S1", add="docs/foo.md"
+        )
+        commands.cmd_ref(
+            repo_root=self.t.root, id="P1.S1", remove="docs/foo.md"
+        )
+        s = self._slice("P1.S1")
+        self.assertNotIn("docs/foo.md", s.refs)
+
+    def test_cmd_title_allowed_on_cancelled(self):
+        commands.cmd_title(
+            repo_root=self.t.root, id="P1.S1", new="new title"
+        )
+        s = self._slice("P1.S1")
+        self.assertEqual(s.title, "new title")
+
+    def test_cli_set_choices_do_not_include_cancelled(self):
+        from tasktool import cli
+        parser = cli._build_parser()
+        # Find the 'set' subparser action and verify --status choices.
+        set_action = None
+        for action in parser._actions:
+            if hasattr(action, "choices") and isinstance(action.choices, dict):
+                if "set" in action.choices:
+                    set_action = action.choices["set"]
+                    break
+        self.assertIsNotNone(set_action)
+        status_arg = next(
+            a for a in set_action._actions
+            if "--status" in getattr(a, "option_strings", [])
+        )
+        self.assertNotIn("cancelled", status_arg.choices)
 # ── P6.S1 Task 4: cmd_set workflow-step / review flags ──
 import pytest  # noqa: E402  (placed at file end for cohesion with new P6.S1 tests)
 

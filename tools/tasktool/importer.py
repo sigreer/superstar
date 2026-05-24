@@ -1,7 +1,7 @@
 from __future__ import annotations
 import re
 from dataclasses import dataclass, field
-from tasktool.model import Project, Phase, Slice, BlockedOn, CrossCutting, Status
+from tasktool.model import Project, Phase, Slice, BlockedOn, CrossCutting, Status, is_terminal
 
 
 @dataclass(slots=True)
@@ -31,22 +31,23 @@ EMOJI_TO_STATUS = {
     "🚧": Status.IN_PROGRESS,
     "⏸": Status.BLOCKED,
     "☐": Status.READY,
+    "🚫": Status.CANCELLED,
 }
 
 PHASE_HEADER_RE = re.compile(
     r"^##\s+(?P<id>P\d+)\s+—\s+(?P<title>.+?)\s+"
-    r"(?P<emoji>[✅🚧☐])(?:\s+`(?P<tag>[^`]+)`)?\s*$"
+    r"(?P<emoji>[✅🚧☐🚫])(?:\s+`(?P<tag>[^`]+)`)?\s*$"
 )
 PHASE_HEADER_BLOCKED_RE = re.compile(
     r"^##\s+(?P<id>P\d+)\s+—\s+(?P<title>.+?)\s+"
     r"⏸(?:\s+`(?P<tag>[^`]+)`)?\s*$"
 )
-DONE_TAG_RE = re.compile(r"^DONE\s+(?P<date>\d{4}-\d{2}-\d{2})$")
+DONE_TAG_RE = re.compile(r"^(?:DONE|CANCELLED)\s+(?P<date>\d{4}-\d{2}-\d{2})$")
 SPEC_RE = re.compile(r"Spec:\s*\[`(?P<path>[^`]+)`\]\([^)]+\)")
 PLAN_RE = re.compile(r"Plan:\s*(?:\[`(?P<path>[^`]+)`\]\([^)]+\)|_pending_)")
 
 SLICE_LINE_RE = re.compile(
-    r"^-\s+(?P<emoji>[✅🚧⏸☐])\s+\*\*(?P<id>(?:P\d+\.)?S\d+[a-z]?)\*\*"
+    r"^-\s+(?P<emoji>[✅🚧⏸☐🚫])\s+\*\*(?P<id>(?:P\d+\.)?S\d+[a-z]?)\*\*"
     r"(?:\s+`(?P<tag>[^`]+)`)?"
     r"(?:\s+(?:—\s+)?(?P<rest>.+))?$"
 )
@@ -55,7 +56,7 @@ INLINE_PLAN_RE = re.compile(r"Plan:\s*\[`(?P<path>[^`]+)`\]\([^)]+\)")
 
 CROSS_HEADER_RE = re.compile(r"^##\s+Cross-cutting\b")
 CROSS_LINE_RE = re.compile(
-    r"^-\s+(?P<emoji>[✅🚧☐])\s+\*\*(?P<id>X\d+)\*\*"
+    r"^-\s+(?P<emoji>[✅🚧☐🚫])\s+\*\*(?P<id>X\d+)\*\*"
     r"(?:\s+`(?P<tag>[^`]+)`)?"
     r"(?:\s+(?:—\s+)?(?P<rest>.+))?$"
 )
@@ -100,7 +101,7 @@ def _match_cross_line(line: str) -> _CrossMatch | None:
         rest = (m.group("rest") or "").strip()
         title = rest or UNTITLED
         status = EMOJI_TO_STATUS[m.group("emoji")]
-        closed = _extract_date_from_tag(m.group("tag")) if status is Status.DONE else None
+        closed = _extract_date_from_tag(m.group("tag")) if is_terminal(status) else None
         return _CrossMatch(
             id=m.group("id"),
             title=title,
@@ -149,7 +150,7 @@ def _match_phase_header(line: str) -> _PhaseMatch | None:
         status = EMOJI_TO_STATUS[emoji]
         tag = m.group("tag")
         closed: str | None = None
-        if status is Status.DONE and tag:
+        if is_terminal(status) and tag:
             dm = DONE_TAG_RE.match(tag)
             if dm:
                 closed = dm.group("date")

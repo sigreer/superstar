@@ -19,6 +19,7 @@ from tasktool.model import (
     ArchivedCrossCutting,
     Project, Phase, Slice, Task, CrossCutting, BlockedOn, Status, PlanningStatus,
     SliceWorkflowStep, PhaseWorkflowStep, ReviewStage,
+    is_terminal,
 )
 from tasktool.serialize import load_project, save_project
 from tasktool.validate import validate_project
@@ -117,6 +118,15 @@ def _validate_set_flags(
             raise UsageError(
                 "tasktool set: --workflow-step is not valid for task rows"
             )
+
+
+def _refuse_if_cancelled(qid: str, item, command: str) -> None:
+    """Refuse a lifecycle command if the row is in CANCELLED status."""
+    if item.status == Status.CANCELLED:
+        hint = " — use note --append" if command == "replace notes" else ""
+        raise CommandError(
+            f"{qid}: cannot {command} a cancelled row{hint}"
+        )
 
 DEFAULT_JSON_REL = "docs/tasklist.json"
 UNCONFIGURED_HINT = (
@@ -647,8 +657,8 @@ def _apply_review_gate(
         item.phase_reviewer_chain = rel
 
 def _start_item(qid: str, item, *, resume: bool = False) -> None:
-    if item.status == Status.DONE:
-        raise CommandError(f"{qid} is already done")
+    if is_terminal(item.status):
+        raise CommandError(f"{qid} is already {item.status.value}")
     if item.status == Status.BLOCKED:
         if not resume:
             raise CommandError(f"{qid} is blocked; use start --resume to clear blocked_on")
@@ -669,7 +679,7 @@ def _archive_cross_at_root(
     p: Project,
     item: CrossCutting,
 ) -> tuple[Path, str]:
-    if item.status != Status.DONE:
+    if not is_terminal(item.status):
         raise CommandError(
             f"cross-cutting {item.id} must be done before archive; run tasktool close {item.id} first"
         )
@@ -1022,9 +1032,15 @@ def cmd_set(
         review_active=review_active, review_stage=review_stage,
         reviewer_chain=reviewer_chain,
     )
+    if status == "cancelled":
+        raise CommandError(
+            f"{id}: cannot set status=cancelled directly; "
+            f"use `tasktool cancel <id> --reason \"...\"`"
+        )
     with _write_context(repo_root) as write_root:
         p = _load(write_root)
         qid, _container, item = _find_item(p, id)
+        _refuse_if_cancelled(qid, item, "set")
         kind = parse_id(qid)[0]
 
         if status is not None:
@@ -1083,6 +1099,7 @@ def cmd_close(
     with _write_context(repo_root) as write_root:
         p = _load(write_root)
         qid, _container, item = _find_item(p, id)
+        _refuse_if_cancelled(qid, item, "close")
         kind = parse_id(qid)[0]
         if no_archive and kind != "cross":
             raise CommandError("--no-archive is only valid for cross-cutting items")
@@ -1112,6 +1129,76 @@ def cmd_close(
             _git_stage(write_root, archive_path)
         _notify_status(qid=qid, kind=kind, status=item.status, title=item.title)
 
+def _stamp_cancellation(item, reason: str, *, suffix: str | None) -> None:
+    ts = _dt.datetime.now().isoformat(timespec="seconds")
+    line = f"Cancelled {ts}: {reason}"
+    if suffix:
+        line += f" ({suffix})"
+    item.notes = (item.notes + "\n" + line).strip() if item.notes else line
+    item.status = Status.CANCELLED
+    item.closed = _today()
+    # Clear transient review state introduced by P6.S1 so cancelled rows
+    # don't render with stale review block. workflow_step is left intact —
+    # it records the furthest step the work reached, which is informative.
+    if hasattr(item, "review_active"):
+        item.review_active = False
+    if hasattr(item, "review_stage"):
+        item.review_stage = None
+
+
+def cmd_cancel(
+    *, repo_root: Path, id: str, reason: str | None,
+    cascade: bool = False, no_archive: bool = False,
+) -> None:
+    if reason is None or not reason.strip():
+        raise CommandError(f"{id}: cancel requires --reason")
+    reason = reason.strip()
+
+    kind = parse_id(id)[0]
+    if kind == "task":
+        raise CommandError(
+            "cancel does not apply to tasks; cancel the parent slice instead"
+        )
+    if cascade and kind != "phase":
+        raise CommandError(f"{id}: --cascade is only valid for phase ids")
+    if no_archive and kind != "cross":
+        raise CommandError(f"{id}: --no-archive is only valid for cross-cutting ids")
+
+    with _write_context(repo_root) as write_root:
+        p = _load(write_root)
+        qid, _container, item = _find_item(p, id)
+        if is_terminal(item.status):
+            raise CommandError(f"{qid} is already {item.status.value}; cannot cancel")
+
+        if kind == "phase":
+            open_slices = [s for s in item.slices if not is_terminal(s.status)]
+            if open_slices and not cascade:
+                ids = ", ".join(s.id for s in open_slices)
+                raise CommandError(
+                    f"{qid}: phase has open slices ({ids}); use --cascade to cancel them"
+                )
+            for s in open_slices:
+                _stamp_cancellation(s, reason, suffix=f"cascaded from {qid}")
+                _notify_status(
+                    qid=f"{qid}.{s.id}", kind="slice",
+                    status=s.status, title=s.title,
+                )
+            _stamp_cancellation(item, reason, suffix=None)
+            _save(write_root, p)
+            _notify_status(qid=qid, kind="phase", status=item.status, title=item.title)
+            return
+
+        _stamp_cancellation(item, reason, suffix=None)
+
+        archive_path: Path | None = None
+        if kind == "cross" and not no_archive:
+            archive_path, _archive_rel = _archive_cross_at_root(write_root, p, item)
+        _save(write_root, p)
+        if archive_path is not None:
+            _git_stage(write_root, archive_path)
+        _notify_status(qid=qid, kind=kind, status=item.status, title=item.title)
+
+
 def cmd_archive_cross(*, repo_root: Path, id: str) -> None:
     with _write_context(repo_root) as write_root:
         p = _load(write_root)
@@ -1131,6 +1218,7 @@ def cmd_block(*, repo_root: Path, slice_id: str, on: str) -> None:
         if not is_slice_id(slice_id):
             raise CommandError(f"block only works on slices; {slice_id} is a {kind_of(slice_id)}")
         _qid, _container, item = _find_item(p, slice_id)
+        _refuse_if_cancelled(_qid, item, "block")
         if on.startswith("external:"):
             item.blocked_on = BlockedOn(kind="external", value=on[len("external:"):])
         else:
@@ -1146,6 +1234,7 @@ def cmd_unblock(*, repo_root: Path, slice_id: str, resume: bool = False) -> None
         if not is_slice_id(slice_id):
             raise CommandError(f"unblock only works on slices; {slice_id} is a {kind_of(slice_id)}")
         _qid, _container, item = _find_item(p, slice_id)
+        _refuse_if_cancelled(_qid, item, "unblock")
         item.blocked_on = None
         if resume:
             _start_item(_qid, item, resume=True)
@@ -1165,6 +1254,7 @@ def cmd_deps(
         qid, _container, item = _find_item(p, slice_id)
         if parse_id(qid)[0] != "slice":
             raise CommandError(f"deps only works on slices; {qid} is a {parse_id(qid)[0]}")
+        _refuse_if_cancelled(qid, item, "change deps for")
         dep = _resolve_dependency_id(p, add or remove or "")
         if add is not None and dep not in item.depends_on:
             item.depends_on.append(dep)
@@ -1181,6 +1271,7 @@ def cmd_ratify(
         qid, _container, item = _find_item(p, slice_id)
         if parse_id(qid)[0] != "slice":
             raise CommandError(f"ratify only works on slices; {qid} is a {parse_id(qid)[0]}")
+        _refuse_if_cancelled(qid, item, "ratify")
         item.planning_status = PlanningStatus(status)
         if parallel_group is not None:
             item.parallel_group = parallel_group or None
@@ -1206,6 +1297,8 @@ def cmd_note(
     with _write_context(repo_root) as write_root:
         p = _load(write_root)
         _qid, _container, item = _find_item(p, id)
+        if replace is not None:
+            _refuse_if_cancelled(_qid, item, "replace notes")
         if append is not None:
             item.notes = (item.notes + "\n" + append).strip() if item.notes else append
         else:
@@ -1501,6 +1594,7 @@ def _item_one_line(prefix: str, item) -> str:
     return f"{prefix}  [{status_tag}]  {item.title}"
 
 def cmd_show(*, repo_root: Path, id: str) -> str:
+    from tasktool.model import extract_cancellation_reason
     p = _load(repo_root)
     qid, _container, item = _find_item(p, id)
     lines = [f"# {qid} — {item.title}", f"status: {item.status.value}"]
@@ -1555,6 +1649,11 @@ def cmd_show(*, repo_root: Path, id: str) -> str:
         lines.append("\nTasks:")
         for t in item.tasks:
             lines.append(_item_one_line(f"  {t.id}", t))
+    if item.status == Status.CANCELLED:
+        reason = extract_cancellation_reason(getattr(item, "notes", None))
+        if reason:
+            lines.insert(0, "")
+            lines.insert(0, f"**{reason}**")
     return "\n".join(lines) + "\n"
 
 def _phase_by_id(p: Project, phase_id: str) -> Phase:
@@ -1566,10 +1665,16 @@ def _phase_by_id(p: Project, phase_id: str) -> Phase:
 def _done_slice_ids(phase: Phase) -> set[str]:
     return {f"{phase.id}.{s.id}" for s in phase.slices if s.status == Status.DONE}
 
+def _cancelled_slice_ids(phase: Phase) -> set[str]:
+    return {f"{phase.id}.{s.id}" for s in phase.slices if s.status == Status.CANCELLED}
+
 def _is_slice_ready_for_work(phase: Phase, s: Slice) -> bool:
-    if s.status in (Status.DONE, Status.BLOCKED):
+    if is_terminal(s.status) or s.status == Status.BLOCKED:
         return False
     if s.planning_status == PlanningStatus.SUPERSEDED:
+        return False
+    cancelled = _cancelled_slice_ids(phase)
+    if any(dep in cancelled for dep in s.depends_on):
         return False
     return all(dep in _done_slice_ids(phase) for dep in s.depends_on)
 
@@ -1600,10 +1705,14 @@ def cmd_schedule(*, repo_root: Path, phase_id: str, format: str = "text") -> str
     p = _load(repo_root)
     phase = _phase_by_id(p, phase_id)
     done = _done_slice_ids(phase)
+    cancelled = _cancelled_slice_ids(phase)
     rows = []
     for s in phase.slices:
-        waiting_on = [dep for dep in s.depends_on if dep not in done]
-        ready = _is_slice_ready_for_work(phase, s)
+        waiting_on = [
+            dep for dep in s.depends_on if dep not in done and dep not in cancelled
+        ]
+        cancelled_deps = [dep for dep in s.depends_on if dep in cancelled]
+        ready = _is_slice_ready_for_work(phase, s) and not cancelled_deps
         rows.append({
             "id": f"{phase.id}.{s.id}",
             "status": s.status.value,
@@ -1611,6 +1720,7 @@ def cmd_schedule(*, repo_root: Path, phase_id: str, format: str = "text") -> str
             "parallel_group": s.parallel_group,
             "depends_on": s.depends_on,
             "waiting_on": waiting_on,
+            "cancelled_deps": cancelled_deps,
             "ready": ready,
             "title": s.title,
         })
@@ -1624,17 +1734,21 @@ def cmd_schedule(*, repo_root: Path, phase_id: str, format: str = "text") -> str
         ready = "ready" if row["ready"] else "waiting"
         deps = ", ".join(row["depends_on"]) if row["depends_on"] else "-"
         waits = ", ".join(row["waiting_on"]) if row["waiting_on"] else "-"
+        cancelled_str = (
+            ", ".join(row["cancelled_deps"]) if row["cancelled_deps"] else "-"
+        )
         group = row["parallel_group"] or "-"
         lines.append(
             f"{row['id']}  [{row['status']}/{row['planning_status']}]  "
-            f"group={group}  {ready}  deps={deps}  waiting_on={waits}  {row['title']}"
+            f"group={group}  {ready}  deps={deps}  waiting_on={waits}  "
+            f"cancelled_deps={cancelled_str}  {row['title']}"
         )
     return "\n".join(lines).rstrip() + "\n"
 
 def cmd_phase_status(*, repo_root: Path, recent: int = 3, format: str = "text") -> str:
     p = _load(repo_root)
-    open_cross = [c for c in p.cross_cutting if c.status != Status.DONE]
-    open_phases = [ph for ph in p.phases if ph.status != Status.DONE]
+    open_cross = [c for c in p.cross_cutting if not is_terminal(c.status)]
+    open_phases = [ph for ph in p.phases if not is_terminal(ph.status)]
     archived = p.archived_phases[-recent:] if recent > 0 else []
     if format == "json":
         import json as _j
@@ -1679,11 +1793,17 @@ def cmd_phase_status(*, repo_root: Path, recent: int = 3, format: str = "text") 
         lines.append("  none")
     return "\n".join(lines) + "\n"
 
-def _iter_items(p: Project):
+def _iter_items(p: Project, *, suppress_children_of_terminal: bool = False):
     for ph in p.phases:
         yield ("phase", ph.id, ph)
         for s in ph.slices:
             yield ("slice", f"{ph.id}.{s.id}", s)
+            if suppress_children_of_terminal and is_terminal(s.status):
+                # Containment rule: when reporting only open work, skip the
+                # child tasks of a terminal (done/cancelled) parent slice.
+                # Their statuses are not mutated; cmd_show still emits them
+                # verbatim.
+                continue
             for t in s.tasks:
                 yield ("task", f"{ph.id}.{s.id}.{t.id}", t)
     for c in p.cross_cutting:
@@ -1707,7 +1827,9 @@ def cmd_list(
     else:
         status_filter = None
     rows: list[tuple[str, str, str, str]] = []
-    for item_kind, qid, item in _iter_items(p):
+    for item_kind, qid, item in _iter_items(
+        p, suppress_children_of_terminal=open_only,
+    ):
         if phase and not qid.startswith(phase):
             continue
         if kind and item_kind != kind:
@@ -1908,17 +2030,26 @@ def _cmd_archive_phase_at_root(
     phase = next((ph for ph in p.phases if ph.id == phase_id), None)
     if phase is None:
         raise CommandError(f"phase {phase_id} not found")
-    open_slices = [s.id for s in phase.slices if s.status != Status.DONE]
+    open_slices = [s.id for s in phase.slices if not is_terminal(s.status)]
     if open_slices:
         raise CommandError(
             f"phase {phase_id} has open slices: {', '.join(open_slices)}"
         )
-    if skip_review_gate:
-        print(f"warning: review gate skipped for {phase_id}", file=_sys.stderr)
-    _apply_review_gate(invocation_root, phase, phase_id, "phase",
-                       reviewer_chain, skip_review_gate)
-    if phase.status != Status.DONE:
+    if phase.status == Status.CANCELLED:
+        # Cancelled phases bypass the post-phase reviewer gate; record the skip.
+        skip_note = "Phase cancelled; post-phase review gate skipped"
+        phase.notes = (
+            phase.notes + "\n" + skip_note if phase.notes else skip_note
+        )
+    else:
+        if skip_review_gate:
+            print(f"warning: review gate skipped for {phase_id}", file=_sys.stderr)
+        _apply_review_gate(invocation_root, phase, phase_id, "phase",
+                           reviewer_chain, skip_review_gate)
+    if not is_terminal(phase.status):
         phase.status = Status.DONE
+        phase.closed = phase.closed or _today()
+    else:
         phase.closed = phase.closed or _today()
 
     slug = _slugify(phase.title)
@@ -1970,7 +2101,7 @@ def _cmd_archive_phase_at_root(
     archive_path.write_text(summary_text, encoding="utf-8")
     _save(write_root, p)
     _git_stage(write_root, archive_path)
-    _notify_status(qid=phase_id, kind="phase", status=Status.DONE, title=phase.title)
+    _notify_status(qid=phase_id, kind="phase", status=phase.status, title=phase.title)
 
 def cmd_brief(*, repo_root: Path, id: str) -> str:
     from tasktool.brief import brief as _brief
@@ -2180,12 +2311,13 @@ def cmd_worktree_prune(
             )
         wt_path = (write_root / path_str).resolve()
 
-        # Guard 1: slice status is done (unless --force).
+        # Guard 1: slice status is terminal (done OR cancelled), unless --force.
         if not force:
-            if getattr(item, "status", None) != Status.DONE:
+            if not is_terminal(getattr(item, "status", None)):
                 raise CommandError(
                     f"{qid}: slice status is {item.status.value!r}; prune requires "
-                    f"'done' (run `tasktool close {qid}` first, or pass --force)"
+                    f"a terminal status (run `tasktool close {qid}` or "
+                    f"`tasktool cancel {qid}` first, or pass --force)"
                 )
 
             # Guard 2: branch merged into authoritative parent.

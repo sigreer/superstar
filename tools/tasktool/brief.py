@@ -1,5 +1,8 @@
 from __future__ import annotations
-from tasktool.model import Project, Phase, Slice, Task, CrossCutting, Status
+from tasktool.model import (
+    Project, Phase, Slice, Task, CrossCutting, Status,
+    extract_cancellation_reason,
+)
 from tasktool.ids import parse_id
 
 
@@ -133,4 +136,11 @@ def brief(p: Project, qid: str) -> str:
                 lines.append(f"  - {r}")
         if item.notes:
             lines.append(f"notes:\n{item.notes}")
+    # Lead with the cancellation reason for cancelled rows, so brief output
+    # surfaces "why" before structural details.
+    if getattr(item, "status", None) == Status.CANCELLED:
+        reason = extract_cancellation_reason(getattr(item, "notes", None))
+        if reason:
+            lines.insert(0, "")
+            lines.insert(0, f"**{reason}**")
     return "\n".join(lines) + "\n"
