@@ -297,7 +297,7 @@
       "slices": [
         {
           "blocked_on": null,
-          "closed": null,
+          "closed": "2026-05-24",
           "created": "2026-05-23",
           "depends_on": [],
           "id": "S1",
@@ -308,11 +308,12 @@
           "refs": [
             "docs/plans/2026-05-23-P6.S1-workflow-step-field.md",
             "docs/handoffs/2026-05-23-P6.S1-workflow-step-field-prompt.md",
-            "docs/reviewer/p6-s1-workflow-step-field-plan"
+            "docs/reviewer/p6-s1-workflow-step-field-plan",
+            "docs/reviewer/p6-s1-workflow-step-field-P6-S1-post-slice"
           ],
-          "reviewer_chain": "docs/reviewer/p6-s1-workflow-step-field-plan",
+          "reviewer_chain": "docs/reviewer/p6-s1-workflow-step-field-P6-S1-post-slice",
           "started": "2026-05-24",
-          "status": "in_progress",
+          "status": "done",
           "tasks": [],
           "title": "Add workflow_step field, transient review block, and read-only infer-step",
           "worktree_in_place": true
