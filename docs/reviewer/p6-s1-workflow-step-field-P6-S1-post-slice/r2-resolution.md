@@ -3,7 +3,7 @@
 ## F1
 Status: fixed
 Evidence:
-- Commit: <pending>
+- Commit: cc4256f
 - Files: `docs/specs/2026-05-23-P6-programmatic-workflow-enhancements-design.md` §3.3 amended (R3 added); `docs/plans/2026-05-23-P6.S1-workflow-step-field.md` Step 5.3 snippet amended; `tools/tasktool/tests/test_commands.py` adds two regression tests.
 - Verification: `cd tools/tasktool && python -m pytest` — full suite green (666 passed).
 
