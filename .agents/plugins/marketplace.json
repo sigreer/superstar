@@ -6,7 +6,7 @@
   "plugins": [
     {
       "name": "superstar",
-      "version": "6.6.6",
+      "version": "6.7.0",
       "source": {
         "source": "local",
         "path": "./plugins/superstar"
