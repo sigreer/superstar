@@ -41,6 +41,12 @@
       "archived_path": "docs/archived-tasks/X22-add-cancelled-terminal-status-to-tasktoo.md",
       "id": "X22",
       "title": "Add cancelled terminal status to tasktool"
+    },
+    {
+      "archived_date": "2026-05-24",
+      "archived_path": "docs/archived-tasks/X23-document-cancelled-lifecycle-and-admin-c.md",
+      "id": "X23",
+      "title": "Document cancelled lifecycle and admin closeout guidance"
     }
   ],
   "archived_phases": [

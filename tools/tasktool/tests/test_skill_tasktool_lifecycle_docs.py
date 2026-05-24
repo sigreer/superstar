@@ -25,6 +25,10 @@ def test_tasklist_discipline_documents_authority_and_start_workflow() -> None:
     assert "--no-archive" in text
     assert "archive-cross" in text
     assert "archived x ids are still reserved" in text.lower()
+    assert "cancelled` phases" in text
+    assert "Administrative closeout exception" in text
+    assert "already-superseded planning rows" in text
+    assert "cancelled phases bypass" in text
 
 
 def test_subagent_driven_development_starts_slice_before_dispatch() -> None:

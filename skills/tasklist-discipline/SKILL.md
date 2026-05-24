@@ -18,7 +18,7 @@ Prefer the repo-local launcher `tools/tasktool/tasktool` when it exists; it work
 - About to plan or write a new spec → allocate an ID with `tasktool create phase|slice|task|cross …` **before** the spec file lands. The TASKLIST row is the allocation; the spec/plan/reviewer-chain filenames are downstream.
 - About to start implementation for a slice → `tasktool start <slice-id>`. This records the lifecycle start and moves the row to `in_progress`; do this before dispatching implementation or editing implementation files.
 - About to close a slice → `tasktool close <slice-id>`. The CLI enforces the post-slice external-review gate.
-- About to close a phase → `tasktool archive-phase <phase-id>`. The CLI enforces the post-phase gate and writes the archive note.
+- About to close a phase → `tasktool archive-phase <phase-id>`. For `done` phases the CLI enforces the post-phase gate and writes the archive note; for `cancelled` phases it archives without a post-phase review because nothing shipped.
 - About to close a cross-cutting item → `tasktool close <x-id>`. The CLI marks it done and archives it by default. Use `--no-archive` only when the closed X-item must remain visible temporarily; later run `tasktool archive-cross <x-id>`.
 - Entering a slice → `tasktool brief <slice-id>` instead of reading the JSON.
 - Onboarding a project — `[[project-setup]]` runs `tasktool init` and installs the hook.
@@ -26,6 +26,8 @@ Prefer the repo-local launcher `tools/tasktool/tasktool` when it exists; it work
 Onboarding has a hard setup boundary: after `[[project-setup]]` configures `.tasktool/config.json` with authoritative routing, creates or imports `docs/tasklist.json`, installs hooks, installs the global `external-reviewer` shim or replaces a legacy repo-local reviewer bridge with the compatibility shim, moves legacy `docs/superpowers/` files, or edits `CLAUDE.md` / `AGENTS.md`, that setup/migration must be committed, stashed, or explicitly paused before implementation work begins.
 
 **Implementation isolation boundary:** If tasklist work is tied to starting, continuing, reviewing, or closing an implementation slice, invoke `[[using-git-worktrees]]` before tasktool status/ref/note/close mutations for an active implementation slice. `tasktool start`, `tasktool set`, `tasktool ref`, `tasktool note`, `tasktool close`, and reviewer-chain registration are not harmless bookkeeping when run from a shared checkout: they dirty the slice evidence set. A normal `main`/`master` checkout is planning/setup/read-only by default unless the user explicitly opts out of isolation in the current turn. Invoke `tasktool` from the active implementation worktree; authoritative routing sends the mutation to the configured checkout.
+
+**Administrative closeout exception:** Pure lifecycle bookkeeping for already-superseded planning rows may run from the authoritative checkout without creating a new implementation worktree. Examples: `tasktool cancel <phase-id> --cascade --reason "…"`, `tasktool archive-phase <phase-id>` on that cancelled phase, or adding refs/notes that explain the cancellation. Do not use this exception to edit implementation files, close shipped slices, register reviewer evidence for active implementation work, or mix new product changes into the bookkeeping commit.
 
 **Subagent rule (load-bearing).** Parents create or adopt worktrees via `tasktool start <slice-id>`. Dispatched subagents inherit the parent's cwd and **must not** call `tasktool start` — implementation work happens inside the parent's already-recorded worktree, and a subagent starting a slice double-counts the lifecycle row and corrupts the slice's worktree fields. Tasktool refuses `tasktool start` when it observes a dispatched-subagent signal (`SUPERSTAR_SUBAGENT_ROLE`, `CLAUDE_AGENT_ROLE`, or the test-only `SUPERSTAR_FORCE_SUBAGENT=1`). The runtime guard is detection-dependent — a coordinator that loses its env (e.g. `env -i`) will look like a top-level invocation — so **this prose rule is the load-bearing guard**; the env signals are belt-and-braces.
 
@@ -76,7 +78,7 @@ tools/tasktool/tasktool cancel <id> --reason "<text>"           # terminate with
 tools/tasktool/tasktool cancel <phase-id> --reason "…" --cascade  # cancel a phase + its open slices
 tools/tasktool/tasktool cancel <x-id> --reason "…" --no-archive   # keep cancelled X visible
 tools/tasktool/tasktool archive-cross <x-id>  # archive a done visible cross-cutting item
-tools/tasktool/tasktool archive-phase <phase-id>  # enforces post-phase review gate
+tools/tasktool/tasktool archive-phase <phase-id>  # done phases require post-phase review; cancelled phases bypass it
 tools/tasktool/tasktool validate              # full validation
 ```
 
@@ -85,7 +87,7 @@ Run `tools/tasktool/tasktool --help` (or `tools/tasktool/tasktool <cmd> --help`)
 ## Gating concepts (why the CLI refuses you)
 
 - **Post-slice external review.** `tasktool close <slice-id>` reads `chain.json` from the slice's reviewer chain folder (`docs/reviewer/<slug>-post-slice/` by default; override with `--reviewer-chain`). It refuses unless the latest round's verdict ∈ {`ready`, `ready with small edits`}. Per-task internal reviews do not satisfy this gate.
-- **Post-phase external review.** `tasktool archive-phase <phase-id>` refuses until every slice is `done` *and* the phase's post-phase chain returns `ready` / `ready with small edits`.
+- **Post-phase external review.** `tasktool archive-phase <phase-id>` refuses until every slice is `done` *and* the phase's post-phase chain returns `ready` / `ready with small edits`. If the phase itself is `cancelled`, archive still requires every child slice to be terminal, but it bypasses the post-phase chain because cancelled work never shipped.
 - **Cross-cutting archive.** `tasktool close <x-id>` is ungated by external review and moves the completed X-item out of active `cross_cutting` into `archived_cross_cutting`, with a lossless markdown archive under `docs/archived-tasks/`. `--no-archive` leaves it visible as `done`; `tasktool archive-cross <x-id>` moves it later without sending another done notification.
 - **`--skip-review-gate`** exists for emergencies and is recorded in the slice/phase `notes` with a timestamp. Use it only when the operator has explicitly chosen to bypass.
 
@@ -95,7 +97,7 @@ See `[[external-review]]` for how to drive the reviewer.
 
 - `tasktool cancel <id> --reason "<text>"` is the only sanctioned path. Applies to phases, slices, and cross-cutting items. Tasks cannot be cancelled — cancel the parent slice.
 - The reason is required and is recorded in `notes` as `Cancelled <ISO-ts>: <reason>` (and `(cascaded from <phase-id>)` for child slices cancelled via `--cascade`).
-- Cancellation **bypasses** the post-slice and post-phase external-review gates — cancelled work never shipped.
+- Cancellation **bypasses** the post-slice and post-phase external-review gates — cancelled work never shipped. A cancelled phase may be archived with `tasktool archive-phase <phase-id>` without `--skip-review-gate` or a post-phase reviewer chain.
 - A cancelled slice does **not** satisfy a downstream `depends_on`. `tasktool schedule <phase-id>` emits `cancelled_deps` for affected slices; `ready-slices` omits them. Cancel the downstream too or remove the dependency.
 - Cancelled cross-cutting items auto-archive by default. Use `--no-archive` to keep the cancelled row visible in the active list; archive later with `archive-cross`.
 - Phase cancellation refuses if any slice is still open. Use `--cascade` to cancel open slices in one call; already-done slices are never touched.
