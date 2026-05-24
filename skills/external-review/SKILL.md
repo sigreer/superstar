@@ -72,6 +72,8 @@ If `reviewer-agent` is missing, `[[project-setup]]` will offer to install/config
 
 - `--incremental-budget-chars` (default `400000`) sets a target cap on assembled prompt size for incremental rounds. The prompt is pruned in priority order — target preview, diff body, resolution body, prior findings body — toward the target; sentinel markers, chain summary, and finding-ID lists are never trimmed. The final size may exceed the target by ~150 bytes due to the appended `<!-- budget-applied: ... -->` diagnostic note.
 
+**Slice review block.** When invoked with `--kind plan` or `--kind post-slice` and a slice `--work-id`, the script writes a transient `review_active` / `review_stage` pair on the slice row via `tasktool set`. The block is cleared when the slice's `workflow_step` is changed by the next manual setter call. The writes are best-effort: if `tasktool` is missing or fails, a warning is logged and the review continues.
+
 ## How a round runs
 
 For `post-slice` and `post-phase`, run a scope preflight before invoking the reviewer:

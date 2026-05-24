@@ -45,6 +45,8 @@ For each task:
 4. Run the in-loop internal review per `[[requesting-internal-review]]` if the plan or task calls for it
 5. Mark as completed
 
+The slice's `workflow_step` should be `implement` when execution begins and only advance to `done` after the post-slice review verdict is `ready` / `ready with small edits`. See [[tasklist-discipline]].
+
 ### Step 3: Close Each Slice (REQUIRED GATE)
 
 When the last task in a slice is verified — **before flipping slice status** — run the external-review gate:

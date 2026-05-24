@@ -32,6 +32,8 @@ Plans are organised into **slices** (and slices into **tasks**) per `[[tasklist-
 
 For each active slice, the coordinator must run `tasktool start <slice-id>` before dispatching implementation. This is the lifecycle gate that records the start and moves the row to `in_progress`; do not substitute prose notes, TodoWrite state, or manual JSON edits.
 
+The slice's `workflow_step` should be `implement` when execution begins and only advance to `done` after the post-slice review verdict is `ready` / `ready with small edits`. See [[tasklist-discipline]].
+
 Before dispatching any implementation subagent, run `[[using-git-worktrees]]` as the first executable gate and verify the coordinator is operating from an isolated worktree for the active slice. Implementation requires one isolated worktree per active slice unless the human partner explicitly opts out in the current turn. A normal repo checkout on `main`/`master` is read-only/planning-only by default: do not edit files, run artifact-producing tests, write reviewer chains, or mutate tasktool status for an implementation slice there without that explicit opt-out.
 
 **Subagents inherit your cwd and must not call `tasktool start`.** The implementer/spec-reviewer/code-quality-reviewer prompt templates already export `SUPERSTAR_SUBAGENT_ROLE` so tasktool refuses subagent-side `start` calls; see `[[tasklist-discipline]]` "Subagent rule" for the load-bearing prose rule.

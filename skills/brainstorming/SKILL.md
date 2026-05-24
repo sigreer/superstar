@@ -128,6 +128,14 @@ After the spec self-review loop passes, invoke `[[external-review]]` with `--kin
 
 If the reviewer returns `revise`, apply the findings directly, update the spec, and re-submit. If a finding requires a product decision that was not resolved during brainstorming, ask the user the narrow question needed to unblock the review. Otherwise, continue without pausing.
 
+After the spec transaction commits, if you are working at the slice level set the slice's workflow step explicitly:
+
+```bash
+tasktool set <slice-id> --workflow-step spec
+```
+
+After the spec review passes (verdict `ready` / `ready with small edits`), set `--workflow-step plan` before invoking writing-plans. See [[tasklist-discipline]] for the field summary. Setting the field is optional but encouraged — it primes downstream automation that future slices in `P6` will enable.
+
 **Communication contract:** Do not ask the user before implementation planning. The validated design conversation already happened before the spec was written; the external reviewer is the post-write gate. Speak to the user only for genuine questions/blockers, or after both the spec and implementation plan have passed external review.
 
 **Implementation:**

@@ -119,6 +119,38 @@ Creating a new slice or X-item is allocation/tracking only. It does not authoriz
 
 Spec, plan, handoff, reviewer-chain, and archived-task paths are workflow artifacts. Register them through `tasktool artifact add` or `tasktool prepare`; do not hand-edit `docs/tasklist.json` refs for these paths. Use `tasktool artifact status <id> --strict` before handing work to another agent.
 
+## workflow_step
+
+Slices and phases carry an optional `workflow_step` field that tracks where the row is in the spec → plan → implement → done sequence. The two enums are intentionally different:
+
+- **Slice steps:** `spec | plan | implement | done`. Set manually as the slice progresses through its lifecycle.
+- **Phase steps:** `spec | ready | in_progress | done`. Set manually for `spec` / `ready`; `in_progress` / `done` are observable from child slice status and surface in `tasktool infer-step`.
+- **Cross-cutting (`X*`) rows have no `workflow_step`** — they skip the spec/plan loop.
+
+In this revision the field is **informational only**. No tasktool command auto-advances it; no operation is refused based on its value. Future slices in `P6 — Programmatic Workflow Enhancements` will introduce auto-advance and downstream automation (statusline / session-rename).
+
+### Setting it manually
+
+```bash
+tasktool set P6.S1 --workflow-step plan
+tasktool set P6 --workflow-step ready
+tasktool set P6.S1 --clear-workflow-step
+```
+
+### Inspecting inferred values
+
+```bash
+tasktool infer-step P6.S1                 # text
+tasktool infer-step P6.S1 --format json   # structured
+tasktool infer-step --all --diff          # rows where stored != inferred (exit 1 if drift, 0 otherwise)
+```
+
+`infer-step` is read-only — it never mutates state. Use it to sanity-check what the field *would* be if you set it manually.
+
+### Transient slice review block
+
+The external-reviewer script writes a small transient block (`review_active`, `review_stage`) on slices when a plan or post-slice review is in progress. The block is cleared when the slice's `workflow_step` changes or when the review finishes. Agents and skills should not write these fields directly.
+
 ## Red flags
 
 | Thought | Reality |

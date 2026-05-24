@@ -158,6 +158,14 @@ When `docs/tasklist.json` exists, a passing spec review is not complete until th
 
 After saving the plan, run `[[external-review]]` with `--kind plan` against the plan, passing the spec as `--context`. Iterate until the verdict is `ready` or `ready with small edits` before proceeding to the handoff step below. Do not ask the user before this review unless blocked.
 
+After the plan review verdict is `ready` / `ready with small edits`, set the slice's workflow step before handing off:
+
+```bash
+tasktool set <slice-id> --workflow-step implement
+```
+
+See [[tasklist-discipline]] for the field summary.
+
 ## Execution Handoff
 
 After both reviews are passed, write a **handoff prompt** for the next session and offer the execution choice.
