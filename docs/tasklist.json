@@ -301,7 +301,7 @@
           "created": "2026-05-23",
           "depends_on": [],
           "id": "S1",
-          "notes": "Task 5 deviation: plan tests for infer-step contradict spec §3.3 rule 1 ('phase.spec_path absent → spec'). Implementer chose to follow verbatim plan tests, ignoring phase.spec_path in slice inference. Pragmatic: slice.plan_path being present implies the slice has moved past spec. Flag for post-slice external review.",
+          "notes": "P6.S1 implementation complete; post-slice review F1 (slice inference vs spec §3.3) resolved by amending the spec to match shipped behavior (R3). Regression tests pin the contract.",
           "parallel_group": null,
           "plan_path": "docs/plans/2026-05-23-P6.S1-workflow-step-field.md",
           "planning_status": "ratified",

@@ -1515,6 +1515,29 @@ def test_infer_step_slice_done_wins_over_everything():
     assert commands.infer_step_for_id(p, "P6.S1") == {"step": "done", "blocked": False}
 
 
+def test_infer_step_slice_no_phase_spec_with_ratified_plan_is_implement():
+    """Regression for F1 (post-slice review). A ratified slice plan with no
+    phase.spec_path infers 'implement' — slice.plan_path is the authoritative
+    signal for moving past spec at the slice level. See docs/specs/2026-05-23-P6
+    §3.3 (R3 amendment)."""
+    from tasktool.model import PlanningStatus
+    p = _make_project(slice_kwargs={
+        "plan_path": "docs/plans/P6.S1.md",
+        "planning_status": PlanningStatus.RATIFIED,
+    })
+    assert commands.infer_step_for_id(p, "P6.S1") == {"step": "implement", "blocked": False}
+
+
+def test_infer_step_slice_no_phase_spec_with_proposed_plan_is_plan():
+    """Regression for F1: mirror test for the plan step."""
+    from tasktool.model import PlanningStatus
+    p = _make_project(slice_kwargs={
+        "plan_path": "docs/plans/P6.S1.md",
+        "planning_status": PlanningStatus.PROPOSED,
+    })
+    assert commands.infer_step_for_id(p, "P6.S1") == {"step": "plan", "blocked": False}
+
+
 def test_infer_step_slice_blocked_overlay():
     from tasktool.model import Status, PlanningStatus, BlockedOn
     p = _make_project(slice_kwargs={

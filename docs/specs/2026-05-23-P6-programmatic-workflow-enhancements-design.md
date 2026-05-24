@@ -100,13 +100,13 @@ Surfaced in existing commands:
 **For a slice:**
 
 ```
-phase.spec_path absent                                       → spec
-phase.spec_path present and slice.plan_path absent           → spec
+slice.plan_path absent                                        → spec
 slice.plan_path present and slice.planning_status != ratified → plan
-slice.plan_path present, planning_status == ratified,
-  status in {ready, in_progress}                             → implement
-status == done                                               → done
+slice.plan_path present and slice.planning_status == ratified → implement
+status == done                                                → done (overrides all)
 ```
+
+Rationale: `slice.plan_path` is the authoritative signal that the slice has moved past the spec phase. In real workflows a ratified plan cannot exist without a prior spec phase, so consulting `phase.spec_path` at the slice level is redundant and creates false drift for slices whose phase spec is tracked outside the in-tree `spec_path` (e.g. accepted out-of-band). Phase-level inference still consults `phase.spec_path` (§3.3 phase rules) to surface phases that genuinely never wrote a spec.
 
 **Blocked slices.** `Status.BLOCKED` is an orthogonal overlay on the workflow step, not a step itself. The inference rules above are applied as if `status == in_progress` (i.e., the blocker doesn't change which step the work is in), and the result is annotated:
 
@@ -276,3 +276,5 @@ R2 returned a fresh finding F5 (blocking) on phase inference completeness, plus 
 - **F5 (blocking) — phase inference incomplete for mixed slice statuses.** §3.3 phase rules rewritten as a total ordered match over `{ready, in_progress, blocked, done}`. Rule 3 (all `done` → `done`) takes precedence over rule 4 (any non-`ready` child → `in_progress`); rule 5 (all `ready` → `ready`) is the residual. Once any work has begun in any way (a child is `in_progress`, `blocked`, or `done`) the phase is `in_progress`. AC 15 enumerates the test cases.
 - **R2 open Q1 (phase blocked overlay).** Resolved: when rule 4 matches and any child is `blocked`, the phase carries a `(blocked)` annotation symmetric with the slice-level overlay; the base step stays `in_progress`.
 - **R2 open Q2 (`done + ready` semantics).** Resolved: `done + ready` matches rule 4 and infers `in_progress`. Once a child has finished, the phase has begun, even if other children haven't started.
+
+R3 returned `revise` with one blocking finding F1 (slice inference contradicts plan tests). Resolution: spec amended (this section) to drop the `phase.spec_path` precondition for slice inference; `slice.plan_path` is now the authoritative signal for moving past the spec step. The plan tests already encoded this contract; the spec rule was over-precise. Phase-level inference still honors `phase.spec_path`.
