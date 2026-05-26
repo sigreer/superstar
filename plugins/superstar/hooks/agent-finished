@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Stop/SubagentStop hook for generic Superstar completion dings.
+
+set -u
+set -o pipefail
+
+PLUGIN_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+exec python3 "${PLUGIN_ROOT}/tools/tasktool/notify.py" agent-finished

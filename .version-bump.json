@@ -8,6 +8,7 @@
     { "path": ".claude-plugin/marketplace.json", "field": "plugins.0.version" },
     { "path": ".agents/plugins/marketplace.json", "field": "plugins.0.version" },
     { "path": "plugins/superstar/.codex-plugin/plugin.json", "field": "version" },
+    { "path": "plugins/superstar/VERSION", "format": "plain" },
     { "path": "gemini-extension.json", "field": "version" }
   ],
   "audit": {

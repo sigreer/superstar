@@ -59,6 +59,12 @@
       "archived_path": "docs/archived-tasks/X25-duck-media-audio-during-tasktool-tts-and.md",
       "id": "X25",
       "title": "Duck media audio during tasktool TTS and verify Codex plugin payload"
+    },
+    {
+      "archived_date": "2026-05-26",
+      "archived_path": "docs/archived-tasks/X26-fix-codex-marketplace-payload-refresh-fo.md",
+      "id": "X26",
+      "title": "Fix Codex marketplace payload refresh for Superstar"
     }
   ],
   "archived_phases": [

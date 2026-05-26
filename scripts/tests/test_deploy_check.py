@@ -28,11 +28,27 @@ def _make_stamped_shim(path: Path, *, name: str, version: str, source_root: str,
 def _install_ok_caches(home: Path, source: Path) -> None:
     for rel in (
         ".codex/plugins/cache/superstar-dev/superstar/current",
+        ".codex/plugins/cache/superstar-dev/superstar/1.0.0",
         ".claude/plugins/cache/superstar-dev/superstar/current",
+        ".claude/plugins/cache/superstar-dev/superstar/1.0.0",
     ):
         cache = home / rel
         cache.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(source / "VERSION", cache / "VERSION")
+        for required in (
+            "skills/using-superstar/SKILL.md",
+            "skills/project-setup/SKILL.md",
+            "skills/using-git-worktrees/SKILL.md",
+            "hooks/hooks.json",
+            "hooks/run-hook.cmd",
+            "hooks/agent-finished",
+            "hooks/todo-snapshot",
+            "tools/tasktool/notify.py",
+            "assets/app-icon.png",
+        ):
+            path = cache / required
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("fixture\n")
 
 
 def _run_check(
@@ -269,7 +285,7 @@ def test_check_exits_nonzero_on_missing_codex_cache(tmp_path: Path) -> None:
     shutil.copyfile(source / "VERSION", claude_cache / "VERSION")
     result = _run_check(home, source, install_caches=False)
     assert result.returncode != 0
-    assert "codex-cache" in result.stdout
+    assert "codex-current" in result.stdout
     assert "MISSING_CACHE" in result.stdout
 
 
@@ -283,5 +299,5 @@ def test_check_exits_nonzero_on_missing_claude_cache(tmp_path: Path) -> None:
     shutil.copyfile(source / "VERSION", codex_cache / "VERSION")
     result = _run_check(home, source, install_caches=False)
     assert result.returncode != 0
-    assert "claude-cache" in result.stdout
+    assert "claude-current" in result.stdout
     assert "MISSING_CACHE" in result.stdout

@@ -15,15 +15,19 @@ plugin = marketplace["plugins"][0]
 assert plugin["name"] == "superstar", "local marketplace should expose superstar"
 source_path = plugin["source"]["path"]
 assert source_path == "./plugins/superstar", (
-    f"local superstar-dev marketplace must expose the Codex plugin payload, got {source_path!r}"
+    f"local superstar-dev marketplace must expose the embedded Codex plugin payload, got {source_path!r}"
 )
 
 for required in (
     "plugins/superstar/.codex-plugin/plugin.json",
-    "plugins/superstar/skills",
+    "plugins/superstar/skills/using-superstar/SKILL.md",
+    "plugins/superstar/hooks/hooks.json",
+    "plugins/superstar/tools/tasktool/notify.py",
     "plugins/superstar/assets",
 ):
-    assert (root / required).exists(), f"local marketplace source is missing {required}"
+    path = root / required
+    assert path.exists(), f"local marketplace source is missing {required}"
+    assert not path.is_symlink(), f"local marketplace source must be materialized, got symlink: {required}"
 
 print("PASS: local superstar-dev marketplace exposes the Codex plugin payload")
 PY

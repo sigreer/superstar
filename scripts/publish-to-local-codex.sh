@@ -2,10 +2,11 @@
 #
 # Publish the repo-local Superstar marketplace payload into Codex's local cache.
 #
-# Codex's local marketplace installer currently does not materialize symlinked
-# payload directories reliably. This wrapper installs the plugin, then copies the
-# local wrapper payload with symlinks followed so the versioned cache contains
-# real skills, hooks, tools, and assets for new Codex sessions.
+# Codex's local marketplace installer currently refreshes the cache from the
+# source path on startup and does not materialize symlinked payload directories
+# reliably. Keep the marketplace source path pointed at a real embedded plugin
+# payload, and have this wrapper materialize the same payload so the versioned
+# cache contains real skills, hooks, tools, and assets for new Codex sessions.
 
 set -euo pipefail
 
@@ -37,8 +38,8 @@ Publishes plugins/superstar into:
   <cache-root>/<marketplace>/<plugin>/<version>/
   <cache-root>/<marketplace>/<plugin>/current/
 
-The script follows symlinks so cache/<version> and cache/current contain real
-directories/files.
+The script excludes repository-local development state so cache/<version> and
+cache/current contain a materialized runtime payload.
 EOF
 }
 
@@ -66,6 +67,21 @@ PLUGIN_CACHE_ROOT="$CACHE_ROOT/$MARKETPLACE/$PLUGIN"
 CACHE_DIR="$PLUGIN_CACHE_ROOT/$VERSION"
 CURRENT_DIR="$PLUGIN_CACHE_ROOT/current"
 
+materialize_embedded_payload() {
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    echo "+ refresh embedded Codex payload at $SOURCE"
+    return
+  fi
+
+  mkdir -p "$SOURCE/scripts/lib"
+  rsync -a "$REPO_ROOT/VERSION" "$SOURCE/VERSION"
+  rsync -a --delete "$REPO_ROOT/assets/" "$SOURCE/assets/"
+  rsync -a --delete --exclude "__pycache__/" "$REPO_ROOT/hooks/" "$SOURCE/hooks/"
+  rsync -a --delete --exclude "tests/" --exclude "__pycache__/" "$REPO_ROOT/skills/" "$SOURCE/skills/"
+  rsync -a --delete --exclude "tests/" --exclude "__pycache__/" "$REPO_ROOT/tools/" "$SOURCE/tools/"
+  rsync -a "$REPO_ROOT/scripts/lib/shim-version-check.sh" "$SOURCE/scripts/lib/shim-version-check.sh"
+}
+
 run() {
   if [[ "$DRY_RUN" -eq 1 ]]; then
     printf '+ %q' "$@"
@@ -79,6 +95,8 @@ echo "Publishing $PLUGIN@$MARKETPLACE version $VERSION"
 echo "Source: $SOURCE"
 echo "Cache:  $CACHE_DIR"
 echo "Current: $CURRENT_DIR"
+
+materialize_embedded_payload
 
 if [[ "$SKIP_CODEX_ADD" -eq 0 ]]; then
   command -v codex >/dev/null || { echo "ERROR: codex CLI not found" >&2; exit 1; }

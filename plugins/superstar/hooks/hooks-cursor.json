@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "hooks": {
+    "sessionStart": [
+      {
+        "command": "./hooks/run-hook.cmd session-start"
+      }
+    ],
+    "stop": [
+      {
+        "command": "./hooks/run-hook.cmd agent-finished"
+      }
+    ],
+    "subagentStop": [
+      {
+        "command": "./hooks/run-hook.cmd agent-finished"
+      }
+    ]
+  }
+}
