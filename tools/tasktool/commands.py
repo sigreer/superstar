@@ -48,7 +48,11 @@ from tasktool.artifacts import (
 from tasktool.ids import split_qualified, kind_of, is_slice_id, parse_id
 from tasktool.migrate import apply_deltas, compute_deltas, render_diff
 from tasktool.reviewer_gate import check_gate, GateError, GatePass
-from tasktool.notify import notify_tasktool_status
+from tasktool.notify import (
+    notify_tasktool_artifact,
+    notify_tasktool_status,
+    notify_tasktool_workflow_step,
+)
 from tasktool.worktree import (
     AuthorityError,
     find_authoritative_root,
@@ -199,6 +203,32 @@ def _notify_status(*, qid: str, kind: str, status: Status, title: str) -> None:
             work_id=qid,
             kind=kind,
             status=status.value,
+            title=title,
+        )
+    except Exception:
+        pass
+
+def _notify_artifact(
+    *, qid: str, kind: str, artifact_kind: ArtifactKind, title: str
+) -> None:
+    if artifact_kind not in {ArtifactKind.SPEC, ArtifactKind.PLAN}:
+        return
+    try:
+        notify_tasktool_artifact(
+            work_id=qid,
+            kind=kind,
+            artifact_kind=artifact_kind.value,
+            title=title,
+        )
+    except Exception:
+        pass
+
+def _notify_workflow_step(*, qid: str, kind: str, step: str, title: str) -> None:
+    try:
+        notify_tasktool_workflow_step(
+            work_id=qid,
+            kind=kind,
+            step=step,
             title=title,
         )
     except Exception:
@@ -1042,6 +1072,7 @@ def cmd_set(
         qid, _container, item = _find_item(p, id)
         _refuse_if_cancelled(qid, item, "set")
         kind = parse_id(qid)[0]
+        workflow_step_notification: str | None = None
 
         if status is not None:
             new_status = Status(status)
@@ -1064,6 +1095,8 @@ def cmd_set(
                 item.closed = _today()
 
         if workflow_step is not None:
+            previous_step = getattr(item, "workflow_step", None)
+            step_changed = previous_step is None or previous_step.value != workflow_step
             if kind == "slice":
                 item.workflow_step = SliceWorkflowStep(workflow_step)
                 # Step change clears the slice review block.
@@ -1071,6 +1104,8 @@ def cmd_set(
                 item.review_stage = None
             elif kind == "phase":
                 item.workflow_step = PhaseWorkflowStep(workflow_step)
+            if step_changed:
+                workflow_step_notification = workflow_step
         elif clear_workflow_step:
             item.workflow_step = None
             if kind == "slice":
@@ -1085,6 +1120,13 @@ def cmd_set(
             item.review_stage = ReviewStage(review_stage)
 
         _save(write_root, p)
+        if workflow_step_notification is not None:
+            _notify_workflow_step(
+                qid=qid,
+                kind=kind,
+                step=workflow_step_notification,
+                title=item.title,
+            )
         if status is not None:
             _notify_status(qid=qid, kind=kind, status=item.status, title=item.title)
 
@@ -1349,6 +1391,8 @@ def cmd_artifact_add(
         _save(write_root, p)
         if artifact.exists_in_write_root:
             _git_stage_rel(write_root, artifact.relative_path)
+        if added and artifact.exists_in_write_root:
+            _notify_artifact(qid=qid, kind=parse_id(qid)[0], artifact_kind=artifact.kind, title=item.title)
         state = "added" if added else "already present"
         print(f"{qid}: {state} {artifact.relative_path}")
 

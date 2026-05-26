@@ -47,6 +47,42 @@ class NotifyTests(unittest.TestCase):
         self.assertEqual(event["status"], "cancelled")
         self.assertEqual(event["message"], "P1.S2 cancelled: Abandoned slice")
 
+    def test_tasktool_artifact_dry_run_writes_spec_written_message(self):
+        with tempfile.TemporaryDirectory() as td:
+            log = Path(td) / "notify.jsonl"
+            with patch.dict(
+                os.environ,
+                {"SUPERSTAR_NOTIFY_DISABLE": "0", "SUPERSTAR_NOTIFY_DRY_RUN": "1", "SUPERSTAR_NOTIFY_LOG": str(log)},
+            ):
+                notify.notify_tasktool_artifact(
+                    work_id="X1",
+                    kind="cross",
+                    artifact_kind="spec",
+                    title="Artifact work",
+                )
+            event = json.loads(log.read_text(encoding="utf-8"))
+        self.assertEqual(event["type"], "tasktool-artifact")
+        self.assertEqual(event["artifact_kind"], "spec")
+        self.assertEqual(event["message"], "X1 spec written: Artifact work")
+
+    def test_tasktool_workflow_step_dry_run_writes_progress_message(self):
+        with tempfile.TemporaryDirectory() as td:
+            log = Path(td) / "notify.jsonl"
+            with patch.dict(
+                os.environ,
+                {"SUPERSTAR_NOTIFY_DISABLE": "0", "SUPERSTAR_NOTIFY_DRY_RUN": "1", "SUPERSTAR_NOTIFY_LOG": str(log)},
+            ):
+                notify.notify_tasktool_workflow_step(
+                    work_id="P1.S2",
+                    kind="slice",
+                    step="spec",
+                    title="Queued slice",
+                )
+            event = json.loads(log.read_text(encoding="utf-8"))
+        self.assertEqual(event["type"], "tasktool-workflow-step")
+        self.assertEqual(event["step"], "spec")
+        self.assertEqual(event["message"], "P1.S2 progressed to spec step")
+
     def test_agent_ding_style_detects_codex(self):
         with tempfile.TemporaryDirectory() as td:
             log = Path(td) / "notify.jsonl"

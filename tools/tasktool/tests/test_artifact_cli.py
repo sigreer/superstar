@@ -20,6 +20,13 @@ def _tasktool(cwd: Path, *args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run([sys.executable, str(TOOL), *args], cwd=cwd, text=True, capture_output=True, env=env)
 
 
+def _tasktool_with_env(cwd: Path, extra_env: dict[str, str], *args: str) -> subprocess.CompletedProcess[str]:
+    env = os.environ.copy()
+    env.update(extra_env)
+    env["PYTHONPATH"] = str(Path(__file__).resolve().parents[2]) + os.pathsep + env.get("PYTHONPATH", "")
+    return subprocess.run([sys.executable, str(TOOL), *args], cwd=cwd, text=True, capture_output=True, env=env)
+
+
 def _repo(tmp_path: Path) -> Path:
     root = tmp_path / "repo"
     root.mkdir()
@@ -52,6 +59,119 @@ def test_artifact_add_registers_and_stages_spec(tmp_path: Path) -> None:
     status = _git(root, "status", "--porcelain").stdout
     assert "A  docs/specs/2026-05-21-X1-artifact-design.md" in status
     assert "M  docs/tasklist.json" in status
+
+
+def test_artifact_add_existing_spec_emits_written_notification(tmp_path: Path) -> None:
+    root = _repo(tmp_path)
+    spec = root / "docs" / "specs" / "2026-05-21-X1-artifact-design.md"
+    spec.parent.mkdir(parents=True)
+    spec.write_text("# spec\n", encoding="utf-8")
+    log = root / "notify.jsonl"
+
+    r = _tasktool_with_env(
+        root,
+        {
+            "SUPERSTAR_NOTIFY_DISABLE": "0",
+            "SUPERSTAR_NOTIFY_DRY_RUN": "1",
+            "SUPERSTAR_NOTIFY_LOG": str(log),
+        },
+        "artifact",
+        "add",
+        "X1",
+        "--kind",
+        "spec",
+        "--path",
+        str(spec.relative_to(root)),
+    )
+
+    assert r.returncode == 0, r.stdout + r.stderr
+    event = json.loads(log.read_text(encoding="utf-8"))
+    assert event["type"] == "tasktool-artifact"
+    assert event["message"] == "X1 spec written: Artifact work"
+
+
+def test_artifact_add_existing_cross_plan_emits_written_notification(tmp_path: Path) -> None:
+    root = _repo(tmp_path)
+    plan = root / "docs" / "plans" / "2026-05-21-X1-artifact.md"
+    plan.parent.mkdir(parents=True)
+    plan.write_text("# plan\n", encoding="utf-8")
+    log = root / "notify.jsonl"
+
+    r = _tasktool_with_env(
+        root,
+        {
+            "SUPERSTAR_NOTIFY_DISABLE": "0",
+            "SUPERSTAR_NOTIFY_DRY_RUN": "1",
+            "SUPERSTAR_NOTIFY_LOG": str(log),
+        },
+        "artifact",
+        "add",
+        "X1",
+        "--kind",
+        "plan",
+        "--path",
+        str(plan.relative_to(root)),
+    )
+
+    assert r.returncode == 0, r.stdout + r.stderr
+    event = json.loads(log.read_text(encoding="utf-8"))
+    assert event["type"] == "tasktool-artifact"
+    assert event["message"] == "X1 plan written: Artifact work"
+
+
+def test_artifact_add_existing_phase_plan_emits_written_notification(tmp_path: Path) -> None:
+    root = _repo(tmp_path)
+    assert _tasktool(root, "create", "phase", "--title", "Phase artifact").returncode == 0
+    plan = root / "docs" / "plans" / "2026-05-21-P1-artifact.md"
+    plan.parent.mkdir(parents=True)
+    plan.write_text("# plan\n", encoding="utf-8")
+    log = root / "notify.jsonl"
+
+    r = _tasktool_with_env(
+        root,
+        {
+            "SUPERSTAR_NOTIFY_DISABLE": "0",
+            "SUPERSTAR_NOTIFY_DRY_RUN": "1",
+            "SUPERSTAR_NOTIFY_LOG": str(log),
+        },
+        "artifact",
+        "add",
+        "P1",
+        "--kind",
+        "plan",
+        "--path",
+        str(plan.relative_to(root)),
+    )
+
+    assert r.returncode == 0, r.stdout + r.stderr
+    event = json.loads(log.read_text(encoding="utf-8"))
+    assert event["type"] == "tasktool-artifact"
+    assert event["message"] == "P1 plan written: Phase artifact"
+
+
+def test_artifact_add_allow_missing_does_not_emit_written_notification(tmp_path: Path) -> None:
+    root = _repo(tmp_path)
+    log = root / "notify.jsonl"
+
+    r = _tasktool_with_env(
+        root,
+        {
+            "SUPERSTAR_NOTIFY_DISABLE": "0",
+            "SUPERSTAR_NOTIFY_DRY_RUN": "1",
+            "SUPERSTAR_NOTIFY_LOG": str(log),
+        },
+        "artifact",
+        "add",
+        "X1",
+        "--kind",
+        "spec",
+        "--path",
+        "docs/specs/future.md",
+        "--allow-missing",
+    )
+
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert not log.exists()
 
 
 def test_artifact_add_allow_missing_registers_future_spec(tmp_path: Path) -> None:

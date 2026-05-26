@@ -1410,11 +1410,56 @@ def test_set_workflow_step_on_slice(tmp_project_with_p6_s1):
     assert s.workflow_step.value == "plan"
 
 
+def test_set_workflow_step_on_slice_emits_notification(tmp_project_with_p6_s1, monkeypatch):
+    p = tmp_project_with_p6_s1
+    calls = []
+    monkeypatch.setattr(commands, "notify_tasktool_workflow_step", lambda **kwargs: calls.append(kwargs))
+
+    commands.cmd_set(p, id="P6.S1", workflow_step="plan")
+
+    assert calls == [
+        {
+            "work_id": "P6.S1",
+            "kind": "slice",
+            "step": "plan",
+            "title": "t",
+        }
+    ]
+
+
 def test_set_workflow_step_on_phase(tmp_project_with_p6_s1):
     p = tmp_project_with_p6_s1
     commands.cmd_set(p, id="P6", workflow_step="ready")
     state = commands.load_project(p / "docs" / "tasklist.json")
     assert state.phases[0].workflow_step.value == "ready"
+
+
+def test_set_workflow_step_on_phase_emits_notification(tmp_project_with_p6_s1, monkeypatch):
+    p = tmp_project_with_p6_s1
+    calls = []
+    monkeypatch.setattr(commands, "notify_tasktool_workflow_step", lambda **kwargs: calls.append(kwargs))
+
+    commands.cmd_set(p, id="P6", workflow_step="ready")
+
+    assert calls == [
+        {
+            "work_id": "P6",
+            "kind": "phase",
+            "step": "ready",
+            "title": "t",
+        }
+    ]
+
+
+def test_set_same_workflow_step_does_not_emit_notification(tmp_project_with_p6_s1, monkeypatch):
+    p = tmp_project_with_p6_s1
+    commands.cmd_set(p, id="P6.S1", workflow_step="plan")
+    calls = []
+    monkeypatch.setattr(commands, "notify_tasktool_workflow_step", lambda **kwargs: calls.append(kwargs))
+
+    commands.cmd_set(p, id="P6.S1", workflow_step="plan")
+
+    assert calls == []
 
 
 def test_set_rejects_no_op_invocation(tmp_project_with_p6_s1):

@@ -192,6 +192,22 @@ def _agent_style() -> str:
 
 
 def _ding(style: str) -> bool:
+    # Prefer an explicit sound file before falling back to system sound-theme
+    # names. canberra-gtk-play resolves names like "complete"/"bell" against the
+    # active XDG sound theme (often freedesktop), which can be a harsh, piercing
+    # sample. Playing a known-good file directly avoids that. The path is
+    # existence-guarded, so machines without it fall through to the theme logic.
+    # Override with SUPERSTAR_NOTIFY_DING_FILE.
+    preferred: list[str] = []
+    override = os.environ.get("SUPERSTAR_NOTIFY_DING_FILE")
+    if override:
+        preferred.append(override)
+    preferred.append("/usr/share/sounds/Enchanted/stereo/bell.ogg")
+    for filename in preferred:
+        path = Path(filename).expanduser()
+        if path.is_file() and _run_first([["paplay", str(path)]]):
+            return True
+
     sound_names = {
         "claude": ["complete", "bell"],
         "codex": ["message", "bell", "complete"],
@@ -454,6 +470,33 @@ def _tasktool_event(*, work_id: str, kind: str, status: str, title: str) -> dict
     }
 
 
+def _tasktool_artifact_event(
+    *, work_id: str, kind: str, artifact_kind: str, title: str
+) -> dict[str, str]:
+    message = f"{work_id} {artifact_kind} written: {title}"
+    return {
+        "type": "tasktool-artifact",
+        "id": work_id,
+        "kind": kind,
+        "artifact_kind": artifact_kind,
+        "title": title,
+        "message": message,
+    }
+
+
+def _tasktool_workflow_step_event(
+    *, work_id: str, kind: str, step: str, title: str
+) -> dict[str, str]:
+    return {
+        "type": "tasktool-workflow-step",
+        "id": work_id,
+        "kind": kind,
+        "step": step,
+        "title": title,
+        "message": f"{work_id} progressed to {step} step",
+    }
+
+
 def notify_tasktool_status(*, work_id: str, kind: str, status: str, title: str) -> None:
     if _disabled():
         return
@@ -464,10 +507,49 @@ def notify_tasktool_status(*, work_id: str, kind: str, status: str, title: str) 
     _ensure_worker()
 
 
+def notify_tasktool_artifact(
+    *, work_id: str, kind: str, artifact_kind: str, title: str
+) -> None:
+    if _disabled():
+        return
+    event = _tasktool_artifact_event(
+        work_id=work_id,
+        kind=kind,
+        artifact_kind=artifact_kind,
+        title=title,
+    )
+    if _dry_run(event):
+        return
+    _enqueue_event(event)
+    _ensure_worker()
+
+
+def notify_tasktool_workflow_step(
+    *, work_id: str, kind: str, step: str, title: str
+) -> None:
+    if _disabled():
+        return
+    event = _tasktool_workflow_step_event(
+        work_id=work_id,
+        kind=kind,
+        step=step,
+        title=title,
+    )
+    if _dry_run(event):
+        return
+    _enqueue_event(event)
+    _ensure_worker()
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     if not argv:
-        print("usage: notify.py agent-finished | tasktool-status ID KIND STATUS TITLE", file=sys.stderr)
+        print(
+            "usage: notify.py agent-finished | tasktool-status ID KIND STATUS TITLE | "
+            "tasktool-artifact ID KIND ARTIFACT_KIND TITLE | "
+            "tasktool-workflow-step ID KIND STEP TITLE",
+            file=sys.stderr,
+        )
         return 2
     command = argv.pop(0)
     if command == "agent-finished":
@@ -479,6 +561,25 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         work_id, kind, status, title = argv
         notify_tasktool_status(work_id=work_id, kind=kind, status=status, title=title)
+        return 0
+    if command == "tasktool-artifact":
+        if len(argv) != 4:
+            print("usage: notify.py tasktool-artifact ID KIND ARTIFACT_KIND TITLE", file=sys.stderr)
+            return 2
+        work_id, kind, artifact_kind, title = argv
+        notify_tasktool_artifact(
+            work_id=work_id,
+            kind=kind,
+            artifact_kind=artifact_kind,
+            title=title,
+        )
+        return 0
+    if command == "tasktool-workflow-step":
+        if len(argv) != 4:
+            print("usage: notify.py tasktool-workflow-step ID KIND STEP TITLE", file=sys.stderr)
+            return 2
+        work_id, kind, step, title = argv
+        notify_tasktool_workflow_step(work_id=work_id, kind=kind, step=step, title=title)
         return 0
     if command == "worker":
         _worker_loop()

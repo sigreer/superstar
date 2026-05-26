@@ -65,6 +65,108 @@
       "archived_path": "docs/archived-tasks/X26-fix-codex-marketplace-payload-refresh-fo.md",
       "id": "X26",
       "title": "Fix Codex marketplace payload refresh for Superstar"
+    },
+    {
+      "archived_date": "2026-05-26",
+      "archived_path": "docs/archived-tasks/X1-default-external-review-prompt-transport.md",
+      "id": "X1",
+      "title": "Default external-review prompt transport to stdin"
+    },
+    {
+      "archived_date": "2026-05-26",
+      "archived_path": "docs/archived-tasks/X2-add-repo-local-tasktool-launcher.md",
+      "id": "X2",
+      "title": "Add repo-local tasktool launcher"
+    },
+    {
+      "archived_date": "2026-05-26",
+      "archived_path": "docs/archived-tasks/X3-spot-fix-parse-bold-external-review-verd.md",
+      "id": "X3",
+      "title": "Spot fix: parse bold external-review verdict headings"
+    },
+    {
+      "archived_date": "2026-05-26",
+      "archived_path": "docs/archived-tasks/X4-spot-fix-broaden-legacy-tasklist-importe.md",
+      "id": "X4",
+      "title": "Spot fix: broaden legacy tasklist importer compatibility"
+    },
+    {
+      "archived_date": "2026-05-26",
+      "archived_path": "docs/archived-tasks/X5-add-finished-agent-notification-hook.md",
+      "id": "X5",
+      "title": "Add finished-agent notification hook"
+    },
+    {
+      "archived_date": "2026-05-26",
+      "archived_path": "docs/archived-tasks/X6-fix-codex-finished-agent-hook-compatibil.md",
+      "id": "X6",
+      "title": "Fix Codex finished-agent hook compatibility"
+    },
+    {
+      "archived_date": "2026-05-26",
+      "archived_path": "docs/archived-tasks/X7-fix-superstar-codex-plugin-payload-versi.md",
+      "id": "X7",
+      "title": "Fix Superstar Codex plugin payload version drift"
+    },
+    {
+      "archived_date": "2026-05-26",
+      "archived_path": "docs/archived-tasks/X8-move-semantic-notifications-from-agent-h.md",
+      "id": "X8",
+      "title": "Move semantic notifications from agent hooks to tasktool status changes"
+    },
+    {
+      "archived_date": "2026-05-26",
+      "archived_path": "docs/archived-tasks/X9-coalesce-bursty-tasktool-audio-notificat.md",
+      "id": "X9",
+      "title": "Coalesce bursty tasktool audio notifications"
+    },
+    {
+      "archived_date": "2026-05-26",
+      "archived_path": "docs/archived-tasks/X10-harden-external-review-verdict-parser-an.md",
+      "id": "X10",
+      "title": "Harden external-review verdict parser and prompt against Claude formatting variants"
+    },
+    {
+      "archived_date": "2026-05-26",
+      "archived_path": "docs/archived-tasks/X11-make-external-review-bridge-global.md",
+      "id": "X11",
+      "title": "Make external-review bridge global"
+    },
+    {
+      "archived_date": "2026-05-26",
+      "archived_path": "docs/archived-tasks/X12-tasktool-require-authoritative-checkout-.md",
+      "id": "X12",
+      "title": "tasktool: require authoritative-checkout routing for mutations"
+    },
+    {
+      "archived_date": "2026-05-26",
+      "archived_path": "docs/archived-tasks/X13-fix-tasktool-close-repeated-refs-parsing.md",
+      "id": "X13",
+      "title": "Fix tasktool close repeated refs parsing"
+    },
+    {
+      "archived_date": "2026-05-26",
+      "archived_path": "docs/archived-tasks/X14-stabilize-local-claude-codex-plugin-curr.md",
+      "id": "X14",
+      "title": "Stabilize local Claude/Codex plugin current entrypoints"
+    },
+    {
+      "archived_date": "2026-05-26",
+      "archived_path": "docs/archived-tasks/X17-make-spec-and-plan-artifact-handling-tra.md",
+      "id": "X17",
+      "title": "Make spec and plan artifact handling transactional"
+    },
+    {
+      "archived_date": "2026-05-26",
+      "archived_path": "docs/archived-tasks/X27-add-tasktool-tts-for-workflow-artifacts-.md",
+      "id": "X27",
+      "title": "Add tasktool TTS for workflow artifacts and step changes"
+    },
+    {
+      "archived_date": "2026-05-26",
+      "archived_path": "docs/archived-tasks/X28-prefer-explicit-notification-ding-sound-.md",
+      "id": "X28",
+      "title": "Prefer explicit notification ding sound file"
     }
   ],
   "archived_phases": [
@@ -99,214 +201,7 @@
       "title": "Tasktool-owned worktree lifecycle & using-git-worktrees skill collapse"
     }
   ],
-  "cross_cutting": [
-    {
-      "closed": "2026-05-18",
-      "created": "2026-05-18",
-      "id": "X1",
-      "notes": "Changed external-review default prompt transport from argv to stdin so the bundled Codex reviewer-agent receives prompts via codex exec '-' and avoids argv length failures.",
-      "refs": [],
-      "started": null,
-      "status": "done",
-      "title": "Default external-review prompt transport to stdin"
-    },
-    {
-      "closed": "2026-05-18",
-      "created": "2026-05-18",
-      "id": "X2",
-      "notes": "Added repo-local tools/tasktool/tasktool launcher, updated tasklist/project-setup docs to prefer it, and taught the pre-commit hook to use the repo-local launcher before falling back to a global tasktool shim.",
-      "refs": [],
-      "started": null,
-      "status": "done",
-      "title": "Add repo-local tasktool launcher"
-    },
-    {
-      "closed": "2026-05-19",
-      "created": "2026-05-19",
-      "id": "X3",
-      "notes": "User-requested blocking spot fix completed outside the normal workflow for speed. External-review verdict parsing now accepts markdown-emphasized Overall Verdict headings such as **5. Overall Verdict** followed by ready/revise text.",
-      "refs": [
-        "skills/external-review/scripts/external-reviewer.py",
-        "skills/external-review/tests/test_heading_style_verdict.py"
-      ],
-      "started": null,
-      "status": "done",
-      "title": "Spot fix: parse bold external-review verdict headings"
-    },
-    {
-      "closed": "2026-05-19",
-      "created": "2026-05-19",
-      "id": "X4",
-      "notes": "User-requested blocking spot fix completed outside the normal workflow for speed. Legacy markdown import now accepts fully-qualified slice IDs and additional cross-cutting forms including tagged done items, blocked cross rows coerced to ready, and archived cross rows treated as done.",
-      "refs": [
-        "tools/tasktool/importer.py"
-      ],
-      "started": null,
-      "status": "done",
-      "title": "Spot fix: broaden legacy tasklist importer compatibility"
-    },
-    {
-      "closed": "2026-05-19",
-      "created": "2026-05-19",
-      "id": "X5",
-      "notes": "User-requested hook update completed outside the normal workflow for speed. Adds Stop/SubagentStop finished-agent notifications, milestone message derivation from final agent text/transcript payloads, Hypr TTS config reuse with OPENAI_API_KEY fallback, and non-TTS ding fallbacks.\nSuperseded by X8: final-text milestone parsing was removed; agent hooks now emit generic dings and semantic spoken notifications come from tasktool status changes.",
-      "refs": [
-        "hooks/agent-finished",
-        "hooks/hooks.json",
-        "hooks/hooks-cursor.json",
-        "tests/claude-code/test-agent-finished-hook.sh"
-      ],
-      "started": null,
-      "status": "done",
-      "title": "Add finished-agent notification hook"
-    },
-    {
-      "closed": "2026-05-19",
-      "created": "2026-05-19",
-      "id": "X6",
-      "notes": "Codex startup skips Stop/SubagentStop notification hooks when hooks.json uses async=true; fix should preserve finished-agent notification behavior while avoiding unsupported async hook registration in Codex.\nSet finished-agent Stop/SubagentStop hook registrations to async=false for Codex compatibility. The hook now backgrounds real notification playback internally so synchronous hook registration returns quickly while dry-run tests remain foreground and deterministic.",
-      "refs": [
-        "hooks/hooks.json",
-        "hooks/agent-finished",
-        "tests/claude-code/test-hook-config.sh",
-        "tests/claude-code/test-agent-finished-hook.sh"
-      ],
-      "started": null,
-      "status": "done",
-      "title": "Fix Codex finished-agent hook compatibility"
-    },
-    {
-      "closed": "2026-05-19",
-      "created": "2026-05-19",
-      "id": "X7",
-      "notes": "Codex reported superstar/6.0.0 because the installable local marketplace payload under plugins/superstar still declared version 6.0.0 and the version bump audit did not track that embedded manifest.\n\nBumped the embedded Codex plugin payload manifest to 6.0.1 and added it to the version bump check. Reinstalled superstar@superstar-dev, then rebuilt the 6.0.1 runtime cache as a materialized copy of this checkout with .agents excluded so Codex sees the full skills/hooks tree while codex plugin list still reports installed/enabled. Final probe shows cache version 6.0.1, skills/hooks present, and no async-hook warning.",
-      "refs": [
-        ".version-bump.json",
-        "plugins/superstar/.codex-plugin/plugin.json",
-        ".agents/plugins/marketplace.json",
-        "tests/codex-plugin-sync/test-version-drift.sh",
-        "tests/codex-plugin-sync/test-local-marketplace.sh"
-      ],
-      "started": null,
-      "status": "done",
-      "title": "Fix Superstar Codex plugin payload version drift"
-    },
-    {
-      "closed": "2026-05-19",
-      "created": "2026-05-19",
-      "id": "X8",
-      "notes": "Move semantic spoken notifications to tasktool status transitions for ready/in_progress/blocked/done. Keep agent Stop/SubagentStop hooks as generic completion dings only, with different sound styles for Claude and Codex.\nAgent Stop/SubagentStop hooks now emit generic harness-specific dings only. Semantic spoken notifications moved to tasktool status events for ready, in_progress, blocked, and done, including create, set, close, block, unblock, and archive-phase paths.",
-      "refs": [
-        "hooks/agent-finished",
-        "tools/tasktool/notify.py",
-        "tools/tasktool/commands.py",
-        "tools/tasktool/tests/test_notify.py",
-        "tools/tasktool/tests/test_commands.py",
-        "tools/tasktool/tests/conftest.py",
-        "tests/claude-code/test-agent-finished-hook.sh"
-      ],
-      "started": null,
-      "status": "done",
-      "title": "Move semantic notifications from agent hooks to tasktool status changes"
-    },
-    {
-      "closed": "2026-05-19",
-      "created": "2026-05-19",
-      "id": "X9",
-      "notes": "Rapid tasktool status changes currently spawn independent notifier processes, causing overlapping TTS/audio. Add a single-audio queue with at most three queued tasktool events; overflow should collapse to a single 'multiple other events' summary and drop further items.\nAdded a file-backed notification queue shared by agent dings and tasktool TTS. Only one worker drains audio at a time. Queue capacity is three pending events; overflow keeps the first two pending items and replaces the rest with a single 'Multiple other events' summary, dropping further burst items while the summary remains queued.",
-      "refs": [
-        "tools/tasktool/notify.py",
-        "tools/tasktool/tests/test_notify.py"
-      ],
-      "started": null,
-      "status": "done",
-      "title": "Coalesce bursty tasktool audio notifications"
-    },
-    {
-      "closed": "2026-05-20",
-      "created": "2026-05-20",
-      "id": "X10",
-      "notes": "",
-      "refs": [
-        "docs/specs/2026-05-20-X10-verdict-parser-claude-formatting-design.md",
-        "docs/reviewer/x10-verdict-parser-claude-formatting-design-spec",
-        "docs/plans/2026-05-20-X10-verdict-parser-claude-formatting.md"
-      ],
-      "started": null,
-      "status": "done",
-      "title": "Harden external-review verdict parser and prompt against Claude formatting variants"
-    },
-    {
-      "closed": "2026-05-20",
-      "created": "2026-05-20",
-      "id": "X11",
-      "notes": "",
-      "refs": [
-        "docs/specs/2026-05-20-X11-global-external-reviewer-bridge-design.md",
-        "docs/reviewer/x11-global-external-reviewer-bridge-design-spec",
-        "docs/plans/2026-05-20-X11-global-external-reviewer-bridge.md",
-        "docs/reviewer/x11-global-external-reviewer-bridge-plan",
-        "docs/handoffs/2026-05-20-X11-global-external-reviewer-bridge-prompt.md"
-      ],
-      "started": "2026-05-20",
-      "status": "done",
-      "title": "Make external-review bridge global"
-    },
-    {
-      "closed": "2026-05-20",
-      "created": "2026-05-20",
-      "id": "X12",
-      "notes": "",
-      "refs": [
-        "docs/specs/2026-05-20-X12-tasktool-require-authoritative-routing-design.md",
-        "docs/plans/2026-05-20-X12-tasktool-require-authoritative-routing.md"
-      ],
-      "started": "2026-05-20",
-      "status": "done",
-      "title": "tasktool: require authoritative-checkout routing for mutations"
-    },
-    {
-      "closed": "2026-05-20",
-      "created": "2026-05-20",
-      "id": "X13",
-      "notes": "Fixed tasktool close --refs parsing so repeated flags and comma-separated refs both record every path. Verified with focused red/green regressions and full tasktool test suite.",
-      "refs": [
-        "tools/tasktool/cli.py",
-        "tools/tasktool/tests/test_cli_integration.py",
-        "tools/tasktool/tests/test_worktree_authority.py"
-      ],
-      "started": "2026-05-20",
-      "status": "done",
-      "title": "Fix tasktool close repeated refs parsing"
-    },
-    {
-      "closed": "2026-05-20",
-      "created": "2026-05-20",
-      "id": "X14",
-      "notes": "Publish scripts now maintain materialized versioned and current plugin cache directories for Claude and Codex, rewrite hook commands to current/, and refresh the global external-reviewer shim so project-level scripts do not need updating after version bumps.\nImplemented stable materialized current/ entrypoints for local Claude and Codex plugin caches, updated external-reviewer shim installation to target current/, and verified Codex/Claude publish tests plus installer pytest and tasktool validate.",
-      "refs": [],
-      "started": "2026-05-20",
-      "status": "done",
-      "title": "Stabilize local Claude/Codex plugin current entrypoints"
-    },
-    {
-      "closed": "2026-05-21",
-      "created": "2026-05-21",
-      "id": "X17",
-      "notes": "Added transactional tasktool handling for spec/plan/handoff/reviewer artifacts.",
-      "refs": [
-        "docs/specs/2026-05-21-X17-transactional-spec-plan-artifacts-design.md",
-        "docs/reviewer/x17-transactional-spec-plan-artifacts-design-spec",
-        "docs/plans/2026-05-21-X17-transactional-spec-plan-artifacts.md",
-        "docs/reviewer/x17-transactional-spec-plan-artifacts-plan",
-        "docs/handoffs/2026-05-21-X17-transactional-spec-plan-artifacts-prompt.md",
-        "docs/reviewer/x17-transactional-spec-plan-artifacts-X17-post-slice/"
-      ],
-      "started": "2026-05-21",
-      "status": "done",
-      "title": "Make spec and plan artifact handling transactional"
-    }
-  ],
+  "cross_cutting": [],
   "last_reviewed": "2026-05-18",
   "north_star": "",
   "phases": [
