@@ -19,12 +19,7 @@
 # Bypass for genuine emergencies: `git commit --no-verify` and document the reason.
 set -e
 
-REPO_ROOT="$(git rev-parse --show-toplevel)"
-if [ -x "$REPO_ROOT/tools/tasktool/tasktool" ]; then
-  TASKTOOL="$REPO_ROOT/tools/tasktool/tasktool"
-else
-  TASKTOOL="tasktool"
-fi
+TASKTOOL="tasktool"
 
 STAGED="$(git diff --cached --name-only --diff-filter=ACMR)"
 

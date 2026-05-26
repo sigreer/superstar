@@ -31,6 +31,15 @@ def test_tasklist_discipline_documents_authority_and_start_workflow() -> None:
     assert "cancelled phases bypass" in text
 
 
+def test_active_skills_use_global_tasktool_shim_not_repo_local_launcher() -> None:
+    for skill in ["tasklist-discipline", "project-setup"]:
+        text = skill_text(skill)
+        assert "tools/tasktool/tasktool" not in text
+        assert "repo-local launcher" not in text
+        assert "repo-local tasktool" not in text
+        assert "project-scoped tasktool" not in text
+
+
 def test_subagent_driven_development_starts_slice_before_dispatch() -> None:
     text = skill_text("subagent-driven-development")
 

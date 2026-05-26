@@ -24,11 +24,11 @@ For each check the skill must report **status** (`present` / `missing` / `partia
 | # | Check                                                    | Pass criteria                                                          | Scaffold action                                                              |
 |---|----------------------------------------------------------|------------------------------------------------------------------------|------------------------------------------------------------------------------|
 | 0 | Local git repo                                           | `git rev-parse --is-inside-work-tree` succeeds.                        | `git init` before installing hooks or running git-backed verification.        |
-| 1 | `docs/tasklist.json`                                     | File exists and validates clean (`tools/tasktool/tasktool validate`, or `tasktool validate` when the global shim is installed). | Run `tools/tasktool/tasktool config init-authority --branch <main-branch>` first, then `tools/tasktool/tasktool init --project <name>`. |
-| 1a| `.tasktool/config.json` authoritative routing             | File exists with `tasklist.mutation_mode` set to `authoritative-checkout` for the repo's main branch. Missing or unconfigured authority is a setup precondition failure, the same as a missing tasklist. | `tools/tasktool/tasktool config init-authority --branch <main-branch>` from the authoritative checkout before `tasktool init`. |
+| 1 | `docs/tasklist.json`                                     | File exists and validates clean (`tasktool validate`). | Run `tasktool config init-authority --branch <main-branch>` first, then `tasktool init --project <name>`. |
+| 1a| `.tasktool/config.json` authoritative routing             | File exists with `tasklist.mutation_mode` set to `authoritative-checkout` for the repo's main branch. Missing or unconfigured authority is a setup precondition failure, the same as a missing tasklist. | `tasktool config init-authority --branch <main-branch>` from the authoritative checkout before `tasktool init`. |
 | 1b| `.git/hooks/pre-commit` (tasktool hook)                  | Tasktool hook installed (`grep -q 'tasktool-pre-commit-hook' .git/hooks/pre-commit`). | `bash tools/tasktool/install.sh --hook` (or the equivalent for non-superstar repos). |
-| 1c| Legacy `docs/TASKLIST.md` import decision                | If `docs/TASKLIST.md` exists, the user has explicitly chosen `tasktool import docs/TASKLIST.md --project <name>` or chosen to start with a new empty tracker. | Show `tools/tasktool/tasktool import docs/TASKLIST.md --dry-run --project <name>`, surface warnings, then ask whether to import, start empty, or stop. |
-| 1d| Implementation worktree location                         | `git check-ignore -q .worktrees/` succeeds **and** `tools/tasktool/tasktool worktree check-legacy --project <name>` exits 0 (no legacy directories). | Run `tools/tasktool/tasktool worktree ensure-gitignore` (idempotent; creates `.gitignore` if absent and appends `.worktrees/` only when missing). If `worktree check-legacy` reports any of `.claude/worktrees/`, `.codex/worktrees/`, or `~/.config/superstar/worktrees/<project>`, **warn** the user (do not delete). Removal is scheduled for the release after P5 ships. Do not create per-slice worktrees here; `[[using-git-worktrees]]` owns that. |
+| 1c| Legacy `docs/TASKLIST.md` import decision                | If `docs/TASKLIST.md` exists, the user has explicitly chosen `tasktool import docs/TASKLIST.md --project <name>` or chosen to start with a new empty tracker. | Show `tasktool import docs/TASKLIST.md --dry-run --project <name>`, surface warnings, then ask whether to import, start empty, or stop. |
+| 1d| Implementation worktree location                         | `git check-ignore -q .worktrees/` succeeds **and** `tasktool worktree check-legacy --project <name>` exits 0 (no legacy directories). | Run `tasktool worktree ensure-gitignore` (idempotent; creates `.gitignore` if absent and appends `.worktrees/` only when missing). If `worktree check-legacy` reports any of `.claude/worktrees/`, `.codex/worktrees/`, or `~/.config/superstar/worktrees/<project>`, **warn** the user (do not delete). Removal is scheduled for the release after P5 ships. Do not create per-slice worktrees here; `[[using-git-worktrees]]` owns that. |
 | 2 | `docs/specs/` directory                                  | Directory exists.                                                      | `mkdir -p docs/specs` and add a `.gitkeep`.                                  |
 | 3 | `docs/plans/` directory                                  | Directory exists.                                                      | `mkdir -p docs/plans` and add a `.gitkeep`.                                  |
 | 4 | `docs/handoffs/` directory                               | Directory exists.                                                      | `mkdir -p docs/handoffs` and add a `.gitkeep`.                               |
@@ -47,7 +47,7 @@ For each check the skill must report **status** (`present` / `missing` / `partia
 3. **Report findings.** Present the table to the user. Use the standard `present` / `missing` / `partial` language.
 4. **Offer scaffolding.** For each `missing` or `partial` item, ask the user whether to scaffold it. Allow "all", "none", or per-item selection.
 5. **Apply.** For each accepted item, run the scaffold action. Use `git add -N` (intent-to-add) on new empty files so `.gitkeep`s show up in `git status` but aren't auto-staged.
-6. **Verify.** Re-run the audit and confirm everything the user accepted is now `present`. Include `git check-ignore -q .worktrees/` in verification when the worktree-location row is accepted. Also re-run `tools/tasktool/tasktool worktree check-legacy --project <name>` and surface any reported paths so the operator can decide on manual removal. Print the new table.
+6. **Verify.** Re-run the audit and confirm everything the user accepted is now `present`. Include `git check-ignore -q .worktrees/` in verification when the worktree-location row is accepted. Also re-run `tasktool worktree check-legacy --project <name>` and surface any reported paths so the operator can decide on manual removal. Print the new table.
 7. **Run the setup boundary.** Follow "Setup boundary before implementation" below.
 8. **Report.** Summarise what was created, what was skipped, what must be committed or stashed before feature work, and what manual action (if any) is still required — e.g. installing the reviewer command, importing `docs/TASKLIST.md`, populating the north-star or first phase title via `tasktool create`.
 
@@ -61,19 +61,17 @@ After any accepted scaffold or legacy migration:
    - setup/migration (`docs/tasklist.json`, `.gitignore` worktree-ignore entries, `docs/specs/`, `docs/plans/`, `docs/handoffs/`, `docs/reviewer/`, `docs/archived-tasks/`, global `external-reviewer` shim installation, `.git/hooks/pre-commit`, `CLAUDE.md` / `AGENTS.md` / `GEMINI.md`, legacy `docs/superpowers/` moves);
    - feature implementation;
    - local noise or user-owned changes.
-2. Confirm `.tasktool/config.json` exists and names `authoritative-checkout` routing for the repo's main branch. If it is missing or lacks `tasklist.mutation_mode`, run `tools/tasktool/tasktool config init-authority --branch <main-branch>` from the authoritative checkout before any `tasktool init` or other mutating command.
-3. Run `tools/tasktool/tasktool validate` when the repo-local launcher exists, otherwise `tasktool validate`.
+2. Confirm `.tasktool/config.json` exists and names `authoritative-checkout` routing for the repo's main branch. If it is missing or lacks `tasklist.mutation_mode`, run `tasktool config init-authority --branch <main-branch>` from the authoritative checkout before any `tasktool init` or other mutating command.
+3. Run `tasktool validate`.
 4. If `docs/TASKLIST.md` exists, stop until the user chooses one path:
-   - import it with `tools/tasktool/tasktool import docs/TASKLIST.md --project <name>` after first showing `--dry-run` output;
+   - import it with `tasktool import docs/TASKLIST.md --project <name>` after first showing `--dry-run` output;
    - start with an empty tracker and leave/delete the legacy file by explicit user choice;
    - stop setup.
 5. If migration moved dated historical files into `docs/specs/` or `docs/plans/`, dry-run the orphan check before any commit:
    ```bash
-   TASKTOOL=tasktool
-   test -x tools/tasktool/tasktool && TASKTOOL=tools/tasktool/tasktool
    git diff --name-only --diff-filter=ACMR -- docs/specs docs/plans |
      grep -E '^docs/(specs|plans)/[0-9]{4}-[0-9]{2}-[0-9]{2}-' |
-     xargs -r "$TASKTOOL" validate --check-orphans
+     xargs -r tasktool validate --check-orphans
    ```
    If this fails, do not press on. Ask the user whether to import matching IDs, keep those historical docs outside orphan-checked paths, or defer tracking `docs/tasklist.json`.
 6. Stop at the boundary. Ask the user to choose one of:
@@ -194,7 +192,7 @@ Order rows by dependency: a row that scaffolds a directory must precede a row th
 
 ## Integration
 
-- `[[tasklist-discipline]]` — describes tasktool conventions; the CLI itself ships the canonical scaffold via `tools/tasktool/tasktool init`.
+- `[[tasklist-discipline]]` — describes tasktool conventions; the CLI itself ships the canonical scaffold via `tasktool init`.
 - `[[external-review]]` — provides the global bridge command contract and the `AGENT_REVIEWER_CMD` expectation.
 - `[[writing-plans]]` — relies on the `docs/specs/`, `docs/plans/`, `docs/handoffs/` tree.
 - `[[subagent-driven-development]]` — relies on `docs/reviewer/` for chain folders.

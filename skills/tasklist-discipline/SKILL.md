@@ -7,7 +7,7 @@ description: Use whenever planning, closing slices/phases, or referencing work i
 
 A `docs/tasklist.json` file is the canonical, top-level tracker for the project. It groups work into **phases**, **slices**, **tasks**, and **cross-cutting** items, each with a stable, never-renumbered ID. All mutations flow through `tasktool`; a pre-commit hook refuses non-canonical bytes, orphaned spec/plan filenames, and any commit that touches the legacy `docs/TASKLIST.md`.
 
-Prefer the repo-local launcher `tools/tasktool/tasktool` when it exists; it works from a fresh clone without installing a global shim. The global `tasktool` command is an optional convenience installed by `bash tools/tasktool/install.sh`. If neither is available, use `PYTHONPATH=tools python3 -m tasktool`.
+Use the global `tasktool` shim installed by `bash <active-superstar-checkout>/tools/tasktool/install.sh`. If `tasktool` is missing or reports a shim/source version mismatch, reinstall that shim from the active Superstar checkout before continuing.
 
 `.tasktool/config.json` must set `tasklist.mutation_mode` to `authoritative-checkout` for normal superstar work. Mutating commands route through the configured authoritative checkout instead of editing the local worktree's `docs/tasklist.json` directly. Treat that routing as the source of truth: run `tasktool` from the implementation worktree, let the tool acquire the shared lock and update the authoritative checkout, then continue from the same implementation worktree. If a mutating command reports that no authoritative-checkout routing is configured, stop and run `tasktool config init-authority --branch <main-branch>` from the authoritative checkout before retrying; use `tasktool config init-local` only for explicit local-only test fixtures or non-workflow throwaway repos.
 
@@ -53,36 +53,36 @@ Phase planning uses separate scheduling metadata. `planning_path` points at the 
 ## Daily commands
 
 ```sh
-tools/tasktool/tasktool brief <id>            # start-of-work primer for slice or phase
-tools/tasktool/tasktool show <id>             # full detail
-tools/tasktool/tasktool list --open           # everything ready / in_progress / blocked
-tools/tasktool/tasktool create slice <phase-id> --title "…"
-tools/tasktool/tasktool prepare existing <id> --plan path/to/plan.md
-tools/tasktool/tasktool artifact add <id> --kind spec --path path/to/spec.md
-tools/tasktool/tasktool artifact status <id> --strict
-tools/tasktool/tasktool artifact commit <id> --message "…"
-tools/tasktool/tasktool start <slice-id>      # lifecycle start + in_progress
-tools/tasktool/tasktool set <id> --status in_progress  # compatibility alias
-tools/tasktool/tasktool note <id> --append "…"
-tools/tasktool/tasktool ref <id> --add path/to/artifact
-tools/tasktool/tasktool block <slice-id> --on P2.S5
-tools/tasktool/tasktool deps <slice-id> --add P2.S1
-tools/tasktool/tasktool ratify <slice-id> --parallel-group bootstrap
-tools/tasktool/tasktool schedule <phase-id>
-tools/tasktool/tasktool ready-slices <phase-id>
-tools/tasktool/tasktool phase-status
-tools/tasktool/tasktool close <slice-id>      # enforces post-slice review gate
-tools/tasktool/tasktool close <x-id>          # closes and archives cross-cutting by default
-tools/tasktool/tasktool close <x-id> --no-archive
-tools/tasktool/tasktool cancel <id> --reason "<text>"           # terminate without shipping
-tools/tasktool/tasktool cancel <phase-id> --reason "…" --cascade  # cancel a phase + its open slices
-tools/tasktool/tasktool cancel <x-id> --reason "…" --no-archive   # keep cancelled X visible
-tools/tasktool/tasktool archive-cross <x-id>  # archive a done visible cross-cutting item
-tools/tasktool/tasktool archive-phase <phase-id>  # done phases require post-phase review; cancelled phases bypass it
-tools/tasktool/tasktool validate              # full validation
+tasktool brief <id>            # start-of-work primer for slice or phase
+tasktool show <id>             # full detail
+tasktool list --open           # everything ready / in_progress / blocked
+tasktool create slice <phase-id> --title "..."
+tasktool prepare existing <id> --plan path/to/plan.md
+tasktool artifact add <id> --kind spec --path path/to/spec.md
+tasktool artifact status <id> --strict
+tasktool artifact commit <id> --message "..."
+tasktool start <slice-id>      # lifecycle start + in_progress
+tasktool set <id> --status in_progress  # compatibility alias
+tasktool note <id> --append "..."
+tasktool ref <id> --add path/to/artifact
+tasktool block <slice-id> --on P2.S5
+tasktool deps <slice-id> --add P2.S1
+tasktool ratify <slice-id> --parallel-group bootstrap
+tasktool schedule <phase-id>
+tasktool ready-slices <phase-id>
+tasktool phase-status
+tasktool close <slice-id>      # enforces post-slice review gate
+tasktool close <x-id>          # closes and archives cross-cutting by default
+tasktool close <x-id> --no-archive
+tasktool cancel <id> --reason "<text>"           # terminate without shipping
+tasktool cancel <phase-id> --reason "..." --cascade  # cancel a phase + its open slices
+tasktool cancel <x-id> --reason "..." --no-archive   # keep cancelled X visible
+tasktool archive-cross <x-id>  # archive a done visible cross-cutting item
+tasktool archive-phase <phase-id>  # done phases require post-phase review; cancelled phases bypass it
+tasktool validate              # full validation
 ```
 
-Run `tools/tasktool/tasktool --help` (or `tools/tasktool/tasktool <cmd> --help`) for the full surface.
+Run `tasktool --help` (or `tasktool <cmd> --help`) for the full surface.
 
 ## Gating concepts (why the CLI refuses you)
 
@@ -109,7 +109,7 @@ If a raw edit is genuinely needed:
 
 ```sh
 TASKTOOL_RAW=1 $EDITOR docs/tasklist.json
-tools/tasktool/tasktool validate --normalise
+tasktool validate --normalise
 ```
 
 `--normalise` re-serialises the file through the canonical formatter so the pre-commit hook accepts it. There is no `tasktool edit --raw` subcommand by design — the friction keeps agents on the sanctioned commands.
@@ -118,10 +118,10 @@ tools/tasktool/tasktool validate --normalise
 
 | Scenario | Action |
 |----------|--------|
-| Incidental fix in the same area | `tools/tasktool/tasktool create task <slice-id> --title …` |
-| Real unit of work | `tools/tasktool/tasktool create slice <phase-id> --title …` (or `--follow-up <slice-id>` for a letter-suffix) |
+| Incidental fix in the same area | `tasktool create task <slice-id> --title ...` |
+| Real unit of work | `tasktool create slice <phase-id> --title ...` (or `--follow-up <slice-id>` for a letter-suffix) |
 | Bug surfaced by review | Inline task if cheap; follow-up slice if it deserves its own scope. |
-| Cross-cutting, unscheduled | `tools/tasktool/tasktool create cross --title …` |
+| Cross-cutting, unscheduled | `tasktool create cross --title ...` |
 
 Creating a new slice or X-item is allocation/tracking only. It does not authorize implementing that work in the current slice worktree. If the discovery is truly incidental to the active slice, add an in-slice task and keep going. If it is real follow-up work, record it and defer until the current slice closes, or create a separate isolated worktree for that follow-up after the current slice boundary is clean.
 
@@ -186,8 +186,8 @@ The external-reviewer script writes a small transient block (`review_active`, `r
 
 ## Integration
 
-- `[[writing-plans]]` — embeds slice IDs in plan filenames; calls `tools/tasktool/tasktool show <id>` for context.
-- `[[brainstorming]]` — allocates IDs via `tools/tasktool/tasktool create` before writing the spec.
+- `[[writing-plans]]` — embeds slice IDs in plan filenames; calls `tasktool show <id>` for context.
+- `[[brainstorming]]` — allocates IDs via `tasktool create` before writing the spec.
 - `[[external-review]]` — passes `docs/tasklist.json` (or `tasktool render` output) as `--context`.
-- `[[subagent-driven-development]]` — calls `tools/tasktool/tasktool close <slice-id>` at slice end and `tools/tasktool/tasktool archive-phase` at phase end.
+- `[[subagent-driven-development]]` — calls `tasktool close <slice-id>` at slice end and `tasktool archive-phase` at phase end.
 - `[[project-setup]]` — runs `tasktool init` and `install.sh --hook`.

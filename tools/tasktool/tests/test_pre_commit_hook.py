@@ -150,7 +150,7 @@ def test_hook_install_is_idempotent(tmp_path):
     r = subprocess.run(["bash", str(INSTALL), "--hook"], cwd=repo, capture_output=True, text=True, env=env)
     assert r.returncode == 0, r.stdout + r.stderr
 
-def test_hook_prefers_repo_local_tasktool_wrapper(tmp_path):
+def test_hook_uses_global_tasktool_even_when_repo_local_wrapper_exists(tmp_path):
     repo = tmp_path / "r"
     repo.mkdir()
     _git(repo, "init", "-q", "-b", "main")
@@ -164,21 +164,33 @@ def test_hook_prefers_repo_local_tasktool_wrapper(tmp_path):
     )
     wrapper = repo / "tools" / "tasktool" / "tasktool"
     wrapper.parent.mkdir(parents=True)
-    log = repo / "wrapper.log"
+    local_log = repo / "local-wrapper.log"
     wrapper.write_text(
         "#!/usr/bin/env sh\n"
-        f"printf '%s\\n' \"$*\" >> {log}\n"
-        "exit 0\n",
+        f"printf '%s\\n' \"$*\" >> {local_log}\n"
+        "exit 99\n",
         encoding="utf-8",
     )
     wrapper.chmod(0o755)
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    global_log = repo / "global-shim.log"
+    global_shim = bin_dir / "tasktool"
+    global_shim.write_text(
+        "#!/usr/bin/env sh\n"
+        f"printf '%s\\n' \"$*\" >> {global_log}\n"
+        "exit 0\n",
+        encoding="utf-8",
+    )
+    global_shim.chmod(0o755)
     _git(repo, "add", "docs/tasklist.json")
     subprocess.run(["bash", str(INSTALL), "--hook"], cwd=repo, check=True)
     env = os.environ.copy()
-    env["PATH"] = "/usr/bin:/bin"
+    env["PATH"] = f"{bin_dir}:/usr/bin:/bin"
     r = _git(repo, "commit", "-m", "init", check=False, env=env)
     assert r.returncode == 0, r.stdout + r.stderr
-    assert "--project-root" in log.read_text(encoding="utf-8")
+    assert "--project-root" in global_log.read_text(encoding="utf-8")
+    assert not local_log.exists()
 
 def test_staged_good_dirty_worktree_passes(tmp_path):
     """Stage canonical bytes, then dirty the worktree without re-staging.
