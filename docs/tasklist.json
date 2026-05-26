@@ -47,6 +47,12 @@
       "archived_path": "docs/archived-tasks/X23-document-cancelled-lifecycle-and-admin-c.md",
       "id": "X23",
       "title": "Document cancelled lifecycle and admin closeout guidance"
+    },
+    {
+      "archived_date": "2026-05-26",
+      "archived_path": "docs/archived-tasks/X24-use-global-tasktool-shim-in-superstar-gu.md",
+      "id": "X24",
+      "title": "Use global tasktool shim in Superstar guidance"
     }
   ],
   "archived_phases": [
