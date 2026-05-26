@@ -53,6 +53,12 @@
       "archived_path": "docs/archived-tasks/X24-use-global-tasktool-shim-in-superstar-gu.md",
       "id": "X24",
       "title": "Use global tasktool shim in Superstar guidance"
+    },
+    {
+      "archived_date": "2026-05-26",
+      "archived_path": "docs/archived-tasks/X25-duck-media-audio-during-tasktool-tts-and.md",
+      "id": "X25",
+      "title": "Duck media audio during tasktool TTS and verify Codex plugin payload"
     }
   ],
   "archived_phases": [

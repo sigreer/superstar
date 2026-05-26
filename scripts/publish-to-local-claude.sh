@@ -90,7 +90,7 @@ fi
 
 command -v rsync >/dev/null || { echo "ERROR: rsync not found" >&2; exit 1; }
 
-REQUIRED_PATHS="skills/using-superstar/SKILL.md:skills/project-setup/SKILL.md:skills/using-git-worktrees/SKILL.md:skills/external-review/scripts/external-reviewer.py:hooks/run-hook.cmd:hooks/agent-finished:hooks/todo-snapshot:tools/tasktool/notify.py:assets:VERSION"
+REQUIRED_PATHS="skills/using-superstar/SKILL.md:skills/project-setup/SKILL.md:skills/using-git-worktrees/SKILL.md:skills/external-review/scripts/external-reviewer.py:hooks/hooks.json:hooks/run-hook.cmd:hooks/agent-finished:hooks/todo-snapshot:tools/tasktool/notify.py:assets:VERSION"
 
 export EXTRA_RSYNC_ARGS="--exclude .git/ --exclude .worktrees/ --exclude .agents/ --exclude .pytest_cache/ --exclude __pycache__/ --exclude docs/reviewer/"
 

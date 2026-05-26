@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -129,3 +130,38 @@ class NotifyTests(unittest.TestCase):
                     notify._worker_loop()
 
         self.assertEqual(played, ["X1", "X2", "X3"])
+
+    def test_tts_ducks_and_restores_existing_sink_inputs(self):
+        pactl_output = """Sink Input #12
+\tMute: no
+\tVolume: front-left: 65536 / 100% / 0.00 dB,   front-right: 65536 / 100% / 0.00 dB
+"""
+        calls: list[list[str]] = []
+
+        def fake_run(command, **kwargs):
+            calls.append(command)
+            if command[:3] == ["pactl", "list", "sink-inputs"]:
+                return subprocess.CompletedProcess(command, 0, stdout=pactl_output)
+            if command[:2] == ["pactl", "set-sink-input-volume"]:
+                return subprocess.CompletedProcess(command, 0)
+            if command and command[0] == "curl":
+                return subprocess.CompletedProcess(command, 0, stdout=b"audio")
+            if command and command[0] == "mpv":
+                return subprocess.CompletedProcess(command, 0)
+            raise AssertionError(f"unexpected command: {command}")
+
+        with (
+            patch.object(
+                notify,
+                "_read_tts_config",
+                return_value={"api_key": "sk-test", "media_duck_percent": "35"},
+            ),
+            patch.object(notify.subprocess, "run", side_effect=fake_run),
+        ):
+            self.assertTrue(notify._tts("hello"))
+
+        self.assertIn(["pactl", "set-sink-input-volume", "12", "35%"], calls)
+        self.assertIn(["pactl", "set-sink-input-volume", "12", "100%"], calls)
+        mpv_calls = [call for call in calls if call and call[0] == "mpv"]
+        self.assertEqual(len(mpv_calls), 1)
+        self.assertIn("--audio-client-name=superstar-tasktool-tts", mpv_calls[0])

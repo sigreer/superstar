@@ -60,6 +60,7 @@ PARSE_HEADER() {
 # Globals populated by run_check
 EXIT_CODE=0
 declare -A SHIM_SOURCE_ROOTS=()
+DEPLOY_REQUIRED_PATHS="skills/using-superstar/SKILL.md:skills/project-setup/SKILL.md:skills/using-git-worktrees/SKILL.md:hooks/hooks.json:hooks/run-hook.cmd:hooks/agent-finished:hooks/todo-snapshot:tools/tasktool/notify.py:assets:VERSION"
 
 print_row() {
     printf '  %-22s %-14s %s\n' "$1" "$2" "$3"
@@ -235,6 +236,23 @@ check_cache() {
         return
     fi
 
+    local missing=()
+    local rel
+    IFS=":" read -r -a required_paths <<< "$DEPLOY_REQUIRED_PATHS"
+    for rel in "${required_paths[@]}"; do
+        [[ -z "$rel" ]] && continue
+        if [[ ! -e "$cache_dir/$rel" ]]; then
+            missing+=("$rel")
+        fi
+    done
+    if (( ${#missing[@]} > 0 )); then
+        status="INCOMPLETE_CACHE"
+        detail="$cache_dir missing ${missing[*]}"
+        EXIT_CODE=1
+        print_row "$name" "$status" "$detail"
+        return
+    fi
+
     status="OK"
     detail="v$cache_version dir=$cache_dir"
     print_row "$name" "$status" "$detail"
@@ -284,8 +302,10 @@ run_check() {
     if [[ -r "$SOURCE_ROOT/VERSION" ]]; then
         dev_version="$(tr -d '[:space:]' < "$SOURCE_ROOT/VERSION")"
     fi
-    check_cache "codex-cache" "${HOME}/.codex/plugins/cache/superstar-dev/superstar/current" "$dev_version" "$((1 - SKIP_CODEX))"
-    check_cache "claude-cache" "${HOME}/.claude/plugins/cache/superstar-dev/superstar/current" "$dev_version" "$((1 - SKIP_CLAUDE))"
+    check_cache "codex-current" "${HOME}/.codex/plugins/cache/superstar-dev/superstar/current" "$dev_version" "$((1 - SKIP_CODEX))"
+    check_cache "codex-version" "${HOME}/.codex/plugins/cache/superstar-dev/superstar/$dev_version" "$dev_version" "$((1 - SKIP_CODEX))"
+    check_cache "claude-current" "${HOME}/.claude/plugins/cache/superstar-dev/superstar/current" "$dev_version" "$((1 - SKIP_CLAUDE))"
+    check_cache "claude-version" "${HOME}/.claude/plugins/cache/superstar-dev/superstar/$dev_version" "$dev_version" "$((1 - SKIP_CLAUDE))"
 
     echo
     if (( EXIT_CODE == 0 )); then

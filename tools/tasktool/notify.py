@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -295,6 +296,73 @@ def _read_tts_config() -> dict[str, str]:
     return config
 
 
+def _tts_duck_percent(config: dict[str, str]) -> int:
+    raw = os.environ.get("SUPERSTAR_NOTIFY_DUCK_PERCENT") or config.get("media_duck_percent") or "35"
+    try:
+        value = int(float(str(raw)))
+    except (TypeError, ValueError):
+        return 35
+    return max(0, min(value, 150))
+
+
+def _snapshot_sink_inputs() -> list[tuple[str, str]]:
+    try:
+        result = subprocess.run(
+            ["pactl", "list", "sink-inputs"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            check=False,
+        )
+    except OSError:
+        return []
+    if result.returncode != 0:
+        return []
+
+    snapshots: list[tuple[str, str]] = []
+    for block in re.split(r"\n(?=Sink Input #)", result.stdout):
+        lines = block.splitlines()
+        if not lines:
+            continue
+        match = re.match(r"Sink Input #(\d+)", lines[0].strip())
+        if not match:
+            continue
+        if any(line.strip() == "Mute: yes" for line in lines):
+            continue
+        volume = None
+        for line in lines:
+            if line.lstrip().startswith("Volume:"):
+                percent = re.search(r"/\s*(\d+)%\s*/", line)
+                if percent:
+                    volume = percent.group(1)
+                    break
+        if volume is not None:
+            snapshots.append((match.group(1), volume))
+    return snapshots
+
+
+def _set_sink_input_volume(sink_input: str, percent: str | int) -> None:
+    try:
+        subprocess.run(
+            ["pactl", "set-sink-input-volume", sink_input, f"{percent}%"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
+    except OSError:
+        return
+
+
+def _duck_sink_inputs(snapshots: list[tuple[str, str]], percent: int) -> None:
+    for sink_input, _volume in snapshots:
+        _set_sink_input_volume(sink_input, percent)
+
+
+def _restore_sink_inputs(snapshots: list[tuple[str, str]]) -> None:
+    for sink_input, volume in snapshots:
+        _set_sink_input_volume(sink_input, volume)
+
+
 def _tts(message: str) -> bool:
     config = _read_tts_config()
     api_key = config.get("api_key") or os.environ.get("OPENAI_API_KEY")
@@ -335,17 +403,32 @@ def _tts(message: str) -> bool:
     if curl.returncode != 0 or not curl.stdout:
         return False
 
+    sink_inputs = _snapshot_sink_inputs()
+    if sink_inputs:
+        _duck_sink_inputs(sink_inputs, _tts_duck_percent(config))
     try:
-        mpv = subprocess.run(
-            ["mpv", "--no-video", "--really-quiet", "--cache=no", "-"],
-            input=curl.stdout,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            check=False,
-        )
-    except OSError:
-        return False
-    return mpv.returncode == 0
+        try:
+            mpv = subprocess.run(
+                [
+                    "mpv",
+                    "--no-video",
+                    "--really-quiet",
+                    "--cache=no",
+                    "--title=superstar-tasktool-tts",
+                    "--audio-client-name=superstar-tasktool-tts",
+                    "-",
+                ],
+                input=curl.stdout,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+            )
+        except OSError:
+            return False
+        return mpv.returncode == 0
+    finally:
+        if sink_inputs:
+            _restore_sink_inputs(sink_inputs)
 
 
 def notify_agent_finished() -> None:
