@@ -1749,3 +1749,53 @@ class SurfaceCommandTests(unittest.TestCase):
             self.assertIn("theme-tail-css", out)
         finally:
             t.cleanup()
+
+
+class CoordinateCommandTests(unittest.TestCase):
+    def _setup(self, t):
+        commands.cmd_init(repo_root=t.root, project="demo")
+        pid = commands.cmd_create_phase(repo_root=t.root, title="phase")
+        sid = commands.cmd_create_slice(repo_root=t.root, phase_id=pid, title="slice")
+        return pid, sid
+
+    def test_coordinate_sets_group(self):
+        t = _Tmp()
+        try:
+            pid, sid = self._setup(t)
+            commands.cmd_coordinate(repo_root=t.root, slice_id=f"{pid}.{sid}", group="cms")
+            p = load_project(t.root / "docs/tasklist.json")
+            self.assertEqual(p.phases[0].slices[0].coordination_group, "cms")
+        finally:
+            t.cleanup()
+
+    def test_coordinate_clear_resets_to_none(self):
+        t = _Tmp()
+        try:
+            pid, sid = self._setup(t)
+            commands.cmd_coordinate(repo_root=t.root, slice_id=f"{pid}.{sid}", group="cms")
+            commands.cmd_coordinate(repo_root=t.root, slice_id=f"{pid}.{sid}", clear=True)
+            p = load_project(t.root / "docs/tasklist.json")
+            self.assertIsNone(p.phases[0].slices[0].coordination_group)
+        finally:
+            t.cleanup()
+
+    def test_coordinate_requires_group_or_clear(self):
+        t = _Tmp()
+        try:
+            pid, sid = self._setup(t)
+            with self.assertRaises(commands.CommandError):
+                commands.cmd_coordinate(repo_root=t.root, slice_id=f"{pid}.{sid}")
+        finally:
+            t.cleanup()
+
+    def test_coordinate_refuses_cancelled_slice(self):
+        # A valid --group is passed so the flag-validation guard is satisfied and
+        # the cancelled-slice guard inside `_require_slice` is the thing under test.
+        t = _Tmp()
+        try:
+            pid, sid = self._setup(t)
+            commands.cmd_cancel(repo_root=t.root, id=f"{pid}.{sid}", reason="dropped")
+            with self.assertRaises(commands.CommandError):
+                commands.cmd_coordinate(repo_root=t.root, slice_id=f"{pid}.{sid}", group="cms")
+        finally:
+            t.cleanup()

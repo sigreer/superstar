@@ -1380,6 +1380,21 @@ def cmd_surface_list(*, repo_root: Path, phase_id: str | None) -> str:
         return "\n".join(lines) + "\n"
 
 
+def cmd_coordinate(
+    *, repo_root: Path, slice_id: str,
+    group: str | None = None, clear: bool = False,
+) -> None:
+    if clear and group is not None:
+        raise CommandError("coordinate: --group and --clear are mutually exclusive")
+    if not clear and (group is None or not group.strip()):
+        raise CommandError("coordinate requires --group <name> or --clear")
+    with _write_context(repo_root) as write_root:
+        p = _load(write_root)
+        _qid, item = _require_slice(p, slice_id, "coordinate")
+        item.coordination_group = None if clear else group.strip()
+        _save(write_root, p)
+
+
 def cmd_phase_planning_path(*, repo_root: Path, phase_id: str, path: str | None) -> None:
     with _write_context(repo_root) as write_root:
         p = _load(write_root)
