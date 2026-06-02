@@ -1411,6 +1411,27 @@ def _parse_resource_value(raw: str) -> tuple[str, str]:
     return resource, value
 
 
+def _phase_of_slice(p: Project, qid: str):
+    """Return the Phase containing the qualified slice id `qid`."""
+    phase_part, _slice_part, _ = split_qualified(qid)
+    return next((ph for ph in p.phases if ph.id == phase_part), None)
+
+
+def _phase_scope_holder(p: Project, phase, reserving_qid: str, resource: str, value: str):
+    """Return the qualified id of a non-cancelled slice in `phase` (other than the
+    reserving slice) that already holds `resource:value`, or None. Done slices count."""
+    for slc in phase.slices:
+        slc_qid = f"{phase.id}.{slc.id}"
+        if slc_qid == reserving_qid:
+            continue
+        if slc.status == Status.CANCELLED:
+            continue
+        for r in slc.reservations:
+            if r.resource == resource and r.value == value:
+                return slc_qid
+    return None
+
+
 def cmd_reserve_add(
     *, repo_root: Path, slice_id: str, resource_value: str,
     scope: str = "phase", note: str | None = None,
@@ -1422,7 +1443,27 @@ def cmd_reserve_add(
     with _write_context(repo_root) as write_root:
         p = _load(write_root)
         qid, item = _require_slice(p, slice_id, "reserve add")
-        # (collision refusal added in Task 5; happy path only for now)
+        # Idempotent: the same slice re-declaring the SAME (resource, value, scope)
+        # is a no-op. The scope MUST be part of the key — a slice may legitimately
+        # hold the same resource:value at both phase and project scope (only the
+        # project-scoped one is laddered), so a scope-blind check would wrongly
+        # suppress the second add.
+        if any(
+            r.resource == resource and r.value == value and r.scope == scope
+            for r in item.reservations
+        ):
+            return
+        phase = _phase_of_slice(p, qid)
+        holder = _phase_scope_holder(p, phase, qid, resource, value)
+        # project-scope holder check is added in Task 6.
+        if holder is not None and not force:
+            raise CommandError(
+                f"reserve add: {resource}:{value} is already reserved by {holder} "
+                f"in phase {phase.id}; use --force --reason \"...\" to override"
+            )
+        if force:
+            # --force handling (requires --reason) is added in Task 7.
+            pass
         item.reservations.append(
             Reservation(resource=resource, value=value, scope=scope, note=note)
         )
