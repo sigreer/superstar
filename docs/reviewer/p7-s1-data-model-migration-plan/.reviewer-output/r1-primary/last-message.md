@@ -1,0 +1,24 @@
+**Findings**
+F1 Severity: blocking. `reservations_ledger` is treated as “no production change expected” in migration, but the live migrator would handle it as a scalar list and can overwrite authoritative ledger entries during drift reconciliation. The plan says `migrate.py` should need no structural change ([docs/plans/2026-06-02-P7-S1-data-model-migration.md:642]( /home/simon/Dev/sigreer/skills/superstar/docs/plans/2026-06-02-P7-S1-data-model-migration.md:642), [docs/plans/2026-06-02-P7-S1-data-model-migration.md:712]( /home/simon/Dev/sigreer/skills/superstar/docs/plans/2026-06-02-P7-S1-data-model-migration.md:712)), but `_PROJECT_COLLECTIONS` currently excludes the new ledger ([migrate.py:20]( /home/simon/Dev/sigreer/skills/superstar/tools/tasktool/migrate.py:20)) and `_project_scalar_fields()` therefore classifies any new `Project` field not in that list as scalar ([migrate.py:100]( /home/simon/Dev/sigreer/skills/superstar/tools/tasktool/migrate.py:100)). Scalar deltas are applied by direct `setattr` ([migrate.py:247]( /home/simon/Dev/sigreer/skills/superstar/tools/tasktool/migrate.py:247)), so a stale local worktree with `reservations_ledger == []` could erase authoritative archived reservations. That violates the spec’s requirement that project-scoped reservations survive phase archival and preserve holder metadata for future refusals ([docs/specs/2026-06-02-P7-integration-surface-parallel-safety-design.md:112]( /home/simon/Dev/sigreer/skills/superstar/docs/specs/2026-06-02-P7-integration-surface-parallel-safety-design.md:112), [docs/specs/2026-06-02-P7-integration-surface-parallel-safety-design.md:170]( /home/simon/Dev/sigreer/skills/superstar/docs/specs/2026-06-02-P7-integration-surface-parallel-safety-design.md:170)). Add an explicit ledger merge policy and tests, likely keyed by `resource:value:scope:owner_id`.
+
+F2 Severity: important. The plan adds public model dataclasses but omits `tools/tasktool/__init__.py`. Existing package exports mirror the model dataclasses ([__init__.py:4]( /home/simon/Dev/sigreer/skills/superstar/tools/tasktool/__init__.py:4), [__init__.py:22]( /home/simon/Dev/sigreer/skills/superstar/tools/tasktool/__init__.py:22)), and `test_model.py` has a public API export test ([test_model.py:80]( /home/simon/Dev/sigreer/skills/superstar/tools/tasktool/tests/test_model.py:80)). Leaving `Reservation` / `LedgerReservation` out creates an inconsistent public API surface for the new value objects. Add `__init__.py` to the file structure/tasks and extend the public API test.
+
+F3 Severity: important. The schema acceptance gate can silently skip. The plan’s schema test skips if `jsonschema` is absent, then tells the implementer to `pip install jsonschema` ([docs/plans/2026-06-02-P7-S1-data-model-migration.md:533]( /home/simon/Dev/sigreer/skills/superstar/docs/plans/2026-06-02-P7-S1-data-model-migration.md:533), [docs/plans/2026-06-02-P7-S1-data-model-migration.md:570]( /home/simon/Dev/sigreer/skills/superstar/docs/plans/2026-06-02-P7-S1-data-model-migration.md:570)). That is not a reliable repo-local gate, especially in restricted/offline environments. If schema validation is acceptance-critical, either ensure `jsonschema` is a declared test dependency or make the plan require running the validation in an environment where the dependency is already available and record that evidence.
+
+**Open questions / assumptions**
+I assume `reservations_ledger` must be safe under authoritative-checkout drift reconciliation once S2 starts archiving project-scoped reservations. If the intended policy is “replace the whole ledger as scalar,” the spec should explicitly justify why stale local default ledgers cannot erase authoritative holders.
+
+**Suggested Document Edits**
+Add a migration subtask before Task 5’s tests: implement and test ledger-aware drift merging. At minimum, add a regression where authoritative has one ledger holder, local has none, `accept-local` preserves the authoritative holder; and another where local adds a distinct holder and the merged result contains both without duplicating the same `resource:value:scope:owner_id`.
+
+Add `tools/tasktool/__init__.py` to the File Structure table and a task/test step that exports `Reservation` and `LedgerReservation`.
+
+Replace the `pip install jsonschema` instruction with a concrete dependency/verification policy.
+
+**Verification Gaps / Commands**
+Run these after plan edits and implementation:
+`python -m pytest tools/tasktool/tests/test_migrate.py -q`
+`python -m pytest tools/tasktool/tests/test_model.py tools/tasktool/tests/test_serialize.py tools/tasktool/tests/test_schema_gen.py tools/tasktool/tests/test_v1_compat.py -q`
+`python -m pytest tools/tasktool/tests -q`
+
+Overall verdict: revise

@@ -1,0 +1,35 @@
+**Findings**
+
+F1 Severity: blocking. RESOLVED. The plan now explicitly treats `reservations_ledger` as merge-aware rather than scalar, adds a dedicated Task 5a, removes it from `_project_scalar_fields()`, preserves walker coverage, and requires regression tests for stale-local erasure, union of distinct holders, and dedupe by `resource:value:scope:owner_id` (`docs/plans/2026-06-02-P7-S1-data-model-migration.md:708`, `docs/plans/2026-06-02-P7-S1-data-model-migration.md:803`, `docs/plans/2026-06-02-P7-S1-data-model-migration.md:827`, `docs/plans/2026-06-02-P7-S1-data-model-migration.md:860`, `docs/plans/2026-06-02-P7-S1-data-model-migration.md:879`). This matches the spec requirement that project-scoped reservations survive phase archival and dedupe on owner-aware identity (`docs/specs/2026-06-02-P7-integration-surface-parallel-safety-design.md:112`, `docs/specs/2026-06-02-P7-integration-surface-parallel-safety-design.md:171`).
+
+F2 Severity: important. RESOLVED. The plan now includes `tools/tasktool/__init__.py` in the file structure and has a dedicated Task 1b to export `Reservation` and `LedgerReservation` and extend `test_all_exports_present` (`docs/plans/2026-06-02-P7-S1-data-model-migration.md:26`, `docs/plans/2026-06-02-P7-S1-data-model-migration.md:196`, `docs/plans/2026-06-02-P7-S1-data-model-migration.md:202`, `docs/plans/2026-06-02-P7-S1-data-model-migration.md:226`).
+
+F3 Severity: important. RESOLVED. The schema acceptance gate no longer depends on a conditional skip: Task 4 adds a `test_schema_admits_p7_fields` that imports `jsonschema` directly and explicitly says missing `jsonschema` is a hard error, not a skipped acceptance gate (`docs/plans/2026-06-02-P7-S1-data-model-migration.md:595`, `docs/plans/2026-06-02-P7-S1-data-model-migration.md:602`, `docs/plans/2026-06-02-P7-S1-data-model-migration.md:634`, `docs/plans/2026-06-02-P7-S1-data-model-migration.md:636`).
+
+F4 Severity: blocking. The plan misses two existing schema-version tests that will fail after `SCHEMA_VERSION` is bumped to 3. Task 1 appends a new `P7DataModelTests.test_schema_version_is_3` and then later runs the full model suite, but the existing `test_schema_version_is_2` remains in `tools/tasktool/tests/test_model.py:107`. Task 4 similarly appends `test_schema_version_const_is_3`, but the existing `test_schema_version_bumped_to_2` remains in `tools/tasktool/tests/test_schema_gen.py:108`. The plan only updates the stale v1 compat assertion (`docs/plans/2026-06-02-P7-S1-data-model-migration.md:1009`), so the claimed PASS gates at `docs/plans/2026-06-02-P7-S1-data-model-migration.md:241` and `docs/plans/2026-06-02-P7-S1-data-model-migration.md:692` are not executable as written.
+
+**Open questions / assumptions**
+
+I assume the intended migration behavior is that all direct assertions of the current schema version move from 2 to 3, while raw fixture inputs may still carry `schema_version: 2` for legacy-load coverage.
+
+**Suggested document edits**
+
+Add explicit steps to update or rename `tools/tasktool/tests/test_model.py::test_schema_version_is_2` to assert 3 during Task 1.
+
+Add explicit steps to update or rename `tools/tasktool/tests/test_schema_gen.py::test_schema_version_bumped_to_2` to assert schema const 3 during Task 4.
+
+Consider adding a quick `rg -n "schema_version.*2|SCHEMA_VERSION == 2|const.*2" tools/tasktool/tests` check before the final suite, with wording that fixture inputs can remain v2 but current-version assertions cannot.
+
+**Verification gaps / commands**
+
+Run these after the plan edits:
+
+`python -m pytest tools/tasktool/tests/test_model.py -q`
+
+`python -m pytest tools/tasktool/tests/test_schema_gen.py -q`
+
+`python -m pytest tools/tasktool/tests/test_migrate.py -q`
+
+`python -m pytest tools/tasktool/tests -q`
+
+Overall verdict: revise
