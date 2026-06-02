@@ -1,0 +1,35 @@
+1. Findings
+
+F1 — Severity: important — `Project.reservations_ledger` cannot support the refusal message the spec requires after a phase is archived.
+The model defines `Reservation = {resource, value, scope, note}` and `Project.reservations_ledger: list[Reservation]` ([spec](docs/specs/2026-06-02-P7-integration-surface-parallel-safety-design.md:92), [spec](docs/specs/2026-06-02-P7-integration-surface-parallel-safety-design.md:108)), but `reserve add` must name the holding slice on refusal ([spec](docs/specs/2026-06-02-P7-integration-surface-parallel-safety-design.md:138)). Once a phase is archived, the ledger no longer carries the owning phase/slice, so project-scope duplicate checks against the ledger cannot produce the specified message or audit trail. Add owner metadata, for example `owner_id`, `owner_phase_id`, `archived_date`, or define a distinct `LedgerReservation`.
+
+F2 — Severity: important — `worktree status --integration` lacks a specified source of truth for mapping base-branch commits back to sibling slices.
+The spec asks the command to report “which sibling slices closed/landed on base since `worktree_base_sha`” and whether they share surfaces ([spec](docs/specs/2026-06-02-P7-integration-surface-parallel-safety-design.md:177)). Current slice rows store lifecycle/worktree fields but no merge commit, landed commit, close-head SHA, or branch-pruned history ([model](tools/tasktool/model.py:75)). `closed` is a date, not proof that the slice landed on the base branch. Specify how implementation proves “landed”: record a `landed_base_sha`/`closed_head_sha`, require merge commit metadata, or explicitly document a weaker heuristic and its failure modes.
+
+F3 — Severity: important — The reservation override path is internally underspecified.
+The command synopsis for `reserve add` includes `--scope` and `--note`, but not `--force` or an override reason ([spec](docs/specs/2026-06-02-P7-integration-surface-parallel-safety-design.md:123)). Later text says `--force` overrides and records a timestamped note plus “the override reason” ([spec](docs/specs/2026-06-02-P7-integration-surface-parallel-safety-design.md:138)). This is not implementable as written: the CLI shape, required/optional reason, and whether both conflicting slice rows are mutated are unclear. Add the exact flags and persistence behavior.
+
+F4 — Severity: important — The reviewer-artifact section is not grounded enough to drive S8.
+The spec says “exact current naming is confirmed during planning” and guesses the conflict came from a shared or phase-level request path ([spec](docs/specs/2026-06-02-P7-integration-surface-parallel-safety-design.md:250)). But current external-review code already keys post-slice/post-phase chain folders by `work_id` ([external-reviewer.py](skills/external-review/scripts/external-reviewer.py:727)) and writes round/role-unique request files ([external-reviewer.py](skills/external-review/scripts/external-reviewer.py:1403)); it also requires `--work-id` for post-slice/post-phase ([external-reviewer.py](skills/external-review/scripts/external-reviewer.py:2439)). S8 needs the actual conflicting path pattern or current failing scenario before it can be planned or tested.
+
+F5 — Severity: minor — Serialization compatibility needs one explicit rule.
+Current serialization deliberately omits default-valued worktree/workflow keys so historical rows do not gain churn on round-trip ([serialize.py](tools/tasktool/serialize.py:12), [serialize.py](tools/tasktool/serialize.py:67), [test_serialize.py](tools/tasktool/tests/test_serialize.py:166)). The spec says new fields default empty/`None` and existing projects load unchanged ([spec](docs/specs/2026-06-02-P7-integration-surface-parallel-safety-design.md:112)), but does not say whether default `integration_surfaces: []`, `reservations: []`, `coordination_group: null`, and `worktree_base_sha: null` are emitted or omitted. State the canonical serialization rule to avoid noisy `docs/tasklist.json` rewrites.
+
+2. Open questions / assumptions
+
+- Should project-scope reservation history survive phase archive only for shipped `done` slices, or also for cancelled slices with `--force` overrides? The spec says non-cancelled in some places, but the ledger audit behavior should be explicit.
+- Is `worktree sync` intended to update `worktree_base_sha` after a successful merge/rebase? Without that, future integration checks may repeatedly report already-integrated base commits.
+
+3. Suggested document edits
+
+- Replace `Project.reservations_ledger: list[Reservation]` with a ledger entry type that includes owner and archive metadata.
+- Add `reserve add ... [--force --reason "..."]` to the CLI synopsis and define exactly which notes/fields are written.
+- Add a data-source subsection for `worktree status --integration`: base commit, landed sibling evidence, branch-pruned behavior, and whether sync advances the recorded base.
+- Replace §4.H’s “confirm during planning” language with the actual current path behavior and the concrete collision to fix, or defer S8 until that evidence exists.
+- Add a serialization compatibility note for omitting default new fields.
+
+4. Verification gaps / commands that should be run, if any
+
+I ran `tasktool validate --format json`; it returned `ok: true` with no warnings. Before planning, also run focused inspections/tests around `external-reviewer` path generation and worktree lifecycle once the spec clarifies the missing data model pieces.
+
+Overall verdict: revise

@@ -242,6 +242,20 @@
       "started": null,
       "status": "ready",
       "title": "Programmatic Workflow Enhancements"
+    },
+    {
+      "closed": null,
+      "created": "2026-06-02",
+      "id": "P7",
+      "notes": "",
+      "phase_reviewer_chain": "docs/reviewer/p7-integration-surface-parallel-safety-design-spec",
+      "plan_path": null,
+      "planning_path": null,
+      "slices": [],
+      "spec_path": "docs/specs/2026-06-02-P7-integration-surface-parallel-safety-design.md",
+      "started": null,
+      "status": "ready",
+      "title": "Integration-surface-aware parallel slice safety"
     }
   ],
   "project": "superstar",
