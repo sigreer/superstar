@@ -1507,6 +1507,33 @@ def cmd_reserve_add(
         _save(write_root, p)
 
 
+def cmd_reserve_remove(*, repo_root: Path, slice_id: str, resource_value: str) -> None:
+    resource, value = _parse_resource_value(resource_value)
+    with _write_context(repo_root) as write_root:
+        p = _load(write_root)
+        _qid, item = _require_slice(p, slice_id, "reserve remove")
+        item.reservations = [
+            r for r in item.reservations
+            if not (r.resource == resource and r.value == value)
+        ]
+        _save(write_root, p)
+
+
+def cmd_reserve_list(*, repo_root: Path, phase_id: str | None) -> str:
+    with _read_context(repo_root) as write_root:
+        p = _load(write_root)
+        if phase_id is not None and not any(ph.id == phase_id for ph in p.phases):
+            raise CommandError(f"phase {phase_id} not found")
+        lines: list[str] = []
+        for ph, slc in _iter_phase_slices(p, phase_id):
+            for r in slc.reservations:
+                note = f"  — {r.note}" if r.note else ""
+                lines.append(f"{ph.id}.{slc.id}  {r.resource}:{r.value}  [{r.scope}]{note}")
+        if not lines:
+            return "(no reservations)\n"
+        return "\n".join(lines) + "\n"
+
+
 def cmd_phase_planning_path(*, repo_root: Path, phase_id: str, path: str | None) -> None:
     with _write_context(repo_root) as write_root:
         p = _load(write_root)

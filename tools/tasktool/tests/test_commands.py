@@ -2069,3 +2069,85 @@ class ReserveCommandTests(unittest.TestCase):
                 )
         finally:
             t.cleanup()
+
+    def test_reserve_remove_drops_matching(self):
+        t = _Tmp()
+        try:
+            pid, (s0,) = self._phase(t, 1)
+            commands.cmd_reserve_add(
+                repo_root=t.root, slice_id=f"{pid}.{s0}",
+                resource_value="homepage-sort:15", scope="phase",
+            )
+            commands.cmd_reserve_remove(
+                repo_root=t.root, slice_id=f"{pid}.{s0}",
+                resource_value="homepage-sort:15",
+            )
+            p = load_project(t.root / "docs/tasklist.json")
+            self.assertEqual(p.phases[0].slices[0].reservations, [])
+        finally:
+            t.cleanup()
+
+    def test_reserve_remove_releases_slot_for_sibling(self):
+        t = _Tmp()
+        try:
+            pid, (s0, s1) = self._phase(t, 2)
+            commands.cmd_reserve_add(
+                repo_root=t.root, slice_id=f"{pid}.{s0}",
+                resource_value="homepage-sort:15", scope="phase",
+            )
+            commands.cmd_reserve_remove(
+                repo_root=t.root, slice_id=f"{pid}.{s0}",
+                resource_value="homepage-sort:15",
+            )
+            # slot freed → sibling may now claim it
+            commands.cmd_reserve_add(
+                repo_root=t.root, slice_id=f"{pid}.{s1}",
+                resource_value="homepage-sort:15", scope="phase",
+            )
+        finally:
+            t.cleanup()
+
+    def test_reserve_list_renders(self):
+        t = _Tmp()
+        try:
+            pid, (s0,) = self._phase(t, 1)
+            commands.cmd_reserve_add(
+                repo_root=t.root, slice_id=f"{pid}.{s0}",
+                resource_value="homepage-sort:15", scope="phase",
+            )
+            out = commands.cmd_reserve_list(repo_root=t.root, phase_id=pid)
+            self.assertIn(f"{pid}.{s0}", out)
+            self.assertIn("homepage-sort:15", out)
+            self.assertIn("phase", out)
+        finally:
+            t.cleanup()
+
+    def test_reserve_add_refuses_cancelled_slice(self):
+        t = _Tmp()
+        try:
+            pid, (s0,) = self._phase(t, 1)
+            commands.cmd_cancel(repo_root=t.root, id=f"{pid}.{s0}", reason="dropped")
+            with self.assertRaises(commands.CommandError):
+                commands.cmd_reserve_add(
+                    repo_root=t.root, slice_id=f"{pid}.{s0}",
+                    resource_value="homepage-sort:15", scope="phase",
+                )
+        finally:
+            t.cleanup()
+
+    def test_reserve_remove_refuses_cancelled_slice(self):
+        t = _Tmp()
+        try:
+            pid, (s0,) = self._phase(t, 1)
+            commands.cmd_reserve_add(
+                repo_root=t.root, slice_id=f"{pid}.{s0}",
+                resource_value="homepage-sort:15", scope="phase",
+            )
+            commands.cmd_cancel(repo_root=t.root, id=f"{pid}.{s0}", reason="dropped")
+            with self.assertRaises(commands.CommandError):
+                commands.cmd_reserve_remove(
+                    repo_root=t.root, slice_id=f"{pid}.{s0}",
+                    resource_value="homepage-sort:15",
+                )
+        finally:
+            t.cleanup()
