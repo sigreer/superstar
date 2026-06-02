@@ -1672,3 +1672,53 @@ def test_list_filter_workflow_step(tmp_project_with_p6_s1):
     assert any(row["id"] == "P6.S1" for row in json.loads(text))
     text_no = commands.cmd_list(repo_root=p, workflow_step="implement", format="json")
     assert not any(row["id"] == "P6.S1" for row in json.loads(text_no))
+
+
+class SurfaceCommandTests(unittest.TestCase):
+    def _setup_phase_with_slice(self, t):
+        commands.cmd_init(repo_root=t.root, project="demo")
+        pid = commands.cmd_create_phase(repo_root=t.root, title="phase")
+        sid = commands.cmd_create_slice(repo_root=t.root, phase_id=pid, title="slice")
+        return pid, sid
+
+    def test_surface_add_appends_unique_sorted(self):
+        t = _Tmp()
+        try:
+            pid, sid = self._setup_phase_with_slice(t)
+            commands.cmd_surface_add(
+                repo_root=t.root, slice_id=f"{pid}.{sid}",
+                surfaces=["cms-block-registry", "directus-schema", "cms-block-registry"],
+            )
+            p = load_project(t.root / "docs/tasklist.json")
+            slc = p.phases[0].slices[0]
+            self.assertEqual(slc.integration_surfaces, ["cms-block-registry", "directus-schema"])
+        finally:
+            t.cleanup()
+
+    def test_surface_remove_drops_one(self):
+        t = _Tmp()
+        try:
+            pid, sid = self._setup_phase_with_slice(t)
+            commands.cmd_surface_add(
+                repo_root=t.root, slice_id=f"{pid}.{sid}",
+                surfaces=["cms-block-registry", "directus-schema"],
+            )
+            commands.cmd_surface_remove(
+                repo_root=t.root, slice_id=f"{pid}.{sid}", surface="directus-schema",
+            )
+            p = load_project(t.root / "docs/tasklist.json")
+            self.assertEqual(p.phases[0].slices[0].integration_surfaces, ["cms-block-registry"])
+        finally:
+            t.cleanup()
+
+    def test_surface_add_refuses_cancelled_slice(self):
+        t = _Tmp()
+        try:
+            pid, sid = self._setup_phase_with_slice(t)
+            commands.cmd_cancel(repo_root=t.root, id=f"{pid}.{sid}", reason="dropped")
+            with self.assertRaises(commands.CommandError):
+                commands.cmd_surface_add(
+                    repo_root=t.root, slice_id=f"{pid}.{sid}", surfaces=["x"],
+                )
+        finally:
+            t.cleanup()

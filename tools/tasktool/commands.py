@@ -1319,6 +1319,44 @@ def cmd_ratify(
             item.parallel_group = parallel_group or None
         _save(write_root, p)
 
+
+# ───── surface / reserve / coordinate (P7.S2) ─────
+
+def _require_slice(p: Project, slice_id: str, verb: str):
+    """Resolve `slice_id` to a slice row, refusing non-slice ids and cancelled rows.
+    Returns (qid, item)."""
+    qid, _container, item = _find_item(p, slice_id)
+    if parse_id(qid)[0] != "slice":
+        raise CommandError(f"{verb} only works on slices; {qid} is a {parse_id(qid)[0]}")
+    _refuse_if_cancelled(qid, item, verb)
+    return qid, item
+
+
+def cmd_surface_add(*, repo_root: Path, slice_id: str, surfaces: list[str]) -> None:
+    cleaned = [s.strip() for s in surfaces if s and s.strip()]
+    if not cleaned:
+        raise CommandError("surface add requires at least one non-empty surface")
+    with _write_context(repo_root) as write_root:
+        p = _load(write_root)
+        _qid, item = _require_slice(p, slice_id, "surface add")
+        for s in cleaned:
+            if s not in item.integration_surfaces:
+                item.integration_surfaces.append(s)
+        _save(write_root, p)
+
+
+def cmd_surface_remove(*, repo_root: Path, slice_id: str, surface: str) -> None:
+    surface = (surface or "").strip()
+    if not surface:
+        raise CommandError("surface remove requires a non-empty surface")
+    with _write_context(repo_root) as write_root:
+        p = _load(write_root)
+        _qid, item = _require_slice(p, slice_id, "surface remove")
+        if surface in item.integration_surfaces:
+            item.integration_surfaces.remove(surface)
+        _save(write_root, p)
+
+
 def cmd_phase_planning_path(*, repo_root: Path, phase_id: str, path: str | None) -> None:
     with _write_context(repo_root) as write_root:
         p = _load(write_root)
