@@ -1799,3 +1799,44 @@ class CoordinateCommandTests(unittest.TestCase):
                 commands.cmd_coordinate(repo_root=t.root, slice_id=f"{pid}.{sid}", group="cms")
         finally:
             t.cleanup()
+
+
+class ReserveCommandTests(unittest.TestCase):
+    def _phase(self, t, n_slices=1):
+        commands.cmd_init(repo_root=t.root, project="demo")
+        pid = commands.cmd_create_phase(repo_root=t.root, title="phase")
+        sids = [
+            commands.cmd_create_slice(repo_root=t.root, phase_id=pid, title=f"slice{i}")
+            for i in range(n_slices)
+        ]
+        return pid, sids
+
+    def test_reserve_add_records_reservation(self):
+        t = _Tmp()
+        try:
+            pid, (sid,) = self._phase(t, 1)
+            commands.cmd_reserve_add(
+                repo_root=t.root, slice_id=f"{pid}.{sid}",
+                resource_value="homepage-sort:15", scope="phase", note="hero band",
+            )
+            p = load_project(t.root / "docs/tasklist.json")
+            res = p.phases[0].slices[0].reservations
+            self.assertEqual(len(res), 1)
+            self.assertEqual(res[0].resource, "homepage-sort")
+            self.assertEqual(res[0].value, "15")
+            self.assertEqual(res[0].scope, "phase")
+            self.assertEqual(res[0].note, "hero band")
+        finally:
+            t.cleanup()
+
+    def test_reserve_add_rejects_malformed_resource_value(self):
+        t = _Tmp()
+        try:
+            pid, (sid,) = self._phase(t, 1)
+            with self.assertRaises(commands.CommandError):
+                commands.cmd_reserve_add(
+                    repo_root=t.root, slice_id=f"{pid}.{sid}",
+                    resource_value="no-colon-here", scope="phase",
+                )
+        finally:
+            t.cleanup()

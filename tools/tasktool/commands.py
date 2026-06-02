@@ -19,6 +19,7 @@ from tasktool.model import (
     ArchivedCrossCutting,
     Project, Phase, Slice, Task, CrossCutting, BlockedOn, Status, PlanningStatus,
     SliceWorkflowStep, PhaseWorkflowStep, ReviewStage,
+    Reservation, LedgerReservation,
     is_terminal,
 )
 from tasktool.serialize import load_project, save_project
@@ -1392,6 +1393,39 @@ def cmd_coordinate(
         p = _load(write_root)
         _qid, item = _require_slice(p, slice_id, "coordinate")
         item.coordination_group = None if clear else group.strip()
+        _save(write_root, p)
+
+
+def _parse_resource_value(raw: str) -> tuple[str, str]:
+    """Split `<resource>:<value>` on the FIRST colon. Both halves must be non-empty."""
+    if ":" not in raw:
+        raise CommandError(
+            f"reservation must be <resource>:<value>, got {raw!r}"
+        )
+    resource, value = raw.split(":", 1)
+    resource, value = resource.strip(), value.strip()
+    if not resource or not value:
+        raise CommandError(
+            f"reservation must be <resource>:<value> with non-empty halves, got {raw!r}"
+        )
+    return resource, value
+
+
+def cmd_reserve_add(
+    *, repo_root: Path, slice_id: str, resource_value: str,
+    scope: str = "phase", note: str | None = None,
+    force: bool = False, reason: str | None = None,
+) -> None:
+    if scope not in ("phase", "project"):
+        raise CommandError(f"reserve add: --scope must be phase or project, got {scope!r}")
+    resource, value = _parse_resource_value(resource_value)
+    with _write_context(repo_root) as write_root:
+        p = _load(write_root)
+        qid, item = _require_slice(p, slice_id, "reserve add")
+        # (collision refusal added in Task 5; happy path only for now)
+        item.reservations.append(
+            Reservation(resource=resource, value=value, scope=scope, note=note)
+        )
         _save(write_root, p)
 
 
