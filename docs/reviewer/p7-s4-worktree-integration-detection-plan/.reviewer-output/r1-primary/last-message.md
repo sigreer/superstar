@@ -1,0 +1,31 @@
+1. Findings
+
+F1 Severity: important  
+[docs/plans/2026-06-02-P7-S4-worktree-integration-detection.md:48](/home/simon/Dev/sigreer/skills/superstar/docs/plans/2026-06-02-P7-S4-worktree-integration-detection.md:48)-[52](/home/simon/Dev/sigreer/skills/superstar/docs/plans/2026-06-02-P7-S4-worktree-integration-detection.md:52) says the required initial `tasktool start P7.S4` is expected to record `worktree_base_sha`, but current code cannot do that yet. The current `_apply_start_default` creates and records only path/branch/in-place fields ([tools/tasktool/commands.py:935](/home/simon/Dev/sigreer/skills/superstar/tools/tasktool/commands.py:935)-[1001](/home/simon/Dev/sigreer/skills/superstar/tools/tasktool/commands.py:1001)). This also undermines the dogfood checkpoint at [docs/plans/2026-06-02-P7-S4-worktree-integration-detection.md:1110](/home/simon/Dev/sigreer/skills/superstar/docs/plans/2026-06-02-P7-S4-worktree-integration-detection.md:1110)-[1112](/home/simon/Dev/sigreer/skills/superstar/docs/plans/2026-06-02-P7-S4-worktree-integration-detection.md:1112), because the slice’s own row will likely have no base SHA and the plan explicitly preserves idempotent re-start without recomputing it at [docs/plans/2026-06-02-P7-S4-worktree-integration-detection.md:1129](/home/simon/Dev/sigreer/skills/superstar/docs/plans/2026-06-02-P7-S4-worktree-integration-detection.md:1129). The plan should either change the Task 1 expected result to “no base SHA yet” and adjust 11.7 accordingly, or add a concrete backfill/canary path after the feature exists.
+
+F2 Severity: important  
+The ancestry fallback does not implement the spec’s “since `worktree_base_sha`” window. The spec requires a sibling to count only when its branch merged into `worktree_base_sha..base-HEAD` ([docs/specs/2026-06-02-P7-integration-surface-parallel-safety-design.md:245](/home/simon/Dev/sigreer/skills/superstar/docs/specs/2026-06-02-P7-integration-surface-parallel-safety-design.md:245)-[247](/home/simon/Dev/sigreer/skills/superstar/docs/specs/2026-06-02-P7-integration-surface-parallel-safety-design.md:247)). The planned helper reports ancestry as landed whenever `branch_is_merged(... into=base_head)` is true ([docs/plans/2026-06-02-P7-S4-worktree-integration-detection.md:832](/home/simon/Dev/sigreer/skills/superstar/docs/plans/2026-06-02-P7-S4-worktree-integration-detection.md:832)-[836](/home/simon/Dev/sigreer/skills/superstar/docs/plans/2026-06-02-P7-S4-worktree-integration-detection.md:836)); current `branch_is_merged` only checks ancestor reachability to `into` ([tools/tasktool/worktree.py:182](/home/simon/Dev/sigreer/skills/superstar/tools/tasktool/worktree.py:182)-[185](/home/simon/Dev/sigreer/skills/superstar/tools/tasktool/worktree.py:185)). That will over-report a done sibling whose branch was already merged before this worktree branched. Add a negative test for “ancestry branch already ancestor of `worktree_base_sha`” and gate fallback with the same half-open range semantics, e.g. branch tip reachable from `base_head` and not reachable from `base_sha`.
+
+F3 Severity: minor  
+[docs/plans/2026-06-02-P7-S4-worktree-integration-detection.md:23](/home/simon/Dev/sigreer/skills/superstar/docs/plans/2026-06-02-P7-S4-worktree-integration-detection.md:23) describes `rev_list_count(root, range_expr)` / `rev_list_shas(root, range_expr)`, but the task implementation and tests define `rev_list_count(root, base, head)` and `rev_list_shas(root, base, head)` ([docs/plans/2026-06-02-P7-S4-worktree-integration-detection.md:175](/home/simon/Dev/sigreer/skills/superstar/docs/plans/2026-06-02-P7-S4-worktree-integration-detection.md:175)-[182](/home/simon/Dev/sigreer/skills/superstar/docs/plans/2026-06-02-P7-S4-worktree-integration-detection.md:182)). Fix the file-structure table to avoid implementer drift.
+
+2. Open questions / assumptions
+
+Assumption: S1 lands before S4 implementation starts, so model/serialization fields exist and this plan should not patch `model.py`, `serialize.py`, or migration code. That matches the tracker dependency on `P7.S1`.
+
+3. Suggested document edits
+
+- In Task 1.1, state that current `start` will not yet record `worktree_base_sha`, or add a specific post-Task-2 backfill/canary instruction.
+- In Task 9, add a pre-window ancestry negative test and update `_sibling_landed_signal` to exclude branch tips already reachable from `worktree_base_sha`.
+- Align the helper signatures in the file-structure table with the later task code.
+
+4. Verification gaps / commands that should be run
+
+The plan’s command set is broadly good. Add one focused test command for the new ancestry negative case, then keep the existing full gate:
+
+```sh
+python -m pytest tools/tasktool/tests/test_worktree_integration.py -q
+python -m pytest tools/tasktool/tests -q
+```
+
+Overall verdict: revise

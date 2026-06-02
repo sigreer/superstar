@@ -327,20 +327,20 @@
           ],
           "id": "S4",
           "notes": "Spec §4.D. Surfaces: commands, worktree. Record worktree_base_sha on start; stamp landed_base_sha on guarded merged-branch prune of a done slice only; worktree status --integration (landed_base_sha authoritative, branch-ancestry fallback, landed:unknown).",
-          "parallel_group": null,
+          "parallel_group": "core-after-model",
           "plan_path": "docs/plans/2026-06-02-P7-S4-worktree-integration-detection.md",
-          "planning_status": "proposed",
+          "planning_status": "ratified",
           "refs": [
             "docs/plans/2026-06-02-P7-S4-worktree-integration-detection.md",
-            "docs/handoffs/2026-06-02-P7-S4-worktree-integration-detection-prompt.md"
+            "docs/handoffs/2026-06-02-P7-S4-worktree-integration-detection-prompt.md",
+            "docs/reviewer/p7-s4-worktree-integration-detection-plan"
           ],
-          "review_active": true,
-          "review_stage": "passed",
-          "reviewer_chain": null,
+          "reviewer_chain": "docs/reviewer/p7-s4-worktree-integration-detection-plan",
           "started": null,
           "status": "ready",
           "tasks": [],
-          "title": "worktree start base-sha + prune landed-sha stamping + worktree status --integration"
+          "title": "worktree start base-sha + prune landed-sha stamping + worktree status --integration",
+          "workflow_step": "implement"
         },
         {
           "blocked_on": null,
