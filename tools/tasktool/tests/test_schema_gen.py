@@ -105,9 +105,9 @@ def test_schema_includes_prune_audit_fields():
     assert "worktree_prune_pending_at" in cross_props
 
 
-def test_schema_version_bumped_to_2():
+def test_schema_version_bumped_to_3():
     schema = build_schema()
-    assert schema["properties"]["schema_version"]["const"] == 2
+    assert schema["properties"]["schema_version"]["const"] == 3
 
 
 def test_slice_schema_includes_workflow_step():
@@ -137,3 +137,40 @@ def test_cross_schema_does_not_include_workflow_step():
     schema = build_schema()
     cross_schema = schema["properties"]["cross_cutting"]["items"]
     assert "workflow_step" not in cross_schema["properties"]
+
+
+def test_schema_version_const_is_3():
+    from tasktool.schema_gen import build_schema
+    schema = build_schema()
+    assert schema["properties"]["schema_version"] == {"const": 3}
+
+
+def test_schema_admits_p7_fields():
+    # NB: NO conditional skip. jsonschema is a required test dependency for
+    # this slice's schema gate (it is present in the repo dev environment —
+    # jsonschema 4.26.0 — and the existing test_v1_compat / test_schema_gen
+    # suites already validate against build_schema()). A plain top-level
+    # import makes a missing dependency a hard ERROR, not a silent skip, so
+    # the schema gate cannot be quietly bypassed offline.
+    import jsonschema
+    from tasktool.schema_gen import build_schema
+    from tasktool.serialize import to_dict
+    from tasktool.model import (
+        Project, Phase, Slice, Reservation, LedgerReservation,
+    )
+    p = Project(project="demo")
+    ph = Phase(id="P1", title="t", created="2026-06-02")
+    ph.slices.append(Slice(
+        id="S1", title="t", created="2026-06-02",
+        integration_surfaces=["cms-block-registry"],
+        reservations=[Reservation(
+            resource="homepage-sort", value="15", scope="phase", note="hero")],
+        coordination_group="cms",
+        worktree_base_sha="abc123",
+        landed_base_sha="def456",
+    ))
+    p.phases.append(ph)
+    p.reservations_ledger.append(LedgerReservation(
+        resource="block-kind", value="slider", scope="project", note=None,
+        owner_id="P20.S2", owner_phase_id="P20", archived_date="2026-06-01"))
+    jsonschema.validate(instance=to_dict(p), schema=build_schema())
