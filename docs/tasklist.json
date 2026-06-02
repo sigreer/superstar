@@ -250,7 +250,7 @@
       "notes": "",
       "phase_reviewer_chain": "docs/reviewer/p7-integration-surface-parallel-safety-design-spec",
       "plan_path": null,
-      "planning_path": null,
+      "planning_path": "docs/handoffs/2026-06-02-P7-phase-coordinator-prompt.md",
       "slices": [
         {
           "blocked_on": null,
