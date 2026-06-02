@@ -83,7 +83,7 @@ class PublicAPITests(unittest.TestCase):
             "load_project", "save_project", "dumps_canonical", "loads_project",
             "Project", "Phase", "Slice", "Task", "CrossCutting", "BlockedOn",
             "Status", "PlanningStatus", "ArchivedPhase", "ArchivedCrossCutting",
-            "SCHEMA_VERSION",
+            "SCHEMA_VERSION", "Reservation", "LedgerReservation",
         ]:
             self.assertTrue(hasattr(tasktool, name), f"tasktool.{name} missing")
 
