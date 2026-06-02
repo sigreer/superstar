@@ -114,10 +114,119 @@
       "base_ref": null,
       "base_ref_source": null,
       "diff_included": false
+    },
+    {
+      "round": 2,
+      "reviewers": [
+        {
+          "role": "primary",
+          "sweep_group": null,
+          "parent_round": 2,
+          "request": "r2-2026-06-03T0012-primary-request.md",
+          "response": "r2-2026-06-03T0012-primary-response.md",
+          "verdict": "ready",
+          "verdict_valid": true,
+          "returncode": 0,
+          "status": "ok",
+          "provider": "codex",
+          "caller_provider": "claude",
+          "model": null,
+          "sandbox": {
+            "repo_root": "/home/simon/Dev/sigreer/skills/superstar/.worktrees/worktree-p7-s1-data-model-migration-schema-v3-surfaces",
+            "scratch_dir": "/tmp/claude-1000/superstar-reviewer-p7-s1-data-model-migration-P7-S1-post-slice-r2-primary-ph8ptqp6",
+            "response_dir": "docs/reviewer/p7-s1-data-model-migration-P7-S1-post-slice/.reviewer-output/r2-primary",
+            "mode": "workspace-write-with-read-access"
+          },
+          "started_at": "2026-06-02T23:12:33.580Z",
+          "finished_at": "2026-06-02T23:16:12.301Z",
+          "duration_ms": 218720,
+          "estimated_usage": {
+            "formula": "ceil(chars / 4)",
+            "prompt_chars": 180752,
+            "response_chars": 2568,
+            "estimated_input_tokens": 45188,
+            "estimated_output_tokens": 642,
+            "estimated_total_tokens": 45830
+          },
+          "exact_usage": null,
+          "usage_capture_status": "estimated_only",
+          "usage_capture_error": null
+        },
+        {
+          "role": "sweep",
+          "sweep_group": 1,
+          "parent_round": 2,
+          "request": "r2-2026-06-03T0012-sweep1-request.md",
+          "response": "r2-2026-06-03T0012-sweep1-response.md",
+          "verdict": "ready",
+          "verdict_valid": true,
+          "returncode": 0,
+          "status": "ok",
+          "provider": "codex",
+          "caller_provider": "claude",
+          "model": null,
+          "sandbox": {
+            "repo_root": "/home/simon/Dev/sigreer/skills/superstar/.worktrees/worktree-p7-s1-data-model-migration-schema-v3-surfaces",
+            "scratch_dir": "/tmp/claude-1000/superstar-reviewer-p7-s1-data-model-migration-P7-S1-post-slice-r2-sweep1-gkdmie53",
+            "response_dir": "docs/reviewer/p7-s1-data-model-migration-P7-S1-post-slice/.reviewer-output/r2-sweep1",
+            "mode": "workspace-write-with-read-access"
+          },
+          "started_at": "2026-06-02T23:16:12.304Z",
+          "finished_at": "2026-06-02T23:21:41.652Z",
+          "duration_ms": 329347,
+          "estimated_usage": {
+            "formula": "ceil(chars / 4)",
+            "prompt_chars": 57985,
+            "response_chars": 1940,
+            "estimated_input_tokens": 14497,
+            "estimated_output_tokens": 485,
+            "estimated_total_tokens": 14982
+          },
+          "exact_usage": null,
+          "usage_capture_status": "estimated_only",
+          "usage_capture_error": null
+        }
+      ],
+      "status": "ok",
+      "returncode": 0,
+      "started_at": "2026-06-02T23:12:33.580Z",
+      "finished_at": "2026-06-02T23:16:12.301Z",
+      "duration_ms": 218720,
+      "provider": "codex",
+      "caller_provider": "claude",
+      "model": null,
+      "estimated_usage": {
+        "formula": "ceil(chars / 4)",
+        "prompt_chars": 180752,
+        "response_chars": 2568,
+        "estimated_input_tokens": 45188,
+        "estimated_output_tokens": 642,
+        "estimated_total_tokens": 45830
+      },
+      "exact_usage": null,
+      "usage_capture_status": "estimated_only",
+      "usage_capture_error": null,
+      "merged_verdict": "ready",
+      "merged_findings": "r2-merged-findings.md",
+      "request": "r2-2026-06-03T0012-primary-request.md",
+      "response": "r2-2026-06-03T0012-primary-response.md",
+      "resolution": "r1-resolution.md",
+      "resolution_parse_status": "ok",
+      "resolution_waiver": false,
+      "head_sha_at_request": "951e7fdcc6de0eccdc23739832858acfbf83f958",
+      "head_sha_after_round": "951e7fdcc6de0eccdc23739832858acfbf83f958",
+      "worktree_dirty_at_request": false,
+      "verdict": "ready",
+      "verdict_valid": true,
+      "findings_count": 1,
+      "blocking_findings_count": 0,
+      "base_ref": "67aa290bc45319ee027013b751a1f161a071caa0",
+      "base_ref_source": "auto",
+      "diff_included": true
     }
   ],
   "sweep_checkpoints": {
     "first-round": "completed",
-    "final-ready": "pending"
+    "final-ready": "completed"
   }
 }
