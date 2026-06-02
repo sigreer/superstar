@@ -401,3 +401,75 @@ def test_per_field_migration_acceptance_for_non_identity_non_collection_fields(r
             f"{row_type.__name__}.{f.name} migration failed: "
             f"expected {local_val!r}, got {get_on(merged)!r}"
         )
+
+
+def _ledger(resource="route-slug", value="/offers", scope="project",
+            note=None, owner_id="P20.S3", owner_phase_id="P20",
+            archived_date="2026-06-01"):
+    from tasktool.model import LedgerReservation
+    return LedgerReservation(
+        resource=resource, value=value, scope=scope, note=note,
+        owner_id=owner_id, owner_phase_id=owner_phase_id,
+        archived_date=archived_date,
+    )
+
+
+def test_stale_local_empty_ledger_does_not_erase_authoritative_ledger():
+    # Authoritative holds an archived reservation; local checkout is stale
+    # and has an empty ledger. accept-local reconciliation MUST preserve it.
+    local = _project_with_slice()
+    authoritative = _project_with_slice()
+    authoritative.reservations_ledger.append(_ledger())
+
+    deltas, conflicts = compute_deltas(local=local, authoritative=authoritative)
+    merged = apply_deltas(
+        authoritative=authoritative, local=local,
+        deltas=deltas, conflicts=conflicts, policy="accept-local",
+    )
+
+    assert len(merged.reservations_ledger) == 1
+    assert merged.reservations_ledger[0] == _ledger()
+
+
+def test_local_adds_distinct_ledger_holder_unions_both():
+    # Authoritative has holder A; local has A plus a distinct holder B.
+    # Merge must contain BOTH, deduped on resource:value:scope:owner_id.
+    holder_a = _ledger(owner_id="P20.S3")
+    holder_b = _ledger(owner_id="P20.S4")  # same resource:value:scope, diff owner
+    authoritative = _project_with_slice()
+    authoritative.reservations_ledger.append(holder_a)
+    local = _project_with_slice()
+    local.reservations_ledger.append(holder_a)
+    local.reservations_ledger.append(holder_b)
+
+    deltas, conflicts = compute_deltas(local=local, authoritative=authoritative)
+    merged = apply_deltas(
+        authoritative=authoritative, local=local,
+        deltas=deltas, conflicts=conflicts, policy="accept-local",
+    )
+
+    keys = {
+        (r.resource, r.value, r.scope, r.owner_id)
+        for r in merged.reservations_ledger
+    }
+    assert keys == {
+        ("route-slug", "/offers", "project", "P20.S3"),
+        ("route-slug", "/offers", "project", "P20.S4"),
+    }
+    # No duplicate of holder_a despite it existing in both sides.
+    assert len(merged.reservations_ledger) == 2
+
+
+def test_identical_ledger_on_both_sides_yields_no_duplicate():
+    holder_a = _ledger()
+    authoritative = _project_with_slice()
+    authoritative.reservations_ledger.append(holder_a)
+    local = _project_with_slice()
+    local.reservations_ledger.append(_ledger())  # same composite key
+
+    deltas, conflicts = compute_deltas(local=local, authoritative=authoritative)
+    merged = apply_deltas(
+        authoritative=authoritative, local=local,
+        deltas=deltas, conflicts=conflicts, policy="accept-local",
+    )
+    assert len(merged.reservations_ledger) == 1

@@ -24,6 +24,9 @@ _PROJECT_COLLECTIONS = (
     "archived_cross_cutting",
 )
 
+# reservations_ledger rows have no `.id`; their identity is this composite.
+_LEDGER_KEY_FIELDS = ("resource", "value", "scope", "owner_id")
+
 
 @dataclass(frozen=True)
 class Delta:
@@ -85,7 +88,11 @@ def render_diff(deltas: list[Delta], conflicts: list[Conflict]) -> str:
 
 def walker_field_coverage() -> dict[str, set[str]]:
     return {
-        "Project": set(_project_scalar_fields()) | set(_PROJECT_COLLECTIONS),
+        "Project": (
+            set(_project_scalar_fields())
+            | set(_PROJECT_COLLECTIONS)
+            | {"reservations_ledger"}
+        ),
         "Phase": {field.name for field in fields(Phase)},
         "Slice": {field.name for field in fields(Slice)},
         "Task": {field.name for field in fields(Task)},
@@ -98,10 +105,11 @@ def walker_field_coverage() -> dict[str, set[str]]:
 
 
 def _project_scalar_fields() -> tuple[str, ...]:
+    handled = set(_PROJECT_COLLECTIONS) | {"reservations_ledger"}
     return tuple(
         field.name
         for field in fields(Project)
-        if field.name not in set(_PROJECT_COLLECTIONS)
+        if field.name not in handled
     )
 
 
@@ -118,6 +126,17 @@ def _diff_project(
             field_name=field_name,
             local_value=getattr(local, field_name),
             authoritative_value=getattr(authoritative, field_name),
+        )
+
+    if _ledger_has_local_additions(local, authoritative):
+        deltas.append(
+            Delta(
+                kind="add",
+                row_id="<project>.reservations_ledger",
+                field=None,
+                local_value=list(local.reservations_ledger),
+                authoritative_value=list(authoritative.reservations_ledger),
+            )
         )
 
     _diff_collection(
@@ -248,6 +267,8 @@ def _apply_local(authoritative: Project, local: Project, deltas: list[Delta]) ->
         if delta.kind == "field" and delta.row_id == "<project>":
             setattr(merged, _require_field(delta), copy.deepcopy(delta.local_value))
 
+    merged.reservations_ledger = _union_ledger(authoritative, local)
+
     _apply_collection(
         authoritative_rows=merged.phases,
         local_rows=local.phases,
@@ -332,6 +353,37 @@ def _require_field(delta: Delta) -> str:
     if delta.field is None:
         raise ValueError(f"delta {delta!r} has no field")
     return delta.field
+
+
+def _ledger_key(row) -> tuple:
+    return tuple(getattr(row, name) for name in _LEDGER_KEY_FIELDS)
+
+
+def _ledger_has_local_additions(local, authoritative) -> bool:
+    authoritative_keys = {_ledger_key(r) for r in authoritative.reservations_ledger}
+    return any(
+        _ledger_key(r) not in authoritative_keys
+        for r in local.reservations_ledger
+    )
+
+
+def _union_ledger(authoritative, local) -> list:
+    """Union authoritative + local ledger rows, deduped on the composite key.
+
+    Authoritative rows are NEVER dropped (a stale-local empty ledger cannot
+    erase archived reservations); local-only rows are appended. The first
+    occurrence of each composite key wins, so authoritative metadata is
+    authoritative for shared keys.
+    """
+    merged: list = []
+    seen: set = set()
+    for row in list(authoritative.reservations_ledger) + list(local.reservations_ledger):
+        key = _ledger_key(row)
+        if key in seen:
+            continue
+        seen.add(key)
+        merged.append(copy.deepcopy(row))
+    return merged
 
 
 def _qualify(prefix: str, row_id: str) -> str:
