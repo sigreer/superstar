@@ -1471,11 +1471,9 @@ def cmd_reserve_add(
     with _write_context(repo_root) as write_root:
         p = _load(write_root)
         qid, item = _require_slice(p, slice_id, "reserve add")
-        # Idempotent: the same slice re-declaring the SAME (resource, value, scope)
-        # is a no-op. The scope MUST be part of the key — a slice may legitimately
-        # hold the same resource:value at both phase and project scope (only the
-        # project-scoped one is laddered), so a scope-blind check would wrongly
-        # suppress the second add.
+        # Self-dedupe keyed on (resource, value, scope): re-declaring the same
+        # tuple on the same slice is a no-op, but the SAME resource:value at a
+        # DIFFERENT scope (phase vs project) is a distinct, allowed reservation.
         if any(
             r.resource == resource and r.value == value and r.scope == scope
             for r in item.reservations
@@ -1488,17 +1486,24 @@ def cmd_reserve_add(
         else:
             holder = _phase_scope_holder(p, phase, qid, resource, value)
             holder_context = f"phase {phase.id}"
-        if holder is not None and not force:
+        if force:
+            if reason is None or not reason.strip():
+                raise CommandError("reserve add --force requires --reason \"...\"")
+        elif holder is not None:
             raise CommandError(
                 f"reserve add: {resource}:{value} is already reserved by {holder} "
                 f"in {holder_context}; use --force --reason \"...\" to override"
             )
-        if force:
-            # --force handling (requires --reason) is added in Task 7.
-            pass
         item.reservations.append(
             Reservation(resource=resource, value=value, scope=scope, note=note)
         )
+        if force and holder is not None:
+            ts = _dt.datetime.now().isoformat(timespec="seconds")
+            line = (
+                f"Reservation-override {ts}: {resource}:{value} over {holder} "
+                f"— {reason.strip()}"
+            )
+            item.notes = (item.notes + "\n" + line).strip() if item.notes else line
         _save(write_root, p)
 
 

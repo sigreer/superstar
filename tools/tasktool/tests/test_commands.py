@@ -2010,3 +2010,62 @@ class ReserveCommandTests(unittest.TestCase):
             )
         finally:
             t.cleanup()
+
+    def test_force_requires_reason(self):
+        t = _Tmp()
+        try:
+            pid, (s0, s1) = self._phase(t, 2)
+            commands.cmd_reserve_add(
+                repo_root=t.root, slice_id=f"{pid}.{s0}",
+                resource_value="homepage-sort:15", scope="phase",
+            )
+            with self.assertRaises(commands.CommandError) as cm:
+                commands.cmd_reserve_add(
+                    repo_root=t.root, slice_id=f"{pid}.{s1}",
+                    resource_value="homepage-sort:15", scope="phase",
+                    force=True,  # no reason
+                )
+            self.assertIn("--reason", str(cm.exception))
+        finally:
+            t.cleanup()
+
+    def test_force_with_reason_overrides_and_records_note(self):
+        t = _Tmp()
+        try:
+            pid, (s0, s1) = self._phase(t, 2)
+            commands.cmd_reserve_add(
+                repo_root=t.root, slice_id=f"{pid}.{s0}",
+                resource_value="homepage-sort:15", scope="phase",
+            )
+            commands.cmd_reserve_add(
+                repo_root=t.root, slice_id=f"{pid}.{s1}",
+                resource_value="homepage-sort:15", scope="phase",
+                force=True, reason="intentional shared band",
+            )
+            p = load_project(t.root / "docs/tasklist.json")
+            s0_row = next(s for s in p.phases[0].slices if s.id == s0)
+            s1_row = next(s for s in p.phases[0].slices if s.id == s1)
+            # Reserving slice gained the reservation + an override note.
+            self.assertEqual(len(s1_row.reservations), 1)
+            self.assertIn("Reservation-override", s1_row.notes)
+            self.assertIn("homepage-sort:15", s1_row.notes)
+            self.assertIn(f"{pid}.{s0}", s1_row.notes)
+            self.assertIn("intentional shared band", s1_row.notes)
+            # Holder slice is NOT mutated.
+            self.assertEqual(len(s0_row.reservations), 1)
+            self.assertEqual(s0_row.notes, "")
+        finally:
+            t.cleanup()
+
+    def test_force_without_collision_still_requires_reason(self):
+        t = _Tmp()
+        try:
+            pid, (s0,) = self._phase(t, 1)
+            with self.assertRaises(commands.CommandError):
+                commands.cmd_reserve_add(
+                    repo_root=t.root, slice_id=f"{pid}.{s0}",
+                    resource_value="homepage-sort:9", scope="phase",
+                    force=True,  # force always requires reason
+                )
+        finally:
+            t.cleanup()
