@@ -50,6 +50,29 @@ def _strip_workflow_defaults(d: dict) -> dict:
     return d
 
 
+_P7_DEFAULT_OMIT = {
+    "coordination_group": None,
+    "worktree_base_sha": None,
+    "landed_base_sha": None,
+}
+
+
+def _strip_p7_defaults(d: dict) -> dict:
+    """Drop P7 slice keys whose values equal their dataclass default.
+
+    Empty integration_surfaces / reservations lists and None scalar fields
+    are omitted so historical rows gain no churn on round-trip (spec §4.A F5).
+    """
+    for field, default in _P7_DEFAULT_OMIT.items():
+        if field in d and d[field] == default:
+            del d[field]
+    if d.get("integration_surfaces") == []:
+        d.pop("integration_surfaces", None)
+    if d.get("reservations") == []:
+        d.pop("reservations", None)
+    return d
+
+
 def to_dict(p: Project) -> dict:
     def _coerce(obj):
         if isinstance(obj, (Status, PlanningStatus,
@@ -73,8 +96,12 @@ def to_dict(p: Project) -> dict:
         for slc in phase.get("slices", []):
             _strip_worktree_defaults(slc)
             _strip_workflow_defaults(slc)
+            _strip_p7_defaults(slc)
     for cross in out.get("cross_cutting", []):
         _strip_worktree_defaults(cross)
+    # Omit reservations_ledger when empty so historical projects gain no churn.
+    if out.get("reservations_ledger") == []:
+        del out["reservations_ledger"]
     # Always emit current SCHEMA_VERSION on save (auto-promotion of legacy rows).
     out["schema_version"] = SCHEMA_VERSION
     return out

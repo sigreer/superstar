@@ -356,3 +356,70 @@ def test_legacy_row_without_workflow_fields_loads_clean():
     assert p.phases[0].slices[0].workflow_step is None
     assert p.phases[0].slices[0].review_active is False
     assert p.phases[0].slices[0].review_stage is None
+
+
+class P7OmitWhenDefaultTests(unittest.TestCase):
+    def test_default_slice_omits_new_keys(self):
+        p = Project(project="demo")
+        ph = Phase(id="P1", title="phase", created="2026-06-02")
+        ph.slices.append(Slice(id="S1", title="slice", created="2026-06-02"))
+        p.phases.append(ph)
+        out = to_dict(p)
+        slc = out["phases"][0]["slices"][0]
+        for key in (
+            "integration_surfaces", "reservations", "coordination_group",
+            "worktree_base_sha", "landed_base_sha",
+        ):
+            self.assertNotIn(key, slc, f"{key} should be omitted when default")
+
+    def test_default_project_omits_reservations_ledger(self):
+        p = Project(project="demo")
+        out = to_dict(p)
+        self.assertNotIn("reservations_ledger", out)
+
+    def test_schema_version_serialized_as_3(self):
+        p = Project(project="demo")
+        out = to_dict(p)
+        self.assertEqual(out["schema_version"], 3)
+
+    def test_non_default_slice_keys_are_kept(self):
+        from tasktool.model import Reservation
+        p = Project(project="demo")
+        ph = Phase(id="P1", title="phase", created="2026-06-02")
+        s = Slice(
+            id="S1", title="slice", created="2026-06-02",
+            integration_surfaces=["cms-block-registry"],
+            reservations=[Reservation(
+                resource="homepage-sort", value="15", scope="phase",
+                note="hero slot",
+            )],
+            coordination_group="cms",
+            worktree_base_sha="abc123",
+            landed_base_sha="def456",
+        )
+        ph.slices.append(s)
+        p.phases.append(ph)
+        slc = to_dict(p)["phases"][0]["slices"][0]
+        self.assertEqual(slc["integration_surfaces"], ["cms-block-registry"])
+        self.assertEqual(slc["reservations"], [{
+            "resource": "homepage-sort", "value": "15",
+            "scope": "phase", "note": "hero slot",
+        }])
+        self.assertEqual(slc["coordination_group"], "cms")
+        self.assertEqual(slc["worktree_base_sha"], "abc123")
+        self.assertEqual(slc["landed_base_sha"], "def456")
+
+    def test_non_default_reservations_ledger_is_kept(self):
+        from tasktool.model import LedgerReservation
+        p = Project(project="demo")
+        p.reservations_ledger.append(LedgerReservation(
+            resource="route-slug", value="/offers", scope="project",
+            note=None, owner_id="P20.S3", owner_phase_id="P20",
+            archived_date="2026-06-02",
+        ))
+        out = to_dict(p)
+        self.assertEqual(out["reservations_ledger"], [{
+            "resource": "route-slug", "value": "/offers", "scope": "project",
+            "note": None, "owner_id": "P20.S3", "owner_phase_id": "P20",
+            "archived_date": "2026-06-02",
+        }])
