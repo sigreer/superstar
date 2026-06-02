@@ -1,0 +1,1072 @@
+<!-- superstar-prompt:start -->
+You are acting as an independent senior engineering reviewer.
+
+Review stance:
+- Lead with findings, ordered by severity.
+- Focus on correctness, consistency, implementation risk, missing acceptance
+  gates, vague handoffs, ungrounded assumptions, unverified claims, and drift
+  from the codebase.
+- Give exact file/line references when possible.
+- If the document is sound, say that clearly and list residual risks.
+- Keep the review actionable. Avoid broad rewrites unless the current structure
+  creates concrete risk.
+
+Repository root:
+/home/simon/Dev/sigreer/skills/superstar/.worktrees/worktree-p7-s1-data-model-migration-schema-v3-surfaces
+
+Target kind:
+post-slice
+
+Review mode:
+Post-slice review. Treat this as a completion gate for one
+slice of work. Compare the completed changes and stated evidence against the
+slice acceptance criteria. Prioritize: incomplete tasks, uncommitted or
+untracked artifacts, missing tests, failing or skipped verification, broken
+cross-site behavior, and claims not supported by the repo state.
+
+Target document:
+docs/plans/2026-06-02-P7-S1-data-model-migration.md
+
+Additional context files:
+- docs/specs/2026-06-02-P7-integration-surface-parallel-safety-design.md
+- docs/tasklist.json
+
+Review output contract:
+1. Findings
+   - Tag each finding with a stable ID: `F1`, `F2`, `F3`, …. IDs must remain
+     stable if this review is iterated in subsequent rounds.
+   - Mark severity inline: `Severity: blocking | important | minor | nit`.
+2. Open questions / assumptions
+3. Suggested document edits
+4. Verification gaps / commands that should be run, if any
+
+End your review with this exact line, as plain text on its own line:
+
+    Overall verdict: <ready|ready with small edits|revise>
+
+Do not bold, italicise, prefix with `##`, split across lines, or drop the
+word "Overall". Do not write `**Verdict: ready**` or place the value on a
+new line after a heading.
+
+Read the files from disk. Do not rely only on the snippets in this prompt.
+
+
+## Target Preview
+
+### docs/plans/2026-06-02-P7-S1-data-model-migration.md
+
+    1	# P7.S1 — Data Model + Migration (schema v3) Implementation Plan
+    2	
+    3	> **For agentic workers:** REQUIRED SUB-SKILL: Use superstar:subagent-driven-development (recommended) or superstar:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+    4	
+    5	**Goal:** Add integration-surface, scarce-reservation, coordination-group, and worktree base/landed-SHA fields to the `tasktool` data model and bump the on-disk schema to v3, with additive v1→v3 / v2→v3 migration and omit-when-default serialization so historical `tasklist.json` rows gain zero churn.
+    6	
+    7	**Architecture:** The change is in the model/serialization/drift-merge layer of the `tasktool` CLI (`tools/tasktool/`). New value objects `Reservation` and `LedgerReservation` are added as `@dataclass(slots=True)` types alongside the existing `BlockedOn`; five new fields are appended to `Slice` and one collection field to `Project`, and both new types are re-exported from the package `__init__`. Serialization mirrors the existing `_strip_worktree_defaults` / `_strip_workflow_defaults` omit-when-default convention so default-valued rows serialize byte-identically to today; deserialization is tolerant of missing keys (the additive migration path). The JSON Schema (`schema_gen.py`) is extended to admit the new keys, and the drift-merge walker (`migrate.py`) is extended to treat `reservations_ledger` as a **merge-aware, union/never-delete collection** (not a scalar) so reconciliation can never erase archived project-scoped reservations — keeping validation and drift-migration in lockstep, which the test suite enforces.
+    8	
+    9	**Tech Stack:** Python 3, dataclasses, pytest
+   10	
+   11	---
+   12	
+   13	## Scheduling
+   14	
+   15	P7.S1 has **no `depends_on`** — it is the foundation slice for phase P7. Per the governing spec (§5 slice decomposition table), S1 blocks S2, S3, S4, S6, and S7 (each of those declares `S1` among its dependencies). S1 itself depends on nothing, so it is **independently plannable and independently executable right now**: it only touches `model.py`, `__init__.py`, `serialize.py`, `schema_gen.py`, `migrate.py`, and their tests, none of which are being modified by a sibling slice in flight. No coordination group or reservation is required for S1 itself. Confirm before starting that no other P7 slice has begun mutating these source files (`tasktool worktree list --all`); if all clear, proceed.
+   16	
+   17	This slice writes **no** CLI commands, **no** scheduling/overlap logic, and **no** worktree base-SHA *recording* — it only defines the fields those later slices populate. `worktree_base_sha` / `landed_base_sha` are added as inert `None`-default fields here; the logic that stamps them ships in S4.
+   18	
+   19	---
+   20	
+   21	## File Structure
+   22	
+   23	| File | Responsibility | Change in this slice |
+   24	|------|----------------|----------------------|
+   25	| `tools/tasktool/model.py` | Dataclass definitions + `SCHEMA_VERSION` constant | Add `Reservation` and `LedgerReservation` dataclasses; add 5 fields to `Slice`; add `reservations_ledger` to `Project`; bump `SCHEMA_VERSION` 2 → 3 |
+   26	| `tools/tasktool/__init__.py` | Public package API (`from tasktool import ...`) + `__all__` | Export `Reservation` and `LedgerReservation` (mirrors how the other model dataclasses are re-exported at lines 4–16 / 22–34) |
+   27	| `tools/tasktool/serialize.py` | `to_dict` / `from_dict`, omit-when-default stripping, canonical dump/load | Strip new default-valued keys on serialize; deserialize new keys tolerantly (default when absent); nest `Reservation`/`LedgerReservation` (de)serialization |
+   28	| `tools/tasktool/schema_gen.py` | JSON Schema generator validated against on save | Add `integration_surfaces`, `reservations`, `coordination_group`, `worktree_base_sha`, `landed_base_sha` to the slice object; add `reservations_ledger` to the project object; define `reservation` / `ledger_reservation` sub-schemas |
+   29	| `tools/tasktool/migrate.py` | Drift diff/merge walker (`compute_deltas` / `apply_deltas`) + `walker_field_coverage()` | **Structural change required:** register `reservations_ledger` as a merge-aware collection (it is currently mis-classified as a *scalar* project field, which makes drift reconciliation able to erase archived reservations — see Task 5a). Add ledger-aware diff/merge keyed/deduped on `resource:value:scope:owner_id`. The `Slice`-field walker remains dynamic (`fields(Slice)`), so `test_walker_covers_every_dataclass_field` still passes for the slice fields |
+   30	| `tools/tasktool/tests/test_model.py` | Dataclass default / construction tests | New tests for the new dataclasses, new `Slice` field defaults, new `Project` field default, and `SCHEMA_VERSION == 3` |
+   31	| `tools/tasktool/tests/test_serialize.py` | Round-trip + omit-when-default + deserialize-tolerance tests | New round-trip, omit-when-default, and missing-key tolerance tests |
+   32	| `tools/tasktool/tests/test_migrate.py` | Drift-walker coverage + per-field migration acceptance | New per-field value pairs for the added fields so the parametrized acceptance test exercises them |
+   33	| `tools/tasktool/tests/test_v1_compat.py` | v1 legacy-row load + promotion compat | New v1→v3 and v2→v3 no-churn compat assertions |
+   34	
+   35	> **Source-of-truth note:** Edit **only** `tools/tasktool/`. `plugins/superstar/tools/tasktool/` is a synced copy maintained by release scripts — do **not** touch it in this slice.
+   36	
+   37	> **Test invocation (verified working from repo root):**
+   38	> ```sh
+   39	> python -m pytest tools/tasktool/tests/<file> -q
+   40	> ```
+   41	> Root `pyproject.toml` sets `addopts = "--import-mode=importlib"` and `testpaths` includes `tools/tasktool/tests`, so `tasktool` imports resolve without a `PYTHONPATH` export. Run all five touched test files together at the end with:
+   42	> ```sh
+   43	> python -m pytest tools/tasktool/tests/test_model.py tools/tasktool/tests/test_serialize.py tools/tasktool/tests/test_migrate.py tools/tasktool/tests/test_v1_compat.py tools/tasktool/tests/test_schema_gen.py -q
+   44	> ```
+   45	
+   46	---
+   47	
+   48	## Task 1 — Lifecycle start + model: new dataclasses and `SCHEMA_VERSION` bump
+   49	
+   50	### Step 1.1 — Start the slice worktree (before any source edit)
+   51	
+   52	- [ ] Run the lifecycle start command so all implementation happens in an isolated worktree:
+   53	  ```sh
+   54	  tasktool start P7.S1
+   55	  ```
+   56	  Expected: the command creates (or resumes) a worktree branch for `P7.S1`, prints the worktree path and branch, and marks the slice `in_progress`. **All subsequent edits and commits in this plan happen inside that worktree**, not in the main checkout. If `tasktool start` reports the slice is already in progress in an existing worktree, `cd` into that worktree and continue there.
+   57	
+   58	> Note: S1 does **not** add base-SHA *recording* logic to `start` — that is S4's scope. Here `tasktool start` is used purely as the normal lifecycle entry point.
+   59	
+   60	### Step 1.2 — Write failing test: new dataclasses + `Slice`/`Project` defaults + schema version
+   61	
+   62	- [ ] Open `tools/tasktool/tests/test_model.py`. Append the following test class at end of file:
+   63	  ```python
+   64	  class P7DataModelTests(unittest.TestCase):
+   65	      def test_schema_version_is_3(self):
+   66	          self.assertEqual(SCHEMA_VERSION, 3)
+   67	
+   68	      def test_reservation_dataclass(self):
+   69	          from tasktool.model import Reservation
+   70	          r = Reservation(resource="homepage-sort", value="15", scope="phase")
+   71	          self.assertEqual(r.resource, "homepage-sort")
+   72	          self.assertEqual(r.value, "15")
+   73	          self.assertEqual(r.scope, "phase")
+   74	          self.assertIsNone(r.note)
+   75	          r2 = Reservation(
+   76	              resource="route-slug", value="/offers",
+   77	              scope="project", note="landing route",
+   78	          )
+   79	          self.assertEqual(r2.note, "landing route")
+   80	
+   81	      def test_ledger_reservation_dataclass(self):
+   82	          from tasktool.model import LedgerReservation
+   83	          lr = LedgerReservation(
+   84	              resource="homepage-sort", value="15", scope="project",
+   85	              note=None, owner_id="P20.S3", owner_phase_id="P20",
+   86	              archived_date="2026-06-02",
+   87	          )
+   88	          self.assertEqual(lr.owner_id, "P20.S3")
+   89	          self.assertEqual(lr.owner_phase_id, "P20")
+   90	          self.assertEqual(lr.archived_date, "2026-06-02")
+   91	
+   92	      def test_slice_p7_field_defaults(self):
+   93	          s = Slice(id="S1", title="x", created="2026-06-02")
+   94	          self.assertEqual(s.integration_surfaces, [])
+   95	          self.assertEqual(s.reservations, [])
+   96	          self.assertIsNone(s.coordination_group)
+   97	          self.assertIsNone(s.worktree_base_sha)
+   98	          self.assertIsNone(s.landed_base_sha)
+   99	
+  100	      def test_slice_p7_fields_are_independent_lists(self):
+  101	          a = Slice(id="S1", title="x", created="2026-06-02")
+  102	          b = Slice(id="S2", title="y", created="2026-06-02")
+  103	          a.integration_surfaces.append("cms-block-registry")
+  104	          a.reservations.append(
+  105	              __import__("tasktool.model", fromlist=["Reservation"]).Reservation(
+  106	                  resource="block-kind", value="slider", scope="phase",
+  107	              )
+  108	          )
+  109	          self.assertEqual(b.integration_surfaces, [])
+  110	          self.assertEqual(b.reservations, [])
+  111	
+  112	      def test_project_reservations_ledger_default(self):
+  113	          p = Project(project="demo")
+  114	          self.assertEqual(p.reservations_ledger, [])
+  115	  ```
+  116	
+  117	### Step 1.2a — Update the existing stale schema-version assertion (REQUIRED)
+  118	
+  119	- [ ] In `tools/tasktool/tests/test_model.py`, there is a pre-existing module-level test (around line 107) that pins the **old** version:
+  120	  ```python
+  121	  def test_schema_version_is_2():
+  122	      assert SCHEMA_VERSION == 2
+  123	  ```
+  124	  This will fail after the bump. **Rename and update it** so the existing current-version assertion tracks v3 (do not just leave the new `P7DataModelTests.test_schema_version_is_3` to coexist with a now-false sibling):
+  125	  ```python
+  126	  def test_schema_version_is_3():
+  127	      assert SCHEMA_VERSION == 3
+  128	  ```
+  129	  (The bump itself is made in Step 1.4; authoring this edit now keeps the test red-then-green with the rest of Task 1.)
+  130	
+  131	### Step 1.3 — Run the failing test (expected FAIL)
+  132	
+  133	- [ ] Run:
+  134	  ```sh
+  135	  python -m pytest tools/tasktool/tests/test_model.py -q
+  136	  ```
+  137	  Expected: **FAIL** — `ImportError`/`AttributeError` for `Reservation` / `LedgerReservation`, `AssertionError: 2 != 3` for `SCHEMA_VERSION` (from both the new `P7DataModelTests.test_schema_version_is_3` and the renamed module-level `test_schema_version_is_3`), and `AttributeError` for the new `Slice`/`Project` attributes. Running the **whole file** (not just `::P7DataModelTests`) is required so the renamed module-level test is exercised too.
+  138	
+  139	### Step 1.4 — Implement: bump `SCHEMA_VERSION` in `model.py`
+  140	
+  141	- [ ] In `tools/tasktool/model.py`, change line 7:
+  142	  ```python
+  143	  SCHEMA_VERSION = 2
+  144	  ```
+  145	  to:
+  146	  ```python
+  147	  SCHEMA_VERSION = 3
+  148	  ```
+  149	
+  150	### Step 1.5 — Implement: add `Reservation` and `LedgerReservation` dataclasses
+  151	
+  152	- [ ] In `tools/tasktool/model.py`, immediately **after** the `BlockedOn` dataclass (currently lines 58–61, ending before `@dataclass(slots=True)\nclass Task:`), insert:
+  153	  ```python
+  154	  @dataclass(slots=True)
+  155	  class Reservation:
+  156	      resource: str
+  157	      value: str
+  158	      scope: Literal["phase", "project"] = "phase"
+  159	      note: str | None = None
+  160	
+  161	  @dataclass(slots=True)
+  162	  class LedgerReservation:
+  163	      resource: str
+  164	      value: str
+  165	      scope: Literal["phase", "project"]
+  166	      note: str | None
+  167	      owner_id: str
+  168	      owner_phase_id: str
+  169	      archived_date: str
+  170	  ```
+  171	
+  172	> Design note: `LedgerReservation` is `Reservation` + `{owner_id, owner_phase_id, archived_date}`. It is kept as a flat dataclass (not subclassing `Reservation`) because `slots=True` dataclass inheritance is fragile and the project's existing dataclasses (`Slice`, `CrossCutting`) likewise duplicate fields rather than subclass. The ledger fields are required (no defaults) — a ledger row is only ever constructed at archive time when all five identity fields are known (§4.A / §4.B), so there is no "missing owner" case to default.
+  173	
+  174	### Step 1.6 — Implement: add five `Slice` fields
+  175	
+  176	- [ ] In `tools/tasktool/model.py`, in the `Slice` dataclass, **after** the last worktree field (`worktree_prune_pending_at: str | None = None`, currently line 99), append:
+  177	  ```python
+  178	      integration_surfaces: list[str] = field(default_factory=list)
+  179	      reservations: list[Reservation] = field(default_factory=list)
+  180	      coordination_group: str | None = None
+  181	      worktree_base_sha: str | None = None
+  182	      landed_base_sha: str | None = None
+  183	  ```
+  184	
+  185	### Step 1.7 — Implement: add `Project.reservations_ledger`
+  186	
+  187	- [ ] In `tools/tasktool/model.py`, in the `Project` dataclass, **after** `archived_cross_cutting: list[ArchivedCrossCutting] = field(default_factory=list)` (currently line 157), append:
+  188	  ```python
+  189	      reservations_ledger: list[LedgerReservation] = field(default_factory=list)
+  190	  ```
+  191	
+  192	### Step 1.8 — Run the test (expected PASS)
+  193	
+  194	- [ ] Run the whole file so both the new class and the renamed module-level `test_schema_version_is_3` are exercised:
+  195	  ```sh
+  196	  python -m pytest tools/tasktool/tests/test_model.py -q
+  197	  ```
+  198	  Expected: **PASS** — including `P7DataModelTests` (6 tests) and the renamed module-level `test_schema_version_is_3`. Confirm there is **no** surviving `test_schema_version_is_2` (it was renamed in Step 1.2a, not duplicated).
+  199	
+  200	### Step 1.9 — Commit
+  201	
+  202	- [ ] Run:
+  203	  ```sh
+  204	  git add tools/tasktool/model.py tools/tasktool/tests/test_model.py
+  205	  git commit -m "P7.S1: add Reservation/LedgerReservation, Slice/Project fields, bump schema v3"
+  206	  ```
+  207	
+  208	---
+  209	
+  210	## Task 1b — Public API: export `Reservation` / `LedgerReservation`
+  211	
+  212	> Why: `tools/tasktool/__init__.py` re-exports every model dataclass (lines 4–16, `__all__` at 22–34) and `test_model.py::test_all_exports_present` asserts the public surface. The two new dataclasses must join that surface so downstream code can `from tasktool import Reservation, LedgerReservation` and the export test stays meaningful.
+  213	
+  214	### Step 1b.1 — Write failing test: new types are exported
+  215	
+  216	- [ ] Open `tools/tasktool/tests/test_model.py`. Find `test_all_exports_present` (around line 80) and add the two new names to its checked list so the loop reads:
+  217	  ```python
+  218	      def test_all_exports_present(self):
+  219	          import tasktool
+  220	          for name in [
+  221	              "load_project", "save_project", "dumps_canonical", "loads_project",
+  222	              "Project", "Phase", "Slice", "Task", "CrossCutting", "BlockedOn",
+  223	              "Status", "PlanningStatus", "ArchivedPhase", "ArchivedCrossCutting",
+  224	              "SCHEMA_VERSION", "Reservation", "LedgerReservation",
+  225	          ]:
+  226	              self.assertTrue(hasattr(tasktool, name), f"tasktool.{name} missing")
+  227	  ```
+  228	
+  229	### Step 1b.2 — Run the failing test (expected FAIL)
+  230	
+  231	- [ ] Run:
+  232	  ```sh
+  233	  python -m pytest "tools/tasktool/tests/test_model.py::PublicApiTests::test_all_exports_present" -q
+  234	  ```
+  235	  (If the enclosing class is named differently, run the whole file: `python -m pytest tools/tasktool/tests/test_model.py -q`.)
+  236	  Expected: **FAIL** — `AssertionError: tasktool.Reservation missing` (the names are not yet re-exported from `__init__.py`).
+  237	
+  238	### Step 1b.3 — Implement: add exports to `__init__.py`
+  239	
+  240	- [ ] In `tools/tasktool/__init__.py`, extend the `from tasktool.model import (...)` block (currently lines 4–16) to include the two new names, e.g. after `BlockedOn,`:
+  241	  ```python
+  242	      BlockedOn,
+  243	      Reservation,
+  244	      LedgerReservation,
+  245	  ```
+  246	- [ ] In the same file, extend `__all__` (currently lines 22–42) to include the two names, e.g. after `"BlockedOn",`:
+  247	  ```python
+  248	      "BlockedOn",
+  249	      "Reservation",
+  250	      "LedgerReservation",
+  251	  ```
+  252	
+  253	### Step 1b.4 — Run the test (expected PASS)
+  254	
+  255	- [ ] Run:
+  256	  ```sh
+  257	  python -m pytest tools/tasktool/tests/test_model.py -q
+  258	  ```
+  259	  Expected: **PASS** — including `test_all_exports_present`.
+  260	
+  261	### Step 1b.5 — Commit
+  262	
+  263	- [ ] Run:
+  264	  ```sh
+  265	  git add tools/tasktool/__init__.py tools/tasktool/tests/test_model.py
+  266	  git commit -m "P7.S1: export Reservation/LedgerReservation from tasktool package"
+  267	  ```
+  268	
+  269	---
+  270	
+  271	## Task 2 — Serialize: omit-when-default for the new fields + nested reservation (de)serialization
+  272	
+  273	### Step 2.1 — Write failing test: omit-when-default on serialize
+  274	
+  275	- [ ] Open `tools/tasktool/tests/test_serialize.py`. Append at end of file:
+  276	  ```python
+  277	  class P7OmitWhenDefaultTests(unittest.TestCase):
+  278	      def test_default_slice_omits_new_keys(self):
+  279	          p = Project(project="demo")
+  280	          ph = Phase(id="P1", title="phase", created="2026-06-02")
+  281	          ph.slices.append(Slice(id="S1", title="slice", created="2026-06-02"))
+  282	          p.phases.append(ph)
+  283	          out = to_dict(p)
+  284	          slc = out["phases"][0]["slices"][0]
+  285	          for key in (
+  286	              "integration_surfaces", "reservations", "coordination_group",
+  287	              "worktree_base_sha", "landed_base_sha",
+  288	          ):
+  289	              self.assertNotIn(key, slc, f"{key} should be omitted when default")
+  290	
+  291	      def test_default_project_omits_reservations_ledger(self):
+  292	          p = Project(project="demo")
+  293	          out = to_dict(p)
+  294	          self.assertNotIn("reservations_ledger", out)
+  295	
+  296	      def test_schema_version_serialized_as_3(self):
+  297	          p = Project(project="demo")
+  298	          out = to_dict(p)
+  299	          self.assertEqual(out["schema_version"], 3)
+  300	
+  301	      def test_non_default_slice_keys_are_kept(self):
+  302	          from tasktool.model import Reservation
+  303	          p = Project(project="demo")
+  304	          ph = Phase(id="P1", title="phase", created="2026-06-02")
+  305	          s = Slice(
+  306	              id="S1", title="slice", created="2026-06-02",
+  307	              integration_surfaces=["cms-block-registry"],
+  308	              reservations=[Reservation(
+  309	                  resource="homepage-sort", value="15", scope="phase",
+  310	                  note="hero slot",
+  311	              )],
+  312	              coordination_group="cms",
+  313	              worktree_base_sha="abc123",
+  314	              landed_base_sha="def456",
+  315	          )
+  316	          ph.slices.append(s)
+  317	          p.phases.append(ph)
+  318	          slc = to_dict(p)["phases"][0]["slices"][0]
+  319	          self.assertEqual(slc["integration_surfaces"], ["cms-block-registry"])
+  320	          self.assertEqual(slc["reservations"], [{
+  321	              "resource": "homepage-sort", "value": "15",
+  322	              "scope": "phase", "note": "hero slot",
+  323	          }])
+  324	          self.assertEqual(slc["coordination_group"], "cms")
+  325	          self.assertEqual(slc["worktree_base_sha"], "abc123")
+  326	          self.assertEqual(slc["landed_base_sha"], "def456")
+  327	
+  328	      def test_non_default_reservations_ledger_is_kept(self):
+  329	          from tasktool.model import LedgerReservation
+  330	          p = Project(project="demo")
+  331	          p.reservations_ledger.append(LedgerReservation(
+  332	              resource="route-slug", value="/offers", scope="project",
+  333	              note=None, owner_id="P20.S3", owner_phase_id="P20",
+  334	              archived_date="2026-06-02",
+  335	          ))
+  336	          out = to_dict(p)
+  337	          self.assertEqual(out["reservations_ledger"], [{
+  338	              "resource": "route-slug", "value": "/offers", "scope": "project",
+  339	              "note": None, "owner_id": "P20.S3", "owner_phase_id": "P20",
+  340	              "archived_date": "2026-06-02",
+  341	          }])
+  342	  ```
+  343	
+  344	### Step 2.2 — Run the failing test (expected FAIL)
+  345	
+  346	- [ ] Run:
+  347	  ```sh
+  348	  python -m pytest tools/tasktool/tests/test_serialize.py::P7OmitWhenDefaultTests -q
+  349	  ```
+  350	  Expected: **FAIL** — `test_default_slice_omits_new_keys` and `test_default_project_omits_reservations_ledger` fail because `asdict()` currently emits the new default-valued keys, and `test_schema_version_serialized_as_3` would already pass via SCHEMA_VERSION but the omit tests fail. (`test_non_default_*` may already pass since `asdict` serializes nested dataclasses, but the omit tests gate this task.)
+  351	
+  352	### Step 2.3 — Implement: extend the slice omit map
+  353	
+  354	- [ ] In `tools/tasktool/serialize.py`, **after** the `_WORKFLOW_DEFAULT_OMIT` dict (currently ends line 39) and its `_strip_workflow_defaults` function (ends line 50), add a new omit map + stripper for the P7 fields:
+  355	  ```python
+  356	  _P7_DEFAULT_OMIT = {
+  357	      "coordination_group": None,
+  358	      "worktree_base_sha": None,
+  359	      "landed_base_sha": None,
+  360	  }
+  361	
+  362	
+  363	  def _strip_p7_defaults(d: dict) -> dict:
+  364	      """Drop P7 slice keys whose values equal their dataclass default.
+  365	
+  366	      Empty integration_surfaces / reservations lists and None scalar fields
+  367	      are omitted so historical rows gain no churn on round-trip (spec §4.A F5).
+  368	      """
+  369	      for field, default in _P7_DEFAULT_OMIT.items():
+  370	          if field in d and d[field] == default:
+  371	              del d[field]
+  372	      if d.get("integration_surfaces") == []:
+  373	          d.pop("integration_surfaces", None)
+  374	      if d.get("reservations") == []:
+  375	          d.pop("reservations", None)
+  376	      return d
+  377	  ```
+  378	
+  379	### Step 2.4 — Implement: call the slice stripper + strip empty `reservations_ledger`
+  380	
+  381	- [ ] In `tools/tasktool/serialize.py`, inside `to_dict`, in the per-slice loop (currently lines 73–74), add the new stripper call so the loop reads:
+  382	  ```python
+  383	          for slc in phase.get("slices", []):
+  384	              _strip_worktree_defaults(slc)
+  385	              _strip_workflow_defaults(slc)
+  386	              _strip_p7_defaults(slc)
+  387	  ```
+  388	- [ ] In the same `to_dict`, **before** the `out["schema_version"] = SCHEMA_VERSION` line (currently line 79), add the project-level ledger strip:
+  389	  ```python
+  390	      # Omit reservations_ledger when empty so historical projects gain no churn.
+  391	      if out.get("reservations_ledger") == []:
+  392	          del out["reservations_ledger"]
+  393	  ```
+  394	
+  395	### Step 2.5 — Run the test (expected PASS)
+  396	
+  397	- [ ] Run:
+  398	  ```sh
+  399	  python -m pytest tools/tasktool/tests/test_serialize.py::P7OmitWhenDefaultTests -q
+  400	  ```
+  401	  Expected: **PASS** (5 passed).
+  402	
+  403	### Step 2.6 — Commit
+  404	
+  405	- [ ] Run:
+  406	  ```sh
+  407	  git add tools/tasktool/serialize.py tools/tasktool/tests/test_serialize.py
+  408	  git commit -m "P7.S1: omit P7 slice/project fields when default on serialize"
+  409	  ```
+  410	
+  411	---
+  412	
+  413	## Task 3 — Deserialize: tolerant `from_dict` for the new fields + round-trip
+  414	
+  415	### Step 3.1 — Write failing test: deserialize tolerance + round-trip
+  416	
+  417	- [ ] Open `tools/tasktool/tests/test_serialize.py`. Append at end of file:
+  418	  ```python
+  419	  class P7DeserializeTests(unittest.TestCase):
+  420	      def test_missing_keys_default_on_deserialize(self):
+  421	          # A row with none of the new keys (the v1/v2 historical shape).
+  422	          raw = {
+  423	              "project": "demo", "schema_version": 3,
+  424	              "phases": [{
+  425	                  "id": "P1", "title": "t", "created": "2026-06-02", "status": "ready",
+  426	                  "slices": [{
+  427	                      "id": "S1", "title": "t", "created": "2026-06-02",
+  428	                      "status": "ready",
+  429	                  }],
+  430	              }],
+  431	              "cross_cutting": [], "archived_phases": [], "archived_cross_cutting": [],
+  432	          }
+  433	          p = from_dict(raw)
+  434	          s = p.phases[0].slices[0]
+  435	          self.assertEqual(s.integration_surfaces, [])
+  436	          self.assertEqual(s.reservations, [])
+  437	          self.assertIsNone(s.coordination_group)
+  438	          self.assertIsNone(s.worktree_base_sha)
+  439	          self.assertIsNone(s.landed_base_sha)
+  440	          self.assertEqual(p.reservations_ledger, [])
+  441	
+  442	      def test_present_keys_deserialize_to_objects(self):
+  443	          from tasktool.model import Reservation, LedgerReservation
+  444	          raw = {
+  445	              "project": "demo", "schema_version": 3,
+  446	              "phases": [{
+  447	                  "id": "P1", "title": "t", "created": "2026-06-02", "status": "ready",
+  448	                  "slices": [{
+  449	                      "id": "S1", "title": "t", "created": "2026-06-02",
+  450	                      "status": "ready",
+  451	                      "integration_surfaces": ["cms-block-registry", "theme-tail-css"],
+  452	                      "reservations": [
+  453	                          {"resource": "homepage-sort", "value": "15",
+  454	                           "scope": "phase", "note": "hero"},
+  455	                          {"resource": "route-slug", "value": "/offers",
+  456	                           "scope": "project", "note": None},
+  457	                      ],
+  458	                      "coordination_group": "cms",
+  459	                      "worktree_base_sha": "abc123",
+  460	                      "landed_base_sha": "def456",
+  461	                  }],
+  462	              }],
+  463	              "cross_cutting": [], "archived_phases": [], "archived_cross_cutting": [],
+  464	              "reservations_ledger": [
+  465	                  {"resource": "block-kind", "value": "slider", "scope": "project",
+  466	                   "note": None, "owner_id": "P20.S2", "owner_phase_id": "P20",
+  467	                   "archived_date": "2026-06-01"},
+  468	              ],
+  469	          }
+  470	          p = from_dict(raw)
+  471	          s = p.phases[0].slices[0]
+  472	          self.assertEqual(s.integration_surfaces, ["cms-block-registry", "theme-tail-css"])
+  473	          self.assertEqual(s.reservations[0], Reservation(
+  474	              resource="homepage-sort", value="15", scope="phase", note="hero"))
+  475	          self.assertEqual(s.reservations[1], Reservation(
+  476	              resource="route-slug", value="/offers", scope="project", note=None))
+  477	          self.assertEqual(s.coordination_group, "cms")
+  478	          self.assertEqual(s.worktree_base_sha, "abc123")
+  479	          self.assertEqual(s.landed_base_sha, "def456")
+  480	          self.assertEqual(p.reservations_ledger[0], LedgerReservation(
+  481	              resource="block-kind", value="slider", scope="project", note=None,
+  482	              owner_id="P20.S2", owner_phase_id="P20", archived_date="2026-06-01"))
+  483	
+  484	      def test_full_roundtrip_with_p7_fields(self):
+  485	          from tasktool.model import Reservation, LedgerReservation
+  486	          p = Project(project="demo")
+  487	          ph = Phase(id="P1", title="phase", created="2026-06-02")
+  488	          ph.slices.append(Slice(
+  489	              id="S1", title="slice", created="2026-06-02",
+  490	              integration_surfaces=["cms-block-registry"],
+  491	              reservations=[Reservation(
+  492	                  resource="homepage-sort", value="15", scope="phase", note="hero")],
+  493	              coordination_group="cms",
+  494	              worktree_base_sha="abc123",
+  495	              landed_base_sha="def456",
+  496	          ))
+  497	          p.phases.append(ph)
+  498	          p.reservations_ledger.append(LedgerReservation(
+  499	              resource="block-kind", value="slider", scope="project", note=None,
+  500	              owner_id="P20.S2", owner_phase_id="P20", archived_date="2026-06-01"))
+  501	          back = from_dict(to_dict(p))
+  502	          self.assertEqual(back, p)
+  503	
+  504	      def test_default_roundtrip_equality(self):
+  505	          # A wholly-default project must round-trip to an equal object even
+  506	          # though the new keys are omitted on serialize.
+  507	          p = Project(project="demo")
+  508	          ph = Phase(id="P1", title="phase", created="2026-06-02")
+  509	          ph.slices.append(Slice(id="S1", title="slice", created="2026-06-02"))
+  510	          p.phases.append(ph)
+  511	          back = from_dict(to_dict(p))
+  512	          self.assertEqual(back, p)
+  513	  ```
+  514	
+  515	### Step 3.2 — Run the failing test (expected FAIL)
+  516	
+  517	- [ ] Run:
+  518	  ```sh
+  519	  python -m pytest tools/tasktool/tests/test_serialize.py::P7DeserializeTests -q
+  520	  ```
+  521	  Expected: **FAIL** — `from_dict` does not yet read the new keys, so deserialized `Slice` objects lack the attributes / they are dropped, and `Project` has no `reservations_ledger` argument (`TypeError` or attribute mismatch on equality).
+  522	
+  523	### Step 3.3 — Implement: reservation/ledger deserialization helpers
+  524	
+  525	- [ ] In `tools/tasktool/serialize.py`, update the model import (currently lines 5–10) to add `Reservation` and `LedgerReservation`:
+  526	  ```python
+  527	  from tasktool.model import (
+  528	      Project, Phase, Slice, Task, CrossCutting, ArchivedPhase,
+  529	      ArchivedCrossCutting, BlockedOn, Reservation, LedgerReservation,
+  530	      Status, PlanningStatus, SCHEMA_VERSION,
+  531	      SliceWorkflowStep, PhaseWorkflowStep, ReviewStage,
+  532	  )
+  533	  ```
+  534	- [ ] In `from_dict`, **before** the `_slice` inner function (currently defined at line 122), add two helpers (place them after `_blocked`, currently line 121):
+  535	  ```python
+  536	      def _reservation(rd):
+  537	          return Reservation(
+  538	              resource=rd["resource"], value=rd["value"],
+  539	              scope=rd.get("scope", "phase"), note=rd.get("note"),
+  540	          )
+  541	      def _ledger_reservation(rd):
+  542	          return LedgerReservation(
+  543	              resource=rd["resource"], value=rd["value"], scope=rd["scope"],
+  544	              note=rd.get("note"), owner_id=rd["owner_id"],
+  545	              owner_phase_id=rd["owner_phase_id"], archived_date=rd["archived_date"],
+  546	          )
+  547	  ```
+  548	
+  549	### Step 3.4 — Implement: populate the new `Slice` fields in `_slice`
+  550	
+  551	- [ ] In `from_dict`'s `_slice` function, **after** the `worktree_prune_pending_at=...` keyword argument (currently line 146) and before the closing `)`, add:
+  552	  ```python
+  553	              integration_surfaces=list(sd.get("integration_surfaces", [])),
+  554	              reservations=[_reservation(r) for r in sd.get("reservations", [])],
+  555	              coordination_group=sd.get("coordination_group"),
+  556	              worktree_base_sha=_strict_opt_str(sd.get("worktree_base_sha"), scope=scope, field="worktree_base_sha"),
+  557	              landed_base_sha=_strict_opt_str(sd.get("landed_base_sha"), scope=scope, field="landed_base_sha"),
+  558	  ```
+  559	
+  560	### Step 3.5 — Implement: populate `Project.reservations_ledger`
+  561	
+  562	- [ ] In `from_dict`'s final `return Project(...)` (currently lines 188–199), add the ledger argument after `archived_cross_cutting=[...]`:
+  563	  ```python
+  564	          reservations_ledger=[
+  565	              _ledger_reservation(r) for r in d.get("reservations_ledger", [])
+  566	          ],
+  567	  ```
+  568	
+  569	### Step 3.6 — Run the test (expected PASS)
+  570	
+  571	- [ ] Run:
+  572	  ```sh
+  573	  python -m pytest tools/tasktool/tests/test_serialize.py::P7DeserializeTests -q
+  574	  ```
+  575	  Expected: **PASS** (4 passed).
+  576	
+  577	### Step 3.7 — Run the full serialize suite (regression check)
+  578	
+  579	- [ ] Run:
+  580	  ```sh
+  581	  python -m pytest tools/tasktool/tests/test_serialize.py -q
+  582	  ```
+  583	  Expected: **PASS** — all pre-existing serialize tests plus the new `P7OmitWhenDefaultTests` and `P7DeserializeTests` classes.
+  584	
+  585	### Step 3.8 — Commit
+  586	
+  587	- [ ] Run:
+  588	  ```sh
+  589	  git add tools/tasktool/serialize.py tools/tasktool/tests/test_serialize.py
+  590	  git commit -m "P7.S1: deserialize P7 slice/project fields with missing-key tolerance"
+  591	  ```
+  592	
+  593	---
+  594	
+  595	## Task 4 — JSON Schema: add new fields to `schema_gen.py`
+  596	
+  597	> Why this task is required: `test_v1_compat.py::test_v1_validates_against_v3_schema_after_save` (renamed from `..._v2_...` in Task 6) and `test_schema_gen.py` validate serialized output against `build_schema()`, which uses `additionalProperties: False`. Without schema entries for the new keys, any project that *declares* a surface/reservation would fail schema validation. The schema must enumerate the new keys.
+  598	
+  599	### Step 4.1 — Write failing test: schema admits the new fields
+  600	
+
+[truncated: 602 additional lines]
+
+## Context Previews
+
+### docs/specs/2026-06-02-P7-integration-surface-parallel-safety-design.md
+
+    1	# P7 — Integration-surface-aware parallel slice safety
+    2	
+    3	**Status:** design (spec)
+    4	**Date:** 2026-06-02
+    5	**Phase ID:** `P7`
+    6	
+    7	## 1. Problem
+    8	
+    9	`tasktool` decides whether slices may run in parallel from **declared feature
+   10	dependencies** (`Slice.depends_on`) and the `parallel_group` tag. Those answer
+   11	"does S4's feature need S3's feature first?" They do **not** answer the question
+   12	that actually governs safe parallel execution: **what shared write surface does
+   13	each slice mutate?**
+   14	
+   15	This gap produced a real failure in the `multistore` project, phase P20. Four
+   16	storefront-marketing slices (`P20.S2`–`P20.S5`) each declared a dependency only
+   17	on the bootstrap slice `P20.S1`, so `tasktool ready-slices`/`schedule` reported
+   18	them as independently executable. They were feature-distinct (slider, promo
+   19	bands, overlays, blog) but **integration-overlapping**: every one of them wrote
+   20	the same centralized CMS-block machinery — block contracts, parser allowlists,
+   21	Directus schema/seed files, renderer dispatch, theme CSS tails, and the homepage
+   22	ordering array.
+   23	
+   24	The observed consequences:
+   25	
+   26	1. **Conflict-bomb merges.** `P20.S4`'s merge conflicted across `page-renderer.tsx`,
+   27	   theme CSS, reviewer-request artifacts, `docs/tasklist.json`, Directus
+   28	   bootstrap/schema/seed files, content-contract schemas/types, and parser tests.
+   29	2. **Stale-base merges.** `P20.S4` was completed in a worktree that branched from
+   30	   `main` *before* `P20.S2`/`P20.S3` and their cleanup landed. The worktree
+   31	   snapshot was older than `main`, so the merge replayed churn that was already
+   32	   integrated.
+   33	3. **A real semantic collision, not just textual churn.** `P20.S3` and `P20.S4`
+   34	   independently chose homepage sort slot `15`. Nothing forced the second slice
+   35	   onto a free slot at planning time; the collision was discovered and resolved
+   36	   at merge.
+   37	4. **Merge-unsafe reviewer artifacts.** Generated reviewer-request files
+   38	   add/add-conflicted despite not being behavioral code.
+   39	
+   40	The root cause is **dependency modeling by feature intent rather than by
+   41	integration surface.** "Slider" and "promo bands" were non-dependent product
+   42	slices, but they both wrote the same registry, schema, seed arrays, ordering
+   43	slots, parser unions, and theme areas. The tool allowed parallel execution
+   44	because the declared dependencies were technically satisfied.
+   45	
+   46	## 2. Goals
+   47	
+   48	1. **Prevention.** Let planning declare, per slice, the **integration surfaces**
+   49	   it writes and the **scarce resources** it allocates. `tasktool` warns when
+   50	   sibling ready/in-progress slices share a surface with no dependency or
+   51	   coordination link, and *refuses* a duplicate scarce-resource allocation.
+   52	2. **Recovery.** When a sibling slice has landed on the base branch since a
+   53	   slice's worktree branched, surface that fact reliably and provide a
+   54	   conservative "integrate current main" path before the post-slice review/merge,
+   55	   plus a documented centralized-registry merge playbook.
+   56	3. **Merge-safe reviewer artifacts.** Generated reviewer-request files must never
+   57	   add/add-conflict between sibling worktrees.
+   58	4. **Plan ↔ tracker coherence.** Declared surfaces/reservations must be reflected
+   59	   in planning artifacts so the plan and the tracker cannot silently diverge.
+   60	
+   61	## 3. Non-goals (explicit)
+   62	
+   63	- **Directus-specific verifier diagnostics and stale-token handling.** These were
+   64	  real `multistore` pain points (a stale `DIRECTUS_ADMIN_TOKEN` shadowing valid
+   65	  admin credentials made a non-code problem look like a schema failure), but they
+   66	  are project-specific. Superstar core is general-purpose and zero-dependency;
+   67	  Directus tooling belongs in the `multistore` project, not here.
+   68	- **Automatic merge-conflict resolution.** The tooling detects and routes; it does
+   69	  not auto-merge semantic conflicts.
+   70	- **Path-glob surface *inference* as the primary model.** Explicit declaration is
+   71	  the source of truth. A path-glob comparison survives only as a deferred,
+   72	  warning-only post-implementation *audit* (§4.G), never as the planning model.
+   73	- **A "touches existing resource" reservation kind.** Reservations model scarce
+   74	  *allocations* (claiming a new value). Modifying a shared existing resource is a
+   75	  *surface/coordination* concern, not an allocation, so maintenance work is not
+   76	  falsely blocked. A future "touches-existing" field is noted, not built here.
+   77	- **`worktree sync` as an unconditional command.** Detection ships first; the
+   78	  mutating sync command is gated behind strict preconditions and is the explicit
+   79	  deferral candidate if scope tightens.
+   80	
+   81	## 4. Design
+   82	
+   83	### 4.A Data model (`model.py`, schema `v2 → v3`; `migrate.py`)
+   84	
+   85	Add to `Slice`:
+   86	
+   87	- `integration_surfaces: list[str]` — conventional surface tags naming shared
+   88	  write areas the slice mutates. Free-form strings, but a recommended vocabulary
+   89	  is documented in `tasklist-discipline` (e.g. `cms-block-registry`,
+   90	  `directus-schema`, `page-renderer-dispatch`, `theme-tail-css`,
+   91	  `content-contract-types`, `reviewer-artifacts`). Default `[]`.
+   92	- `reservations: list[Reservation]` where
+   93	  `Reservation = {resource: str, value: str, scope: "phase" | "project", note: str | None}`.
+   94	  A reservation is a **scarce allocation claim** on a single value
+   95	  (`homepage-sort:15`, `directus-collection:homepage_slider`, `route-slug:/offers`,
+   96	  `block-kind:slider`, `cache-tag:home`). Default `[]`.
+   97	- `coordination_group: str | None` — names a set of slices that *intentionally*
+   98	  share an integration surface and agree to coordinate (serialize reviews,
+   99	  designate an integration owner, run the registry merge playbook). Distinct from
+  100	  `parallel_group`, which asserts independent parallelism. Default `None`.
+  101	- `worktree_base_sha: str | None` — the base-branch commit the slice's worktree
+  102	  was created from, recorded at `tasktool start`. Enables reliable
+  103	  "a sibling landed since this slice branched" detection that survives later
+  104	  rebases/merges, instead of fragile merge-base inference. Default `None`.
+  105	- `landed_base_sha: str | None` — the base-branch commit at which this slice's
+  106	  work landed, recorded at post-merge prune (see §4.D). This is the authoritative
+  107	  "this slice shipped to base" signal that `closed` (a date) cannot provide.
+  108	  Default `None`.
+  109	
+  110	Add to `Project`:
+  111	
+  112	- `reservations_ledger: list[LedgerReservation]` where
+  113	  `LedgerReservation = Reservation + {owner_id: str, owner_phase_id: str, archived_date: str}`.
+  114	  Project-scoped reservations are copied here when their owning phase is archived,
+  115	  so project-scope uniqueness checks — and the refusal message that must name the
+  116	  holder (§4.B) — survive removal of shipped phases from the active tracker. The
+  117	  extra fields preserve the owning slice/phase and archive date for the refusal
+  118	  message and audit trail. Default `[]`.
+  119	
+  120	Schema bump to `v3`. Migration is additive: missing fields default to empty/`None`
+  121	and `reservations_ledger` to `[]`. Round-trip and v1/v2 compatibility tests
+  122	extended.
+  123	
+  124	**Serialization rule (F5).** New fields follow the existing omit-when-default
+  125	convention in `serialize.py`: an empty `integration_surfaces`/`reservations`,
+  126	a `None` `coordination_group`/`worktree_base_sha`/`landed_base_sha`, and an empty
+  127	`Project.reservations_ledger` are **omitted** on serialization, exactly as
+  128	default-valued worktree/workflow keys are today. Historical rows therefore gain no
+  129	churn on round-trip; a row's bytes change only once it actually declares a surface,
+  130	reservation, coordination group, or base SHA.
+  131	
+  132	### 4.B Declaration CLI (`cli.py` + `commands.py`)
+  133	
+  134	```sh
+  135	tasktool surface add <slice-id> <surface> [<surface>...]
+  136	tasktool surface remove <slice-id> <surface>
+  137	tasktool surface list [<phase-id>]
+  138	
+  139	tasktool reserve add <slice-id> <resource>:<value> [--scope phase|project] [--note "..."] [--force --reason "..."]
+  140	tasktool reserve remove <slice-id> <resource>:<value>
+  141	tasktool reserve list [<phase-id>]
+  142	
+  143	tasktool coordinate <slice-id> --group <name>     # set coordination_group
+  144	tasktool coordinate <slice-id> --clear
+  145	```
+  146	
+  147	- `surface`/`coordinate` are declaration-only; they never refuse.
+  148	- **`reserve add` refuses** when the same `resource:value` is already held by
+  149	  another **non-cancelled** slice within the relevant scope:
+  150	  - `scope: phase` (default) — checks other non-cancelled slices in the same
+  151	    phase. Done slices count: a done slice shipped that value to `main`, so the
+  152	    slot is taken.
+  153	  - `scope: project` — checks all non-cancelled slices across **active** phases
+  154	    *and* `Project.reservations_ledger`.
+  155	  The refusal names the holding slice (from the slice row, or from the ledger's
+  156	  `owner_id`/`owner_phase_id`/`archived_date` for archived holders) and the value.
+  157	- **Override (F3).** `--force` is the only way to add a colliding reservation and
+  158	  **requires** `--reason "<text>"`. It mutates **only the reserving slice**: it
+  159	  appends the reservation and records a timestamped note
+  160	  `Reservation-override <ISO-ts>: <resource>:<value> over <holder-id> — <reason>`.
+  161	  The holder slice is **not** mutated. `--force` without `--reason` is refused.
+  162	  Without `--force`, a collision is a hard refusal (exit non-zero). This refusal
+  163	  is the gate that would have forced `P20.S4` off slot `15` at planning time.
+  164	- **Cancelled work never enters the ledger.** On `tasktool archive-phase`,
+  165	  project-scoped reservations from the phase's **non-cancelled (`done`)** slices
+  166	  are appended to `Project.reservations_ledger` as `LedgerReservation`s, carrying
+  167	  `owner_id`/`owner_phase_id`/`archived_date`. Cancelled slices ship nothing, so
+  168	  their reservations — including `--force` overrides — are released and never
+  169	  laddered.
+  170	- **Ledger dedupe preserves every holder (F7).** Dedup is keyed on
+  171	  `resource:value:scope:owner_id`, **not** `resource:value:scope`. Re-archiving the
+  172	  same phase is idempotent (same owner ⇒ same key), but two distinct `done` slices
+  173	  that intentionally `--force`-shared a project-scoped value both survive in the
+  174	  ledger, so the owner-metadata audit trail is never silently collapsed to one
+  175	  holder. A project-scope `reserve add` collision check that matches any ledger
+  176	  entry on `resource:value:scope` (regardless of owner) still refuses — multiple
+  177	  recorded holders strengthen, not weaken, the refusal message.
+  178	
+  179	### 4.C Scheduling overlap detection (`commands.py`)
+  180	
+  181	Augment the existing scheduling reporters; **surface overlap is a warning, not a
+  182	block** (surfaces are coarse — two slices may touch the same registry in
+  183	non-conflicting ways), while **reservation contention is already prevented at
+  184	declaration time**.
+  185	
+  186	- `cmd_ready_slices` and `cmd_schedule`: for each ready/in-progress slice, compute
+  187	  the set of other non-terminal slices that (a) share ≥1 integration surface,
+  188	  (b) have **no** `depends_on` link in either direction, and (c) are **not** in
+  189	  the same `coordination_group`. Emit a `surface_overlap` field/warning listing
+  190	  the sibling(s) and shared surface(s). Slices in a shared `coordination_group`
+  191	  are reported as `coordinated`, not warned.
+  192	- New `tasktool surface check <phase-id>` — a dedicated read-only report:
+  193	  - every unguarded surface overlap (siblings sharing a surface without a dep or
+  194	    coordination link),
+  195	  - every coordinated surface (shared surface within a `coordination_group`),
+  196	  - reservation contention within the phase (should be empty if `reserve add`
+  197	    refusal held; surfaced for audit and for `--force` overrides).
+  198	  Text and `--format json`. Intended to be run during ratification and before
+  199	  parallel dispatch.
+  200	- `cmd_ratify --parallel-group <g>`: when adding a slice whose surfaces overlap
+
+[truncated: 211 additional lines]
+### docs/tasklist.json
+
+    1	{
+    2	  "archived_cross_cutting": [
+    3	    {
+    4	      "archived_date": "2026-05-21",
+    5	      "archived_path": "docs/archived-tasks/X15-archive-closed-cross-cutting-items.md",
+    6	      "id": "X15",
+    7	      "title": "Archive closed cross-cutting items"
+    8	    },
+    9	    {
+   10	      "archived_date": "2026-05-21",
+   11	      "archived_path": "docs/archived-tasks/X16-stamp-installed-shims-and-enforce-versio.md",
+   12	      "id": "X16",
+   13	      "title": "Stamp installed shims and enforce version drift refusal"
+   14	    },
+   15	    {
+   16	      "archived_date": "2026-05-23",
+   17	      "archived_path": "docs/archived-tasks/X18-harden-external-reviewer-caller-detectio.md",
+   18	      "id": "X18",
+   19	      "title": "Harden external reviewer caller detection for Codex"
+   20	    },
+   21	    {
+   22	      "archived_date": "2026-05-23",
+   23	      "archived_path": "docs/archived-tasks/X20-install-codex-todo-snapshot-hook.md",
+   24	      "id": "X20",
+   25	      "title": "Install Codex todo snapshot hook"
+   26	    },
+   27	    {
+   28	      "archived_date": "2026-05-23",
+   29	      "archived_path": "docs/archived-tasks/X19-install-todowrite-snapshot-hook-via-depl.md",
+   30	      "id": "X19",
+   31	      "title": "Install TodoWrite snapshot hook via deploy.sh"
+   32	    },
+   33	    {
+   34	      "archived_date": "2026-05-23",
+   35	      "archived_path": "docs/archived-tasks/X21-fix-codex-todo-snapshot-async-hook-regis.md",
+   36	      "id": "X21",
+   37	      "title": "Fix Codex todo snapshot async hook registration"
+   38	    },
+   39	    {
+   40	      "archived_date": "2026-05-24",
+   41	      "archived_path": "docs/archived-tasks/X22-add-cancelled-terminal-status-to-tasktoo.md",
+   42	      "id": "X22",
+   43	      "title": "Add cancelled terminal status to tasktool"
+   44	    },
+   45	    {
+   46	      "archived_date": "2026-05-24",
+   47	      "archived_path": "docs/archived-tasks/X23-document-cancelled-lifecycle-and-admin-c.md",
+   48	      "id": "X23",
+   49	      "title": "Document cancelled lifecycle and admin closeout guidance"
+   50	    },
+   51	    {
+   52	      "archived_date": "2026-05-26",
+   53	      "archived_path": "docs/archived-tasks/X24-use-global-tasktool-shim-in-superstar-gu.md",
+   54	      "id": "X24",
+   55	      "title": "Use global tasktool shim in Superstar guidance"
+   56	    },
+   57	    {
+   58	      "archived_date": "2026-05-26",
+   59	      "archived_path": "docs/archived-tasks/X25-duck-media-audio-during-tasktool-tts-and.md",
+   60	      "id": "X25",
+   61	      "title": "Duck media audio during tasktool TTS and verify Codex plugin payload"
+   62	    },
+   63	    {
+   64	      "archived_date": "2026-05-26",
+   65	      "archived_path": "docs/archived-tasks/X26-fix-codex-marketplace-payload-refresh-fo.md",
+   66	      "id": "X26",
+   67	      "title": "Fix Codex marketplace payload refresh for Superstar"
+   68	    },
+   69	    {
+   70	      "archived_date": "2026-05-26",
+   71	      "archived_path": "docs/archived-tasks/X1-default-external-review-prompt-transport.md",
+   72	      "id": "X1",
+   73	      "title": "Default external-review prompt transport to stdin"
+   74	    },
+   75	    {
+   76	      "archived_date": "2026-05-26",
+   77	      "archived_path": "docs/archived-tasks/X2-add-repo-local-tasktool-launcher.md",
+   78	      "id": "X2",
+   79	      "title": "Add repo-local tasktool launcher"
+   80	    },
+   81	    {
+   82	      "archived_date": "2026-05-26",
+   83	      "archived_path": "docs/archived-tasks/X3-spot-fix-parse-bold-external-review-verd.md",
+   84	      "id": "X3",
+   85	      "title": "Spot fix: parse bold external-review verdict headings"
+   86	    },
+   87	    {
+   88	      "archived_date": "2026-05-26",
+   89	      "archived_path": "docs/archived-tasks/X4-spot-fix-broaden-legacy-tasklist-importe.md",
+   90	      "id": "X4",
+   91	      "title": "Spot fix: broaden legacy tasklist importer compatibility"
+   92	    },
+   93	    {
+   94	      "archived_date": "2026-05-26",
+   95	      "archived_path": "docs/archived-tasks/X5-add-finished-agent-notification-hook.md",
+   96	      "id": "X5",
+   97	      "title": "Add finished-agent notification hook"
+   98	    },
+   99	    {
+  100	      "archived_date": "2026-05-26",
+  101	      "archived_path": "docs/archived-tasks/X6-fix-codex-finished-agent-hook-compatibil.md",
+  102	      "id": "X6",
+  103	      "title": "Fix Codex finished-agent hook compatibility"
+  104	    },
+  105	    {
+  106	      "archived_date": "2026-05-26",
+  107	      "archived_path": "docs/archived-tasks/X7-fix-superstar-codex-plugin-payload-versi.md",
+  108	      "id": "X7",
+  109	      "title": "Fix Superstar Codex plugin payload version drift"
+  110	    },
+  111	    {
+  112	      "archived_date": "2026-05-26",
+  113	      "archived_path": "docs/archived-tasks/X8-move-semantic-notifications-from-agent-h.md",
+  114	      "id": "X8",
+  115	      "title": "Move semantic notifications from agent hooks to tasktool status changes"
+  116	    },
+  117	    {
+  118	      "archived_date": "2026-05-26",
+  119	      "archived_path": "docs/archived-tasks/X9-coalesce-bursty-tasktool-audio-notificat.md",
+  120	      "id": "X9",
+  121	      "title": "Coalesce bursty tasktool audio notifications"
+  122	    },
+  123	    {
+  124	      "archived_date": "2026-05-26",
+  125	      "archived_path": "docs/archived-tasks/X10-harden-external-review-verdict-parser-an.md",
+  126	      "id": "X10",
+  127	      "title": "Harden external-review verdict parser and prompt against Claude formatting variants"
+  128	    },
+  129	    {
+  130	      "archived_date": "2026-05-26",
+  131	      "archived_path": "docs/archived-tasks/X11-make-external-review-bridge-global.md",
+  132	      "id": "X11",
+  133	      "title": "Make external-review bridge global"
+  134	    },
+  135	    {
+  136	      "archived_date": "2026-05-26",
+  137	      "archived_path": "docs/archived-tasks/X12-tasktool-require-authoritative-checkout-.md",
+  138	      "id": "X12",
+  139	      "title": "tasktool: require authoritative-checkout routing for mutations"
+  140	    },
+  141	    {
+  142	      "archived_date": "2026-05-26",
+  143	      "archived_path": "docs/archived-tasks/X13-fix-tasktool-close-repeated-refs-parsing.md",
+  144	      "id": "X13",
+  145	      "title": "Fix tasktool close repeated refs parsing"
+  146	    },
+  147	    {
+  148	      "archived_date": "2026-05-26",
+  149	      "archived_path": "docs/archived-tasks/X14-stabilize-local-claude-codex-plugin-curr.md",
+  150	      "id": "X14",
+  151	      "title": "Stabilize local Claude/Codex plugin current entrypoints"
+  152	    },
+  153	    {
+  154	      "archived_date": "2026-05-26",
+  155	      "archived_path": "docs/archived-tasks/X17-make-spec-and-plan-artifact-handling-tra.md",
+  156	      "id": "X17",
+  157	      "title": "Make spec and plan artifact handling transactional"
+  158	    },
+  159	    {
+  160	      "archived_date": "2026-05-26",
+  161	      "archived_path": "docs/archived-tasks/X27-add-tasktool-tts-for-workflow-artifacts-.md",
+  162	      "id": "X27",
+  163	      "title": "Add tasktool TTS for workflow artifacts and step changes"
+  164	    },
+  165	    {
+  166	      "archived_date": "2026-05-26",
+  167	      "archived_path": "docs/archived-tasks/X28-prefer-explicit-notification-ding-sound-.md",
+  168	      "id": "X28",
+  169	      "title": "Prefer explicit notification ding sound file"
+  170	    }
+  171	  ],
+  172	  "archived_phases": [
+  173	    {
+  174	      "archived_date": "2026-05-18",
+  175	      "archived_path": "docs/archived-tasks/P2-tasktool-json-backed-task-management-cli.md",
+  176	      "id": "P2",
+  177	      "title": "tasktool: JSON-backed task management CLI"
+  178	    },
+  179	    {
+  180	      "archived_date": "2026-05-19",
+  181	      "archived_path": "docs/archived-tasks/P4-tasktool-coordination-and-lifecycle-auth.md",
+  182	      "id": "P4",
+  183	      "title": "Tasktool coordination and lifecycle authority"
+  184	    },
+  185	    {
+  186	      "archived_date": "2026-05-19",
+  187	      "archived_path": "docs/archived-tasks/P3-phase-planning-workflow.md",
+  188	      "id": "P3",
+  189	      "title": "Phase planning workflow"
+  190	    },
+  191	    {
+  192	      "archived_date": "2026-05-20",
+  193	      "archived_path": "docs/archived-tasks/P1-external-reviewer-work-historical.md",
+  194	      "id": "P1",
+  195	      "title": "External-reviewer work (historical)"
+  196	    },
+  197	    {
+  198	      "archived_date": "2026-05-21",
+  199	      "archived_path": "docs/archived-tasks/P5-tasktool-owned-worktree-lifecycle-using-.md",
+  200	      "id": "P5",
+
+[truncated: 236 additional lines]
+
+<!-- superstar-prompt:end -->
