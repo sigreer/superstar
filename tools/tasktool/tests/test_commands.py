@@ -1939,3 +1939,74 @@ class ReserveCommandTests(unittest.TestCase):
             self.assertEqual(scopes, ["phase", "project"])
         finally:
             t.cleanup()
+
+    def test_reserve_add_project_scope_collides_across_active_phases(self):
+        t = _Tmp()
+        try:
+            commands.cmd_init(repo_root=t.root, project="demo")
+            p1 = commands.cmd_create_phase(repo_root=t.root, title="phase1")
+            a = commands.cmd_create_slice(repo_root=t.root, phase_id=p1, title="a")
+            p2 = commands.cmd_create_phase(repo_root=t.root, title="phase2")
+            b = commands.cmd_create_slice(repo_root=t.root, phase_id=p2, title="b")
+            commands.cmd_reserve_add(
+                repo_root=t.root, slice_id=f"{p1}.{a}",
+                resource_value="directus-collection:home_slider", scope="project",
+            )
+            with self.assertRaises(commands.CommandError) as cm:
+                commands.cmd_reserve_add(
+                    repo_root=t.root, slice_id=f"{p2}.{b}",
+                    resource_value="directus-collection:home_slider", scope="project",
+                )
+            self.assertIn(f"{p1}.{a}", str(cm.exception))
+        finally:
+            t.cleanup()
+
+    def test_reserve_add_project_scope_collides_with_ledger(self):
+        t = _Tmp()
+        try:
+            commands.cmd_init(repo_root=t.root, project="demo")
+            pid = commands.cmd_create_phase(repo_root=t.root, title="phase")
+            sid = commands.cmd_create_slice(repo_root=t.root, phase_id=pid, title="s")
+            # Seed an archived holder into the ledger directly.
+            from tasktool.model import LedgerReservation
+            from tasktool.serialize import load_project, save_project
+            proj = load_project(t.root / "docs/tasklist.json")
+            proj.reservations_ledger.append(LedgerReservation(
+                resource="route-slug", value="/offers", scope="project",
+                note=None, owner_id="P3.S4", owner_phase_id="P3",
+                archived_date="2026-05-01",
+            ))
+            save_project(proj, t.root / "docs/tasklist.json")
+            with self.assertRaises(commands.CommandError) as cm:
+                commands.cmd_reserve_add(
+                    repo_root=t.root, slice_id=f"{pid}.{sid}",
+                    resource_value="route-slug:/offers", scope="project",
+                )
+            msg = str(cm.exception)
+            self.assertIn("route-slug:/offers", msg)
+            self.assertIn("P3.S4", msg)
+        finally:
+            t.cleanup()
+
+    def test_reserve_add_phase_scope_does_not_consult_ledger(self):
+        t = _Tmp()
+        try:
+            commands.cmd_init(repo_root=t.root, project="demo")
+            pid = commands.cmd_create_phase(repo_root=t.root, title="phase")
+            sid = commands.cmd_create_slice(repo_root=t.root, phase_id=pid, title="s")
+            from tasktool.model import LedgerReservation
+            from tasktool.serialize import load_project, save_project
+            proj = load_project(t.root / "docs/tasklist.json")
+            proj.reservations_ledger.append(LedgerReservation(
+                resource="route-slug", value="/offers", scope="project",
+                note=None, owner_id="P3.S4", owner_phase_id="P3",
+                archived_date="2026-05-01",
+            ))
+            save_project(proj, t.root / "docs/tasklist.json")
+            # phase-scope add of the same value must NOT be blocked by the project ledger.
+            commands.cmd_reserve_add(
+                repo_root=t.root, slice_id=f"{pid}.{sid}",
+                resource_value="route-slug:/offers", scope="phase",
+            )
+        finally:
+            t.cleanup()

@@ -1432,6 +1432,34 @@ def _phase_scope_holder(p: Project, phase, reserving_qid: str, resource: str, va
     return None
 
 
+def _project_scope_holder(p: Project, reserving_qid: str, resource: str, value: str):
+    """Return the holder id (qualified slice id, or a ledger owner descriptor) of a
+    project-scoped `resource:value` collision, or None.
+
+    Checks (a) every non-cancelled slice across ALL active phases except the
+    reserving slice, then (b) `Project.reservations_ledger` (archived holders).
+    A ledger match is reported via `_format_ledger_holder`."""
+    for ph in p.phases:
+        for slc in ph.slices:
+            slc_qid = f"{ph.id}.{slc.id}"
+            if slc_qid == reserving_qid:
+                continue
+            if slc.status == Status.CANCELLED:
+                continue
+            for r in slc.reservations:
+                if r.resource == resource and r.value == value:
+                    return slc_qid
+    for lr in p.reservations_ledger:
+        if lr.resource == resource and lr.value == value:
+            return _format_ledger_holder(lr)
+    return None
+
+
+def _format_ledger_holder(lr) -> str:
+    """Holder descriptor for a ledger entry, naming owner + archive date."""
+    return f"{lr.owner_id} (archived {lr.archived_date} from phase {lr.owner_phase_id})"
+
+
 def cmd_reserve_add(
     *, repo_root: Path, slice_id: str, resource_value: str,
     scope: str = "phase", note: str | None = None,
@@ -1454,12 +1482,16 @@ def cmd_reserve_add(
         ):
             return
         phase = _phase_of_slice(p, qid)
-        holder = _phase_scope_holder(p, phase, qid, resource, value)
-        # project-scope holder check is added in Task 6.
+        if scope == "project":
+            holder = _project_scope_holder(p, qid, resource, value)
+            holder_context = "project scope"
+        else:
+            holder = _phase_scope_holder(p, phase, qid, resource, value)
+            holder_context = f"phase {phase.id}"
         if holder is not None and not force:
             raise CommandError(
                 f"reserve add: {resource}:{value} is already reserved by {holder} "
-                f"in phase {phase.id}; use --force --reason \"...\" to override"
+                f"in {holder_context}; use --force --reason \"...\" to override"
             )
         if force:
             # --force handling (requires --reason) is added in Task 7.
