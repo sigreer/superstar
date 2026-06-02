@@ -268,11 +268,13 @@
             "docs/reviewer/p7-s1-data-model-migration-plan"
           ],
           "reviewer_chain": "docs/reviewer/p7-s1-data-model-migration-plan",
-          "started": null,
-          "status": "ready",
+          "started": "2026-06-02",
+          "status": "in_progress",
           "tasks": [],
           "title": "Data model + migration (schema v3): surfaces, reservations, coordination_group, base/landed SHAs, LedgerReservation",
-          "workflow_step": "implement"
+          "workflow_step": "implement",
+          "worktree_branch": "worktree-p7-s1-data-model-migration-schema-v3-surfaces",
+          "worktree_path": ".worktrees/worktree-p7-s1-data-model-migration-schema-v3-surfaces"
         },
         {
           "blocked_on": null,
@@ -404,11 +406,11 @@
         },
         {
           "blocked_on": null,
-          "closed": null,
+          "closed": "2026-06-02",
           "created": "2026-06-02",
           "depends_on": [],
           "id": "S8",
-          "notes": "Spec §4.H. Surfaces: external-review. INVESTIGATION-FIRST: reproduce reported add/add reviewer-artifact collision vs CURRENT bridge (already work_id-scopes chains + round/role-unique request files). Fix only if reproduced; else document + drop. No deps.",
+          "notes": "Spec §4.H. Surfaces: external-review. INVESTIGATION-FIRST: reproduce reported add/add reviewer-artifact collision vs CURRENT bridge (already work_id-scopes chains + round/role-unique request files). Fix only if reproduced; else document + drop. No deps.\nCancelled 2026-06-02T23:23:25: investigation: reviewer-artifact add/add collision does not reproduce against the current bridge (work-id-keyed chain folders, round/role-unique basenames, mandatory --work-id with mismatch refusal); residual docs/tasklist.json close-churn is owned by P7.S6 integrate-current-main, not by reviewer-artifact naming. See docs/notes/2026-06-02-P7-S8-reviewer-artifact-investigation-decision.md",
           "parallel_group": null,
           "plan_path": "docs/plans/2026-06-02-P7-S8-reviewer-artifact-investigation.md",
           "planning_status": "ratified",
@@ -418,11 +420,12 @@
             "docs/reviewer/p7-s8-reviewer-artifact-investigation-plan"
           ],
           "reviewer_chain": "docs/reviewer/p7-s8-reviewer-artifact-investigation-plan",
-          "started": null,
-          "status": "ready",
+          "started": "2026-06-02",
+          "status": "cancelled",
           "tasks": [],
           "title": "Investigate reviewer-artifact collision vs current bridge; fix only if reproduced, else drop",
-          "workflow_step": "implement"
+          "workflow_step": "implement",
+          "worktree_pruned_at": "2026-06-02"
         }
       ],
       "spec_path": "docs/specs/2026-06-02-P7-integration-surface-parallel-safety-design.md",
