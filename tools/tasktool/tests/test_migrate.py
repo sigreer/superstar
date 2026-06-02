@@ -308,6 +308,22 @@ def _value_pair_for_field(row_type, field) -> tuple[object, object]:
         from tasktool.model import PlanningStatus
 
         return (PlanningStatus.PROPOSED, PlanningStatus.RATIFIED)
+    if field.name == "integration_surfaces":
+        return ([], ["cms-block-registry"])
+    if field.name == "reservations":
+        from tasktool.model import Reservation
+        return ([], [Reservation(resource="homepage-sort", value="15", scope="phase")])
+    if field.name == "coordination_group":
+        return (None, "cms")
+    if field.name in {"worktree_base_sha", "landed_base_sha"}:
+        return (None, "abc123")
+    # NB: reservations_ledger is deliberately NOT given a value pair here.
+    # The generic acceptance test asserts a scalar setattr-style merge
+    # (`get_on(merged) == local_val`), but the ledger uses bespoke
+    # union/never-delete semantics (Task 5a). Returning (None, None) makes
+    # the parametrized test skip it; its merge behavior is covered by the
+    # dedicated ledger tests in Task 5a. Leave it to fall through to the
+    # function's final `return (None, None)`.
     return (None, None)
 
 
@@ -473,3 +489,38 @@ def test_identical_ledger_on_both_sides_yields_no_duplicate():
         deltas=deltas, conflicts=conflicts, policy="accept-local",
     )
     assert len(merged.reservations_ledger) == 1
+
+
+def test_v1_and_v2_raw_load_into_v3_defaults():
+    from tasktool.serialize import from_dict, to_dict
+    for version in (1, 2):
+        raw = {
+            "project": "x", "schema_version": version, "north_star": "",
+            "phases": [{
+                "id": "P1", "title": "t", "created": "2026-05-01", "status": "ready",
+                "slices": [{
+                    "id": "S1", "title": "t", "created": "2026-05-01",
+                    "status": "ready",
+                }],
+            }],
+            "cross_cutting": [], "archived_phases": [], "archived_cross_cutting": [],
+        }
+        p = from_dict(raw)
+        s = p.phases[0].slices[0]
+        assert s.integration_surfaces == []
+        assert s.reservations == []
+        assert s.coordination_group is None
+        assert s.worktree_base_sha is None
+        assert s.landed_base_sha is None
+        assert p.reservations_ledger == []
+        # Re-serialization promotes to v3 and adds no new keys for the
+        # default-valued historical row.
+        out = to_dict(p)
+        assert out["schema_version"] == 3
+        slc = out["phases"][0]["slices"][0]
+        for key in (
+            "integration_surfaces", "reservations", "coordination_group",
+            "worktree_base_sha", "landed_base_sha",
+        ):
+            assert key not in slc
+        assert "reservations_ledger" not in out
