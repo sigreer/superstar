@@ -182,6 +182,41 @@ def _build_parser() -> argparse.ArgumentParser:
                           default="ratified")
     p_ratify.add_argument("--parallel-group")
 
+    # ── surface (P7.S2) ──
+    p_surface = sub.add_parser("surface")
+    surface_sub = p_surface.add_subparsers(dest="surface_cmd", required=True)
+    p_surface_add = surface_sub.add_parser("add")
+    p_surface_add.add_argument("slice_id")
+    p_surface_add.add_argument("surfaces", nargs="+")
+    p_surface_remove = surface_sub.add_parser("remove")
+    p_surface_remove.add_argument("slice_id")
+    p_surface_remove.add_argument("surface")
+    p_surface_list = surface_sub.add_parser("list")
+    p_surface_list.add_argument("phase_id", nargs="?")
+
+    # ── reserve (P7.S2) ──
+    p_reserve = sub.add_parser("reserve")
+    reserve_sub = p_reserve.add_subparsers(dest="reserve_cmd", required=True)
+    p_reserve_add = reserve_sub.add_parser("add")
+    p_reserve_add.add_argument("slice_id")
+    p_reserve_add.add_argument("resource_value", metavar="resource:value")
+    p_reserve_add.add_argument("--scope", choices=["phase", "project"], default="phase")
+    p_reserve_add.add_argument("--note")
+    p_reserve_add.add_argument("--force", action="store_true")
+    p_reserve_add.add_argument("--reason")
+    p_reserve_remove = reserve_sub.add_parser("remove")
+    p_reserve_remove.add_argument("slice_id")
+    p_reserve_remove.add_argument("resource_value", metavar="resource:value")
+    p_reserve_list = reserve_sub.add_parser("list")
+    p_reserve_list.add_argument("phase_id", nargs="?")
+
+    # ── coordinate (P7.S2) ──
+    p_coordinate = sub.add_parser("coordinate")
+    p_coordinate.add_argument("slice_id")
+    coord_excl = p_coordinate.add_mutually_exclusive_group(required=True)
+    coord_excl.add_argument("--group")
+    coord_excl.add_argument("--clear", action="store_true")
+
     p_planning_path = sub.add_parser("planning-path")
     p_planning_path.add_argument("phase_id")
     p_planning_path.add_argument("--set", dest="path", required=True)
@@ -438,6 +473,40 @@ def main(argv: list[str]) -> int:
             commands.cmd_ratify(
                 repo_root=root, slice_id=args.slice_id,
                 status=args.status, parallel_group=args.parallel_group,
+            )
+        elif args.cmd == "surface":
+            if args.surface_cmd == "add":
+                commands.cmd_surface_add(
+                    repo_root=root, slice_id=args.slice_id, surfaces=args.surfaces,
+                )
+            elif args.surface_cmd == "remove":
+                commands.cmd_surface_remove(
+                    repo_root=root, slice_id=args.slice_id, surface=args.surface,
+                )
+            elif args.surface_cmd == "list":
+                sys.stdout.write(commands.cmd_surface_list(
+                    repo_root=root, phase_id=args.phase_id,
+                ))
+        elif args.cmd == "reserve":
+            if args.reserve_cmd == "add":
+                commands.cmd_reserve_add(
+                    repo_root=root, slice_id=args.slice_id,
+                    resource_value=args.resource_value, scope=args.scope,
+                    note=args.note, force=args.force, reason=args.reason,
+                )
+            elif args.reserve_cmd == "remove":
+                commands.cmd_reserve_remove(
+                    repo_root=root, slice_id=args.slice_id,
+                    resource_value=args.resource_value,
+                )
+            elif args.reserve_cmd == "list":
+                sys.stdout.write(commands.cmd_reserve_list(
+                    repo_root=root, phase_id=args.phase_id,
+                ))
+        elif args.cmd == "coordinate":
+            commands.cmd_coordinate(
+                repo_root=root, slice_id=args.slice_id,
+                group=args.group, clear=args.clear,
             )
         elif args.cmd == "planning-path":
             commands.cmd_phase_planning_path(repo_root=root, phase_id=args.phase_id, path=args.path)
