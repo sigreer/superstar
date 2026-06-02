@@ -411,18 +411,18 @@
           "notes": "Spec §4.H. Surfaces: external-review. INVESTIGATION-FIRST: reproduce reported add/add reviewer-artifact collision vs CURRENT bridge (already work_id-scopes chains + round/role-unique request files). Fix only if reproduced; else document + drop. No deps.",
           "parallel_group": null,
           "plan_path": "docs/plans/2026-06-02-P7-S8-reviewer-artifact-investigation.md",
-          "planning_status": "proposed",
+          "planning_status": "ratified",
           "refs": [
             "docs/plans/2026-06-02-P7-S8-reviewer-artifact-investigation.md",
-            "docs/handoffs/2026-06-02-P7-S8-reviewer-artifact-investigation-prompt.md"
+            "docs/handoffs/2026-06-02-P7-S8-reviewer-artifact-investigation-prompt.md",
+            "docs/reviewer/p7-s8-reviewer-artifact-investigation-plan"
           ],
-          "review_active": true,
-          "review_stage": "passed",
-          "reviewer_chain": null,
+          "reviewer_chain": "docs/reviewer/p7-s8-reviewer-artifact-investigation-plan",
           "started": null,
           "status": "ready",
           "tasks": [],
-          "title": "Investigate reviewer-artifact collision vs current bridge; fix only if reproduced, else drop"
+          "title": "Investigate reviewer-artifact collision vs current bridge; fix only if reproduced, else drop",
+          "workflow_step": "implement"
         }
       ],
       "spec_path": "docs/specs/2026-06-02-P7-integration-surface-parallel-safety-design.md",
