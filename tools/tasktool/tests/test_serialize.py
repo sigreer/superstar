@@ -423,3 +423,99 @@ class P7OmitWhenDefaultTests(unittest.TestCase):
             "note": None, "owner_id": "P20.S3", "owner_phase_id": "P20",
             "archived_date": "2026-06-02",
         }])
+
+
+class P7DeserializeTests(unittest.TestCase):
+    def test_missing_keys_default_on_deserialize(self):
+        # A row with none of the new keys (the v1/v2 historical shape).
+        raw = {
+            "project": "demo", "schema_version": 3,
+            "phases": [{
+                "id": "P1", "title": "t", "created": "2026-06-02", "status": "ready",
+                "slices": [{
+                    "id": "S1", "title": "t", "created": "2026-06-02",
+                    "status": "ready",
+                }],
+            }],
+            "cross_cutting": [], "archived_phases": [], "archived_cross_cutting": [],
+        }
+        p = from_dict(raw)
+        s = p.phases[0].slices[0]
+        self.assertEqual(s.integration_surfaces, [])
+        self.assertEqual(s.reservations, [])
+        self.assertIsNone(s.coordination_group)
+        self.assertIsNone(s.worktree_base_sha)
+        self.assertIsNone(s.landed_base_sha)
+        self.assertEqual(p.reservations_ledger, [])
+
+    def test_present_keys_deserialize_to_objects(self):
+        from tasktool.model import Reservation, LedgerReservation
+        raw = {
+            "project": "demo", "schema_version": 3,
+            "phases": [{
+                "id": "P1", "title": "t", "created": "2026-06-02", "status": "ready",
+                "slices": [{
+                    "id": "S1", "title": "t", "created": "2026-06-02",
+                    "status": "ready",
+                    "integration_surfaces": ["cms-block-registry", "theme-tail-css"],
+                    "reservations": [
+                        {"resource": "homepage-sort", "value": "15",
+                         "scope": "phase", "note": "hero"},
+                        {"resource": "route-slug", "value": "/offers",
+                         "scope": "project", "note": None},
+                    ],
+                    "coordination_group": "cms",
+                    "worktree_base_sha": "abc123",
+                    "landed_base_sha": "def456",
+                }],
+            }],
+            "cross_cutting": [], "archived_phases": [], "archived_cross_cutting": [],
+            "reservations_ledger": [
+                {"resource": "block-kind", "value": "slider", "scope": "project",
+                 "note": None, "owner_id": "P20.S2", "owner_phase_id": "P20",
+                 "archived_date": "2026-06-01"},
+            ],
+        }
+        p = from_dict(raw)
+        s = p.phases[0].slices[0]
+        self.assertEqual(s.integration_surfaces, ["cms-block-registry", "theme-tail-css"])
+        self.assertEqual(s.reservations[0], Reservation(
+            resource="homepage-sort", value="15", scope="phase", note="hero"))
+        self.assertEqual(s.reservations[1], Reservation(
+            resource="route-slug", value="/offers", scope="project", note=None))
+        self.assertEqual(s.coordination_group, "cms")
+        self.assertEqual(s.worktree_base_sha, "abc123")
+        self.assertEqual(s.landed_base_sha, "def456")
+        self.assertEqual(p.reservations_ledger[0], LedgerReservation(
+            resource="block-kind", value="slider", scope="project", note=None,
+            owner_id="P20.S2", owner_phase_id="P20", archived_date="2026-06-01"))
+
+    def test_full_roundtrip_with_p7_fields(self):
+        from tasktool.model import Reservation, LedgerReservation
+        p = Project(project="demo")
+        ph = Phase(id="P1", title="phase", created="2026-06-02")
+        ph.slices.append(Slice(
+            id="S1", title="slice", created="2026-06-02",
+            integration_surfaces=["cms-block-registry"],
+            reservations=[Reservation(
+                resource="homepage-sort", value="15", scope="phase", note="hero")],
+            coordination_group="cms",
+            worktree_base_sha="abc123",
+            landed_base_sha="def456",
+        ))
+        p.phases.append(ph)
+        p.reservations_ledger.append(LedgerReservation(
+            resource="block-kind", value="slider", scope="project", note=None,
+            owner_id="P20.S2", owner_phase_id="P20", archived_date="2026-06-01"))
+        back = from_dict(to_dict(p))
+        self.assertEqual(back, p)
+
+    def test_default_roundtrip_equality(self):
+        # A wholly-default project must round-trip to an equal object even
+        # though the new keys are omitted on serialize.
+        p = Project(project="demo")
+        ph = Phase(id="P1", title="phase", created="2026-06-02")
+        ph.slices.append(Slice(id="S1", title="slice", created="2026-06-02"))
+        p.phases.append(ph)
+        back = from_dict(to_dict(p))
+        self.assertEqual(back, p)
