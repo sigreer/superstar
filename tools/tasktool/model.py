@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Literal
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 _CANCEL_LINE_RE = re.compile(r"^Cancelled \S+: .*$", re.M)
 
@@ -61,6 +61,23 @@ class BlockedOn:
     value: str
 
 @dataclass(slots=True)
+class Reservation:
+    resource: str
+    value: str
+    scope: Literal["phase", "project"] = "phase"
+    note: str | None = None
+
+@dataclass(slots=True)
+class LedgerReservation:
+    resource: str
+    value: str
+    scope: Literal["phase", "project"]
+    note: str | None
+    owner_id: str
+    owner_phase_id: str
+    archived_date: str
+
+@dataclass(slots=True)
 class Task:
     id: str
     title: str
@@ -97,6 +114,11 @@ class Slice:
     worktree_pruned_at: str | None = None
     worktree_prune_pending: bool = False
     worktree_prune_pending_at: str | None = None
+    integration_surfaces: list[str] = field(default_factory=list)
+    reservations: list[Reservation] = field(default_factory=list)
+    coordination_group: str | None = None
+    worktree_base_sha: str | None = None
+    landed_base_sha: str | None = None
 
 @dataclass(slots=True)
 class Phase:
@@ -155,3 +177,4 @@ class Project:
     cross_cutting: list[CrossCutting] = field(default_factory=list)
     archived_phases: list[ArchivedPhase] = field(default_factory=list)
     archived_cross_cutting: list[ArchivedCrossCutting] = field(default_factory=list)
+    reservations_ledger: list[LedgerReservation] = field(default_factory=list)

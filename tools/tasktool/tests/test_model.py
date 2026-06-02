@@ -104,8 +104,8 @@ def test_cross_audit_fields_default_to_none_and_false():
     assert c.worktree_prune_pending_at is None
 
 
-def test_schema_version_is_2():
-    assert SCHEMA_VERSION == 2
+def test_schema_version_is_3():
+    assert SCHEMA_VERSION == 3
 
 
 def test_slice_has_workflow_step_default_none():
@@ -162,3 +162,56 @@ def test_is_terminal_done_and_cancelled_only():
 
 def test_cancelled_enum_value():
     assert Status.CANCELLED.value == "cancelled"
+
+
+class P7DataModelTests(unittest.TestCase):
+    def test_schema_version_is_3(self):
+        self.assertEqual(SCHEMA_VERSION, 3)
+
+    def test_reservation_dataclass(self):
+        from tasktool.model import Reservation
+        r = Reservation(resource="homepage-sort", value="15", scope="phase")
+        self.assertEqual(r.resource, "homepage-sort")
+        self.assertEqual(r.value, "15")
+        self.assertEqual(r.scope, "phase")
+        self.assertIsNone(r.note)
+        r2 = Reservation(
+            resource="route-slug", value="/offers",
+            scope="project", note="landing route",
+        )
+        self.assertEqual(r2.note, "landing route")
+
+    def test_ledger_reservation_dataclass(self):
+        from tasktool.model import LedgerReservation
+        lr = LedgerReservation(
+            resource="homepage-sort", value="15", scope="project",
+            note=None, owner_id="P20.S3", owner_phase_id="P20",
+            archived_date="2026-06-02",
+        )
+        self.assertEqual(lr.owner_id, "P20.S3")
+        self.assertEqual(lr.owner_phase_id, "P20")
+        self.assertEqual(lr.archived_date, "2026-06-02")
+
+    def test_slice_p7_field_defaults(self):
+        s = Slice(id="S1", title="x", created="2026-06-02")
+        self.assertEqual(s.integration_surfaces, [])
+        self.assertEqual(s.reservations, [])
+        self.assertIsNone(s.coordination_group)
+        self.assertIsNone(s.worktree_base_sha)
+        self.assertIsNone(s.landed_base_sha)
+
+    def test_slice_p7_fields_are_independent_lists(self):
+        a = Slice(id="S1", title="x", created="2026-06-02")
+        b = Slice(id="S2", title="y", created="2026-06-02")
+        a.integration_surfaces.append("cms-block-registry")
+        a.reservations.append(
+            __import__("tasktool.model", fromlist=["Reservation"]).Reservation(
+                resource="block-kind", value="slider", scope="phase",
+            )
+        )
+        self.assertEqual(b.integration_surfaces, [])
+        self.assertEqual(b.reservations, [])
+
+    def test_project_reservations_ledger_default(self):
+        p = Project(project="demo")
+        self.assertEqual(p.reservations_ledger, [])
