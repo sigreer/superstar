@@ -2151,3 +2151,103 @@ class ReserveCommandTests(unittest.TestCase):
                 )
         finally:
             t.cleanup()
+
+
+class LedgerPopulationTests(unittest.TestCase):
+    def _archive_ready(self, t, pid, sid, *, cancel=False):
+        if cancel:
+            commands.cmd_cancel(repo_root=t.root, id=f"{pid}.{sid}", reason="dropped")
+        else:
+            commands.cmd_start(repo_root=t.root, id=f"{pid}.{sid}")
+            commands.cmd_close(repo_root=t.root, id=f"{pid}.{sid}", skip_review_gate=True)
+
+    def test_archive_phase_ladders_project_reservations_from_done_slices(self):
+        t = _Tmp()
+        try:
+            commands.cmd_init(repo_root=t.root, project="demo")
+            pid = commands.cmd_create_phase(repo_root=t.root, title="phase")
+            sid = commands.cmd_create_slice(repo_root=t.root, phase_id=pid, title="s")
+            commands.cmd_reserve_add(
+                repo_root=t.root, slice_id=f"{pid}.{sid}",
+                resource_value="route-slug:/offers", scope="project",
+            )
+            # phase-scoped reservation must NOT be laddered
+            commands.cmd_reserve_add(
+                repo_root=t.root, slice_id=f"{pid}.{sid}",
+                resource_value="homepage-sort:15", scope="phase",
+            )
+            self._archive_ready(t, pid, sid)
+            commands.cmd_archive_phase(repo_root=t.root, phase_id=pid, skip_review_gate=True)
+            p = load_project(t.root / "docs/tasklist.json")
+            ledger = p.reservations_ledger
+            self.assertEqual(len(ledger), 1)
+            lr = ledger[0]
+            self.assertEqual((lr.resource, lr.value, lr.scope), ("route-slug", "/offers", "project"))
+            self.assertEqual(lr.owner_id, f"{pid}.{sid}")
+            self.assertEqual(lr.owner_phase_id, pid)
+            self.assertTrue(lr.archived_date)
+        finally:
+            t.cleanup()
+
+    def test_archive_phase_excludes_cancelled_slice_reservations(self):
+        t = _Tmp()
+        try:
+            commands.cmd_init(repo_root=t.root, project="demo")
+            pid = commands.cmd_create_phase(repo_root=t.root, title="phase")
+            s_done = commands.cmd_create_slice(repo_root=t.root, phase_id=pid, title="done")
+            s_cx = commands.cmd_create_slice(repo_root=t.root, phase_id=pid, title="cancelled")
+            commands.cmd_reserve_add(
+                repo_root=t.root, slice_id=f"{pid}.{s_done}",
+                resource_value="route-slug:/a", scope="project",
+            )
+            commands.cmd_reserve_add(
+                repo_root=t.root, slice_id=f"{pid}.{s_cx}",
+                resource_value="route-slug:/b", scope="project",
+            )
+            self._archive_ready(t, pid, s_cx, cancel=True)
+            self._archive_ready(t, pid, s_done)
+            commands.cmd_archive_phase(repo_root=t.root, phase_id=pid, skip_review_gate=True)
+            p = load_project(t.root / "docs/tasklist.json")
+            values = {(lr.resource, lr.value) for lr in p.reservations_ledger}
+            self.assertEqual(values, {("route-slug", "/a")})
+        finally:
+            t.cleanup()
+
+    def test_archive_phase_dedupes_on_resource_value_scope_owner(self):
+        t = _Tmp()
+        try:
+            commands.cmd_init(repo_root=t.root, project="demo")
+            pid = commands.cmd_create_phase(repo_root=t.root, title="phase")
+            a = commands.cmd_create_slice(repo_root=t.root, phase_id=pid, title="a")
+            b = commands.cmd_create_slice(repo_root=t.root, phase_id=pid, title="b")
+            commands.cmd_reserve_add(
+                repo_root=t.root, slice_id=f"{pid}.{a}",
+                resource_value="cache-tag:home", scope="project",
+            )
+            # b force-shares the same project value → two distinct owners
+            commands.cmd_reserve_add(
+                repo_root=t.root, slice_id=f"{pid}.{b}",
+                resource_value="cache-tag:home", scope="project",
+                force=True, reason="shared cache tag",
+            )
+            self._archive_ready(t, pid, a)
+            self._archive_ready(t, pid, b)
+            commands.cmd_archive_phase(repo_root=t.root, phase_id=pid, skip_review_gate=True)
+            p = load_project(t.root / "docs/tasklist.json")
+            owners = sorted(lr.owner_id for lr in p.reservations_ledger)
+            self.assertEqual(owners, sorted([f"{pid}.{a}", f"{pid}.{b}"]))
+            self.assertEqual(len(p.reservations_ledger), 2)
+        finally:
+            t.cleanup()
+
+    def test_ledger_population_helper_is_idempotent_on_repeat(self):
+        from tasktool.commands import _ladder_project_reservations
+        from tasktool.model import Project, Phase, Slice, Reservation, Status
+        proj = Project(project="demo")
+        slc = Slice(id="S1", title="s", created="2026-06-02", status=Status.DONE)
+        slc.reservations.append(Reservation(resource="route-slug", value="/x", scope="project", note=None))
+        phase = Phase(id="P1", title="p", created="2026-06-02")
+        phase.slices.append(slc)
+        _ladder_project_reservations(proj, phase, archived_date="2026-06-02")
+        _ladder_project_reservations(proj, phase, archived_date="2026-06-02")
+        self.assertEqual(len(proj.reservations_ledger), 1)

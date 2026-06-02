@@ -1460,6 +1460,34 @@ def _format_ledger_holder(lr) -> str:
     return f"{lr.owner_id} (archived {lr.archived_date} from phase {lr.owner_phase_id})"
 
 
+def _ladder_project_reservations(p: Project, phase, *, archived_date: str) -> None:
+    """Append project-scoped reservations from the phase's NON-CANCELLED (done) slices
+    to `Project.reservations_ledger` as LedgerReservations.
+
+    Deduped on (resource, value, scope, owner_id): re-running is idempotent (same owner
+    ⇒ same key), and two distinct done slices that --force-shared a value both survive.
+    Cancelled slices contribute nothing."""
+    existing = {
+        (lr.resource, lr.value, lr.scope, lr.owner_id)
+        for lr in p.reservations_ledger
+    }
+    for slc in phase.slices:
+        if slc.status == Status.CANCELLED:
+            continue
+        owner_id = f"{phase.id}.{slc.id}"
+        for r in slc.reservations:
+            if r.scope != "project":
+                continue
+            key = (r.resource, r.value, r.scope, owner_id)
+            if key in existing:
+                continue
+            existing.add(key)
+            p.reservations_ledger.append(LedgerReservation(
+                resource=r.resource, value=r.value, scope=r.scope, note=r.note,
+                owner_id=owner_id, owner_phase_id=phase.id, archived_date=archived_date,
+            ))
+
+
 def cmd_reserve_add(
     *, repo_root: Path, slice_id: str, resource_value: str,
     scope: str = "phase", note: str | None = None,
@@ -2310,6 +2338,8 @@ def _cmd_archive_phase_at_root(
         phase.closed = phase.closed or _today()
     else:
         phase.closed = phase.closed or _today()
+
+    _ladder_project_reservations(p, phase, archived_date=_today())
 
     slug = _slugify(phase.title)
     archive_rel = f"docs/archived-tasks/{phase_id}-{slug}.md"
