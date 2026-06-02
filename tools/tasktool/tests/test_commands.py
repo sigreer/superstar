@@ -1722,3 +1722,30 @@ class SurfaceCommandTests(unittest.TestCase):
                 )
         finally:
             t.cleanup()
+
+    def test_surface_list_renders_phase_slices(self):
+        t = _Tmp()
+        try:
+            pid, sid = self._setup_phase_with_slice(t)
+            commands.cmd_surface_add(
+                repo_root=t.root, slice_id=f"{pid}.{sid}",
+                surfaces=["cms-block-registry", "directus-schema"],
+            )
+            out = commands.cmd_surface_list(repo_root=t.root, phase_id=pid)
+            self.assertIn(f"{pid}.{sid}", out)
+            self.assertIn("cms-block-registry", out)
+            self.assertIn("directus-schema", out)
+        finally:
+            t.cleanup()
+
+    def test_surface_list_all_phases_when_omitted(self):
+        t = _Tmp()
+        try:
+            pid, sid = self._setup_phase_with_slice(t)
+            commands.cmd_surface_add(
+                repo_root=t.root, slice_id=f"{pid}.{sid}", surfaces=["theme-tail-css"],
+            )
+            out = commands.cmd_surface_list(repo_root=t.root, phase_id=None)
+            self.assertIn("theme-tail-css", out)
+        finally:
+            t.cleanup()

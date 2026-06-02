@@ -1357,6 +1357,29 @@ def cmd_surface_remove(*, repo_root: Path, slice_id: str, surface: str) -> None:
         _save(write_root, p)
 
 
+def _iter_phase_slices(p: Project, phase_id: str | None):
+    """Yield (phase, slice) for the given phase, or all active phases if None."""
+    for ph in p.phases:
+        if phase_id is not None and ph.id != phase_id:
+            continue
+        for slc in ph.slices:
+            yield ph, slc
+
+
+def cmd_surface_list(*, repo_root: Path, phase_id: str | None) -> str:
+    with _read_context(repo_root) as write_root:
+        p = _load(write_root)
+        if phase_id is not None and not any(ph.id == phase_id for ph in p.phases):
+            raise CommandError(f"phase {phase_id} not found")
+        lines: list[str] = []
+        for ph, slc in _iter_phase_slices(p, phase_id):
+            surfaces = ", ".join(slc.integration_surfaces) if slc.integration_surfaces else "(none)"
+            lines.append(f"{ph.id}.{slc.id}  [{slc.status.value}]  {surfaces}")
+        if not lines:
+            return "(no slices)\n"
+        return "\n".join(lines) + "\n"
+
+
 def cmd_phase_planning_path(*, repo_root: Path, phase_id: str, path: str | None) -> None:
     with _write_context(repo_root) as write_root:
         p = _load(write_root)
