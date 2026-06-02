@@ -254,7 +254,7 @@
       "slices": [
         {
           "blocked_on": null,
-          "closed": null,
+          "closed": "2026-06-03",
           "created": "2026-06-02",
           "depends_on": [],
           "id": "S1",
@@ -267,9 +267,11 @@
             "docs/handoffs/2026-06-02-P7-S1-data-model-migration-prompt.md",
             "docs/reviewer/p7-s1-data-model-migration-plan"
           ],
-          "reviewer_chain": "docs/reviewer/p7-s1-data-model-migration-plan",
+          "review_active": true,
+          "review_stage": "passed",
+          "reviewer_chain": "docs/reviewer/p7-s1-data-model-migration-P7-S1-post-slice",
           "started": "2026-06-02",
-          "status": "in_progress",
+          "status": "done",
           "tasks": [],
           "title": "Data model + migration (schema v3): surfaces, reservations, coordination_group, base/landed SHAs, LedgerReservation",
           "workflow_step": "implement",
@@ -435,5 +437,5 @@
     }
   ],
   "project": "superstar",
-  "schema_version": 2
+  "schema_version": 3
 }
