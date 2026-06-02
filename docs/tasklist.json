@@ -283,20 +283,20 @@
           ],
           "id": "S2",
           "notes": "Spec §4.B. Surfaces: cli, commands. reserve add refusal (phase+project scope incl. ledger); --force requires --reason, mutates only reserving slice; ledger LedgerReservation population on archive-phase (done slices only), dedupe resource:value:scope:owner_id.",
-          "parallel_group": null,
+          "parallel_group": "core-after-model",
           "plan_path": "docs/plans/2026-06-02-P7-S2-surface-reserve-coordinate-cli.md",
-          "planning_status": "proposed",
+          "planning_status": "ratified",
           "refs": [
             "docs/plans/2026-06-02-P7-S2-surface-reserve-coordinate-cli.md",
-            "docs/handoffs/2026-06-02-P7-S2-surface-reserve-coordinate-cli-prompt.md"
+            "docs/handoffs/2026-06-02-P7-S2-surface-reserve-coordinate-cli-prompt.md",
+            "docs/reviewer/p7-s2-surface-reserve-coordinate-cli-plan"
           ],
-          "review_active": true,
-          "review_stage": "passed",
-          "reviewer_chain": null,
+          "reviewer_chain": "docs/reviewer/p7-s2-surface-reserve-coordinate-cli-plan",
           "started": null,
           "status": "ready",
           "tasks": [],
-          "title": "surface / reserve / coordinate CLI; reservation refusal + --force --reason; ledger population on archive"
+          "title": "surface / reserve / coordinate CLI; reservation refusal + --force --reason; ledger population on archive",
+          "workflow_step": "implement"
         },
         {
           "blocked_on": null,
