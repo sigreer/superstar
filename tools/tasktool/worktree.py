@@ -31,6 +31,11 @@ def git_current_branch(root: Path) -> str:
     return _git(root, "branch", "--show-current").stdout.strip()
 
 
+def current_branch_head_sha(root: Path, branch: str) -> str:
+    """Return the full 40-char commit SHA at the tip of `branch`."""
+    return _git(root, "rev-parse", "--verify", f"refs/heads/{branch}").stdout.strip()
+
+
 def same_repository(left: Path, right: Path) -> bool:
     try:
         return git_common_dir(left) == git_common_dir(right)

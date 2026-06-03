@@ -509,3 +509,11 @@ def _extract_xid(listing: str, *, title_contains: str) -> str | None:
             if m:
                 return m.group(1)
     return None
+
+
+def test_current_branch_head_sha_matches_rev_parse(tmp_path):
+    from tasktool.worktree import current_branch_head_sha
+    root = _init_repo(tmp_path / "r")
+    expected = _run(root, "git", "rev-parse", "main").strip()
+    assert current_branch_head_sha(root, "main") == expected
+    assert len(current_branch_head_sha(root, "main")) == 40
