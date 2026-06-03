@@ -208,3 +208,23 @@ def test_integration_no_surface_overlap_when_disjoint(tmp_path):
     _land_sibling(repo, "P1.S2")
     out = _tasktool(repo, "worktree", "status", "P1.S1", "--integration").stdout
     assert "shared integration surface" not in out
+
+
+def test_integration_handles_missing_base_sha(tmp_path):
+    repo = _init_repo(tmp_path / "proj")
+    _seed(repo, "This slice")
+    # Never started -> no worktree_base_sha recorded.
+    res = _tasktool(repo, "worktree", "status", "P1.S1", "--integration", check=False)
+    assert res.returncode == 0
+    assert "worktree_base_sha: <not recorded>" in res.stdout
+
+
+def test_integration_works_for_in_place_slice(tmp_path):
+    repo = _init_repo(tmp_path / "proj")
+    _seed(repo, "This slice")
+    _tasktool(repo, "start", "P1.S1", "--in-place")  # records base_sha, no worktree dir
+    (repo / "z").write_text("z")
+    _run(repo, "git", "add", "z")
+    _run(repo, "git", "commit", "-q", "-m", "z")
+    out = _tasktool(repo, "worktree", "status", "P1.S1", "--integration").stdout
+    assert "base ahead of worktree_base_sha: 1 commit" in out
