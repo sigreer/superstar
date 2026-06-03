@@ -2537,6 +2537,67 @@ def cmd_worktree_status(*, repo_root: Path, id: str) -> str:
         return "\n".join(lines) + "\n"
 
 
+def _phase_siblings(p, phase_id: str, exclude_slice_qid: str):
+    """Yield (sibling_qid, sibling_item) for every slice in `phase_id` except the
+    named one. Qualified ids are `<phase>.<slice>`."""
+    for ph in p.phases:
+        if ph.id != phase_id:
+            continue
+        for s in ph.slices:
+            sib_qid = f"{ph.id}.{s.id}"
+            if sib_qid != exclude_slice_qid:
+                yield sib_qid, s
+
+
+def _sibling_landed_signal(write_root: Path, sib_item, *, base_sha: str, base_head: str):
+    """Return (landed: bool, signal: str) for a sibling slice.
+
+    Both the authoritative and the ancestry signal are gated by the SAME
+    half-open "since worktree_base_sha" window (spec §4.D): the relevant
+    commit must be reachable from `base_head` AND NOT reachable from
+    `base_sha`. A sibling that was already integrated before THIS worktree
+    branched is NOT "landed since" — reporting it would re-surface work that
+    was already present at branch time.
+
+    Priority (§4.D F2):
+      1. non-null landed_base_sha in the half-open `base_sha..base_head`
+         window                                                  -> authoritative
+      2. done + existing branch whose TIP is in the same half-open
+         window (reachable from base_head, not from base_sha)    -> ancestry (weaker)
+      3. otherwise                                               -> unknown
+    """
+    from tasktool import worktree as wt
+    from tasktool.model import Status
+    landed_sha = getattr(sib_item, "landed_base_sha", None)
+    if landed_sha:
+        if wt.commit_is_in_range(write_root, landed_sha, base=base_sha, head=base_head):
+            return True, "authoritative"
+        # Landed, but before this worktree branched — not "since".
+        return False, "landed-before-window"
+    status = getattr(sib_item, "status", None)
+    branch = getattr(sib_item, "worktree_branch", None)
+    if status == Status.DONE and branch and wt.branch_exists(write_root, branch):
+        # Resolve the sibling branch's tip SHA, then apply the half-open window.
+        # `branch_is_merged(..., into=base_head)` alone is INSUFFICIENT: it is
+        # true even when the branch merged BEFORE base_sha, which violates the
+        # "since" window. Require the tip to be in `base_sha..base_head`.
+        try:
+            tip = wt.current_branch_head_sha(write_root, branch)
+        except _subprocess.CalledProcessError:
+            return False, "unknown"
+        if wt.commit_is_in_range(write_root, tip, base=base_sha, head=base_head):
+            return True, "ancestry"
+        # Tip reachable from base_head but also from base_sha => merged before
+        # this worktree branched; not landed-since. Tip not reachable from
+        # base_head at all => not merged into base yet.
+        if wt.branch_is_merged(write_root, branch=branch, into=base_head):
+            return False, "merged-before-window"
+        return False, "unmerged-branch"
+    if status == Status.DONE:
+        return False, "unknown"
+    return False, "not-done"
+
+
 def cmd_worktree_status_integration(*, repo_root: Path, id: str) -> str:
     from tasktool.config import load_config
     from tasktool import worktree as wt
@@ -2561,7 +2622,19 @@ def cmd_worktree_status_integration(*, repo_root: Path, id: str) -> str:
             f"base ahead of worktree_base_sha: {ahead} commit"
             + ("" if ahead == 1 else "s")
         )
-        # Sibling landed-since reporting is added in Task 8/9.
+        landed = []
+        for sib_qid, sib_item in _phase_siblings(p, phase_id, qid):
+            did_land, signal = _sibling_landed_signal(
+                write_root, sib_item, base_sha=base_sha, base_head=base_head
+            )
+            if did_land:
+                landed.append((sib_qid, signal, sib_item))
+        if landed:
+            lines.append("landed since worktree_base_sha:")
+            for sib_qid, signal, _sib in landed:
+                lines.append(f"  - {sib_qid} ({signal})")
+        else:
+            lines.append("landed since worktree_base_sha: (none)")
         return "\n".join(lines) + "\n"
 
 
