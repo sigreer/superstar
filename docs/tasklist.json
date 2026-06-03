@@ -326,7 +326,7 @@
         },
         {
           "blocked_on": null,
-          "closed": null,
+          "closed": "2026-06-03",
           "created": "2026-06-02",
           "depends_on": [
             "P7.S1"
@@ -341,9 +341,11 @@
             "docs/handoffs/2026-06-02-P7-S4-worktree-integration-detection-prompt.md",
             "docs/reviewer/p7-s4-worktree-integration-detection-plan"
           ],
-          "reviewer_chain": "docs/reviewer/p7-s4-worktree-integration-detection-plan",
+          "review_active": true,
+          "review_stage": "passed",
+          "reviewer_chain": "docs/reviewer/p7-s4-worktree-integration-detection-P7-S4-post-slice",
           "started": "2026-06-03",
-          "status": "in_progress",
+          "status": "done",
           "tasks": [],
           "title": "worktree start base-sha + prune landed-sha stamping + worktree status --integration",
           "workflow_step": "implement",
