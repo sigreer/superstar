@@ -1943,6 +1943,10 @@ def cmd_show(*, repo_root: Path, id: str) -> str:
         lines.append("worktree_in_place: true")
     if getattr(item, "worktree_pruned_at", None):
         lines.append(f"worktree_pruned_at: {item.worktree_pruned_at}")
+    if getattr(item, "worktree_base_sha", None):
+        lines.append(f"worktree_base_sha: {item.worktree_base_sha}")
+    if getattr(item, "landed_base_sha", None):
+        lines.append(f"landed_base_sha: {item.landed_base_sha}")
     if getattr(item, "worktree_prune_pending", False):
         lines.append("worktree_prune_pending: true")
         if getattr(item, "worktree_prune_pending_at", None):

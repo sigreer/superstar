@@ -366,3 +366,10 @@ def test_start_adopt_records_merge_base_as_worktree_base_sha(tmp_path):
     assert r.returncode == 0, r.stdout + r.stderr
     sl = tasklist(root)["phases"][0]["slices"][0]
     assert sl["worktree_base_sha"] == fork
+
+
+def test_show_renders_worktree_base_sha(tmp_path):
+    root = seed_repo(tmp_path)
+    assert run(root, "start", "P1.S1").returncode == 0
+    out = run(root, "show", "P1.S1").stdout
+    assert "worktree_base_sha:" in out
