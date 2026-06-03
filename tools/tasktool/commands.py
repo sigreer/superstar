@@ -883,7 +883,7 @@ def cmd_start(
         # we touch the filesystem.
         _preflight_start(qid, item, resume=resume)
         if in_place:
-            _apply_start_in_place(qid, item)
+            _apply_start_in_place(write_root, qid, item)
         else:
             adopt_path: Path | None = Path(adopt).expanduser().resolve() if adopt else None
             if adopt_path is None and auto_adopt_path is not None:
@@ -1011,7 +1011,7 @@ def _apply_start_default(write_root: Path, qid: str, item, *, resume: bool) -> N
     print(f"cd {canonical_path}")
 
 
-def _apply_start_in_place(qid: str, item) -> None:
+def _apply_start_in_place(write_root: Path, qid: str, item) -> None:
     if item.worktree_path is not None:
         raise CommandError(
             f"{qid}: --in-place refused; slice already has a recorded worktree at {item.worktree_path!r}."
@@ -1019,6 +1019,14 @@ def _apply_start_in_place(qid: str, item) -> None:
     item.worktree_in_place = True
     item.worktree_path = None
     item.worktree_branch = None
+    if hasattr(item, "worktree_base_sha") and (write_root / ".git").exists():
+        from tasktool.config import load_config
+        from tasktool.worktree import current_branch_head_sha
+        base_branch = load_config(write_root).tasklist.authoritative_branch
+        try:
+            item.worktree_base_sha = current_branch_head_sha(write_root, base_branch)
+        except _subprocess.CalledProcessError:
+            item.worktree_base_sha = None
 
 
 def _apply_start_adopt(write_root: Path, qid: str, item, adopt_path: Path) -> None:
@@ -1044,6 +1052,14 @@ def _apply_start_adopt(write_root: Path, qid: str, item, adopt_path: Path) -> No
     item.worktree_path = rel_str
     item.worktree_branch = branch
     item.worktree_in_place = False
+    if hasattr(item, "worktree_base_sha"):
+        from tasktool.config import load_config
+        from tasktool.worktree import merge_base_sha
+        base_branch = load_config(write_root).tasklist.authoritative_branch
+        try:
+            item.worktree_base_sha = merge_base_sha(write_root, branch, base_branch)
+        except _subprocess.CalledProcessError:
+            item.worktree_base_sha = None
     print(f"cd {adopt_path}")
 
 def cmd_set(

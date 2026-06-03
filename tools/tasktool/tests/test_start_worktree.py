@@ -337,3 +337,32 @@ def test_start_records_worktree_base_sha_for_default(tmp_path):
     assert r.returncode == 0, r.stdout + r.stderr
     sl = tasklist(root)["phases"][0]["slices"][0]
     assert sl["worktree_base_sha"] == base_head
+
+
+def test_start_in_place_records_worktree_base_sha(tmp_path):
+    root = seed_repo(tmp_path)
+    base_head = _git(root, "rev-parse", "main").stdout.strip()
+    r = run(root, "start", "P1.S1", "--in-place")
+    assert r.returncode == 0, r.stdout + r.stderr
+    sl = tasklist(root)["phases"][0]["slices"][0]
+    assert sl["worktree_in_place"] is True
+    assert sl["worktree_base_sha"] == base_head
+
+
+def test_start_adopt_records_merge_base_as_worktree_base_sha(tmp_path):
+    root = seed_repo(tmp_path)
+    # Fork point is current main HEAD.
+    fork = _git(root, "rev-parse", "main").stdout.strip()
+    external = tmp_path / "external"
+    _git(root, "worktree", "add", "-b", "manual-branch", str(external))
+    # Advance the adopted branch and main independently so HEAD != fork on both.
+    (external / "f").write_text("x")
+    _git(external, "add", "f")
+    _git(external, "commit", "-m", "branch work")
+    (root / "g").write_text("y")
+    _git(root, "add", "g")
+    _git(root, "commit", "-m", "main work")
+    r = run(root, "start", "P1.S1", "--adopt", str(external))
+    assert r.returncode == 0, r.stdout + r.stderr
+    sl = tasklist(root)["phases"][0]["slices"][0]
+    assert sl["worktree_base_sha"] == fork
