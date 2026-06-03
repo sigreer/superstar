@@ -566,3 +566,42 @@ def test_prune_stamps_landed_base_sha_on_merged_done_slice(project_with_worktree
     assert res.returncode == 0
     show = _tasktool(repo, "show", "P1.S1").stdout
     assert f"landed_base_sha: {base_head}" in show
+
+
+def test_prune_does_not_stamp_landed_base_sha_for_cancelled_slice(project_with_worktree):
+    repo, wt = project_with_worktree
+    # Merge so the branch-merged guard would pass, then cancel (not close).
+    _run(repo, "git", "merge", "--no-ff", "-q", "-m", "m",
+         "worktree-p1-s1-first-slice")
+    _tasktool(repo, "cancel", "P1.S1", "--reason", "dropped")
+    res = _tasktool(repo, "worktree", "prune", "P1.S1")
+    assert res.returncode == 0
+    show = _tasktool(repo, "show", "P1.S1").stdout
+    assert "landed_base_sha:" not in show
+
+
+def test_force_prune_unmerged_does_not_stamp_landed_base_sha(tmp_path):
+    repo, wt = _project_with_closed_unmerged(tmp_path)  # done but branch unmerged
+    res = _tasktool(repo, "worktree", "prune", "P1.S1", "--force")
+    assert res.returncode == 0
+    show = _tasktool(repo, "show", "P1.S1").stdout
+    assert "landed_base_sha:" not in show
+
+
+def test_finalize_only_does_not_stamp_landed_base_sha(project_with_worktree):
+    repo, wt = project_with_worktree
+    _tasktool(repo, "close", "P1.S1", "--skip-review-gate")
+    _run(repo, "git", "merge", "--no-ff", "-q", "-m", "m",
+         "worktree-p1-s1-first-slice")
+    # Trigger the prune-from-inside pending path (defers, never stamps).
+    subprocess.run(
+        [str(TASKTOOL), "--project-root", str(repo),
+         "worktree", "prune", "P1.S1"],
+        cwd=wt, text=True, capture_output=True, check=True,
+    )
+    # Caller performs the destructive removal out-of-band, then finalizes.
+    _run(repo, "git", "worktree", "remove", str(wt))
+    res = _tasktool(repo, "worktree", "prune", "P1.S1", "--finalize")
+    assert res.returncode == 0
+    show = _tasktool(repo, "show", "P1.S1").stdout
+    assert "landed_base_sha:" not in show
