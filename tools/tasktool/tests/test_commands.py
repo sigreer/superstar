@@ -1672,3 +1672,582 @@ def test_list_filter_workflow_step(tmp_project_with_p6_s1):
     assert any(row["id"] == "P6.S1" for row in json.loads(text))
     text_no = commands.cmd_list(repo_root=p, workflow_step="implement", format="json")
     assert not any(row["id"] == "P6.S1" for row in json.loads(text_no))
+
+
+class SurfaceCommandTests(unittest.TestCase):
+    def _setup_phase_with_slice(self, t):
+        commands.cmd_init(repo_root=t.root, project="demo")
+        pid = commands.cmd_create_phase(repo_root=t.root, title="phase")
+        sid = commands.cmd_create_slice(repo_root=t.root, phase_id=pid, title="slice")
+        return pid, sid
+
+    def test_surface_add_appends_unique_sorted(self):
+        t = _Tmp()
+        try:
+            pid, sid = self._setup_phase_with_slice(t)
+            commands.cmd_surface_add(
+                repo_root=t.root, slice_id=f"{pid}.{sid}",
+                surfaces=["cms-block-registry", "directus-schema", "cms-block-registry"],
+            )
+            p = load_project(t.root / "docs/tasklist.json")
+            slc = p.phases[0].slices[0]
+            self.assertEqual(slc.integration_surfaces, ["cms-block-registry", "directus-schema"])
+        finally:
+            t.cleanup()
+
+    def test_surface_remove_drops_one(self):
+        t = _Tmp()
+        try:
+            pid, sid = self._setup_phase_with_slice(t)
+            commands.cmd_surface_add(
+                repo_root=t.root, slice_id=f"{pid}.{sid}",
+                surfaces=["cms-block-registry", "directus-schema"],
+            )
+            commands.cmd_surface_remove(
+                repo_root=t.root, slice_id=f"{pid}.{sid}", surface="directus-schema",
+            )
+            p = load_project(t.root / "docs/tasklist.json")
+            self.assertEqual(p.phases[0].slices[0].integration_surfaces, ["cms-block-registry"])
+        finally:
+            t.cleanup()
+
+    def test_surface_add_refuses_cancelled_slice(self):
+        t = _Tmp()
+        try:
+            pid, sid = self._setup_phase_with_slice(t)
+            commands.cmd_cancel(repo_root=t.root, id=f"{pid}.{sid}", reason="dropped")
+            with self.assertRaises(commands.CommandError):
+                commands.cmd_surface_add(
+                    repo_root=t.root, slice_id=f"{pid}.{sid}", surfaces=["x"],
+                )
+        finally:
+            t.cleanup()
+
+    def test_surface_list_renders_phase_slices(self):
+        t = _Tmp()
+        try:
+            pid, sid = self._setup_phase_with_slice(t)
+            commands.cmd_surface_add(
+                repo_root=t.root, slice_id=f"{pid}.{sid}",
+                surfaces=["cms-block-registry", "directus-schema"],
+            )
+            out = commands.cmd_surface_list(repo_root=t.root, phase_id=pid)
+            self.assertIn(f"{pid}.{sid}", out)
+            self.assertIn("cms-block-registry", out)
+            self.assertIn("directus-schema", out)
+        finally:
+            t.cleanup()
+
+    def test_surface_list_all_phases_when_omitted(self):
+        t = _Tmp()
+        try:
+            pid, sid = self._setup_phase_with_slice(t)
+            commands.cmd_surface_add(
+                repo_root=t.root, slice_id=f"{pid}.{sid}", surfaces=["theme-tail-css"],
+            )
+            out = commands.cmd_surface_list(repo_root=t.root, phase_id=None)
+            self.assertIn("theme-tail-css", out)
+        finally:
+            t.cleanup()
+
+
+class CoordinateCommandTests(unittest.TestCase):
+    def _setup(self, t):
+        commands.cmd_init(repo_root=t.root, project="demo")
+        pid = commands.cmd_create_phase(repo_root=t.root, title="phase")
+        sid = commands.cmd_create_slice(repo_root=t.root, phase_id=pid, title="slice")
+        return pid, sid
+
+    def test_coordinate_sets_group(self):
+        t = _Tmp()
+        try:
+            pid, sid = self._setup(t)
+            commands.cmd_coordinate(repo_root=t.root, slice_id=f"{pid}.{sid}", group="cms")
+            p = load_project(t.root / "docs/tasklist.json")
+            self.assertEqual(p.phases[0].slices[0].coordination_group, "cms")
+        finally:
+            t.cleanup()
+
+    def test_coordinate_clear_resets_to_none(self):
+        t = _Tmp()
+        try:
+            pid, sid = self._setup(t)
+            commands.cmd_coordinate(repo_root=t.root, slice_id=f"{pid}.{sid}", group="cms")
+            commands.cmd_coordinate(repo_root=t.root, slice_id=f"{pid}.{sid}", clear=True)
+            p = load_project(t.root / "docs/tasklist.json")
+            self.assertIsNone(p.phases[0].slices[0].coordination_group)
+        finally:
+            t.cleanup()
+
+    def test_coordinate_requires_group_or_clear(self):
+        t = _Tmp()
+        try:
+            pid, sid = self._setup(t)
+            with self.assertRaises(commands.CommandError):
+                commands.cmd_coordinate(repo_root=t.root, slice_id=f"{pid}.{sid}")
+        finally:
+            t.cleanup()
+
+    def test_coordinate_refuses_cancelled_slice(self):
+        # A valid --group is passed so the flag-validation guard is satisfied and
+        # the cancelled-slice guard inside `_require_slice` is the thing under test.
+        t = _Tmp()
+        try:
+            pid, sid = self._setup(t)
+            commands.cmd_cancel(repo_root=t.root, id=f"{pid}.{sid}", reason="dropped")
+            with self.assertRaises(commands.CommandError):
+                commands.cmd_coordinate(repo_root=t.root, slice_id=f"{pid}.{sid}", group="cms")
+        finally:
+            t.cleanup()
+
+
+class ReserveCommandTests(unittest.TestCase):
+    def _phase(self, t, n_slices=1):
+        commands.cmd_init(repo_root=t.root, project="demo")
+        pid = commands.cmd_create_phase(repo_root=t.root, title="phase")
+        sids = [
+            commands.cmd_create_slice(repo_root=t.root, phase_id=pid, title=f"slice{i}")
+            for i in range(n_slices)
+        ]
+        return pid, sids
+
+    def test_reserve_add_records_reservation(self):
+        t = _Tmp()
+        try:
+            pid, (sid,) = self._phase(t, 1)
+            commands.cmd_reserve_add(
+                repo_root=t.root, slice_id=f"{pid}.{sid}",
+                resource_value="homepage-sort:15", scope="phase", note="hero band",
+            )
+            p = load_project(t.root / "docs/tasklist.json")
+            res = p.phases[0].slices[0].reservations
+            self.assertEqual(len(res), 1)
+            self.assertEqual(res[0].resource, "homepage-sort")
+            self.assertEqual(res[0].value, "15")
+            self.assertEqual(res[0].scope, "phase")
+            self.assertEqual(res[0].note, "hero band")
+        finally:
+            t.cleanup()
+
+    def test_reserve_add_rejects_malformed_resource_value(self):
+        t = _Tmp()
+        try:
+            pid, (sid,) = self._phase(t, 1)
+            with self.assertRaises(commands.CommandError):
+                commands.cmd_reserve_add(
+                    repo_root=t.root, slice_id=f"{pid}.{sid}",
+                    resource_value="no-colon-here", scope="phase",
+                )
+        finally:
+            t.cleanup()
+
+    def test_reserve_add_refuses_phase_scope_collision(self):
+        t = _Tmp()
+        try:
+            pid, (s0, s1) = self._phase(t, 2)
+            commands.cmd_reserve_add(
+                repo_root=t.root, slice_id=f"{pid}.{s0}",
+                resource_value="homepage-sort:15", scope="phase",
+            )
+            with self.assertRaises(commands.CommandError) as cm:
+                commands.cmd_reserve_add(
+                    repo_root=t.root, slice_id=f"{pid}.{s1}",
+                    resource_value="homepage-sort:15", scope="phase",
+                )
+            msg = str(cm.exception)
+            self.assertIn("homepage-sort:15", msg)
+            self.assertIn(f"{pid}.{s0}", msg)
+        finally:
+            t.cleanup()
+
+    def test_reserve_add_collision_counts_done_holder(self):
+        t = _Tmp()
+        try:
+            pid, (s0, s1) = self._phase(t, 2)
+            commands.cmd_reserve_add(
+                repo_root=t.root, slice_id=f"{pid}.{s0}",
+                resource_value="homepage-sort:15", scope="phase",
+            )
+            commands.cmd_start(repo_root=t.root, id=f"{pid}.{s0}")
+            commands.cmd_close(repo_root=t.root, id=f"{pid}.{s0}", skip_review_gate=True)
+            # s0 is now done; the slot stays taken.
+            with self.assertRaises(commands.CommandError):
+                commands.cmd_reserve_add(
+                    repo_root=t.root, slice_id=f"{pid}.{s1}",
+                    resource_value="homepage-sort:15", scope="phase",
+                )
+        finally:
+            t.cleanup()
+
+    def test_reserve_add_ignores_cancelled_holder(self):
+        t = _Tmp()
+        try:
+            pid, (s0, s1) = self._phase(t, 2)
+            commands.cmd_reserve_add(
+                repo_root=t.root, slice_id=f"{pid}.{s0}",
+                resource_value="homepage-sort:15", scope="phase",
+            )
+            commands.cmd_cancel(repo_root=t.root, id=f"{pid}.{s0}", reason="dropped")
+            # s0 cancelled → slot released → no refusal.
+            commands.cmd_reserve_add(
+                repo_root=t.root, slice_id=f"{pid}.{s1}",
+                resource_value="homepage-sort:15", scope="phase",
+            )
+            p = load_project(t.root / "docs/tasklist.json")
+            s1_row = next(s for s in p.phases[0].slices if s.id == s1)
+            self.assertEqual(len(s1_row.reservations), 1)
+        finally:
+            t.cleanup()
+
+    def test_reserve_add_same_slice_no_self_collision(self):
+        t = _Tmp()
+        try:
+            pid, (s0,) = self._phase(t, 1)
+            commands.cmd_reserve_add(
+                repo_root=t.root, slice_id=f"{pid}.{s0}",
+                resource_value="homepage-sort:15", scope="phase",
+            )
+            # Re-adding the SAME value to the SAME slice is idempotent, not a collision.
+            commands.cmd_reserve_add(
+                repo_root=t.root, slice_id=f"{pid}.{s0}",
+                resource_value="homepage-sort:15", scope="phase",
+            )
+            p = load_project(t.root / "docs/tasklist.json")
+            self.assertEqual(len(p.phases[0].slices[0].reservations), 1)
+        finally:
+            t.cleanup()
+
+    def test_reserve_add_same_slice_phase_and_project_both_held(self):
+        # Self-dedupe must key on (resource, value, scope): a slice may hold the
+        # same resource:value at BOTH phase and project scope. Only the
+        # project-scoped one is laddered (Task 9), so a scope-blind self-dedupe
+        # would silently drop the reservation that must reach the ledger.
+        t = _Tmp()
+        try:
+            pid, (s0,) = self._phase(t, 1)
+            commands.cmd_reserve_add(
+                repo_root=t.root, slice_id=f"{pid}.{s0}",
+                resource_value="route-slug:/offers", scope="phase",
+            )
+            commands.cmd_reserve_add(
+                repo_root=t.root, slice_id=f"{pid}.{s0}",
+                resource_value="route-slug:/offers", scope="project",
+            )
+            p = load_project(t.root / "docs/tasklist.json")
+            res = p.phases[0].slices[0].reservations
+            scopes = sorted(r.scope for r in res if r.resource == "route-slug" and r.value == "/offers")
+            self.assertEqual(scopes, ["phase", "project"])
+        finally:
+            t.cleanup()
+
+    def test_reserve_add_project_scope_collides_across_active_phases(self):
+        t = _Tmp()
+        try:
+            commands.cmd_init(repo_root=t.root, project="demo")
+            p1 = commands.cmd_create_phase(repo_root=t.root, title="phase1")
+            a = commands.cmd_create_slice(repo_root=t.root, phase_id=p1, title="a")
+            p2 = commands.cmd_create_phase(repo_root=t.root, title="phase2")
+            b = commands.cmd_create_slice(repo_root=t.root, phase_id=p2, title="b")
+            commands.cmd_reserve_add(
+                repo_root=t.root, slice_id=f"{p1}.{a}",
+                resource_value="directus-collection:home_slider", scope="project",
+            )
+            with self.assertRaises(commands.CommandError) as cm:
+                commands.cmd_reserve_add(
+                    repo_root=t.root, slice_id=f"{p2}.{b}",
+                    resource_value="directus-collection:home_slider", scope="project",
+                )
+            self.assertIn(f"{p1}.{a}", str(cm.exception))
+        finally:
+            t.cleanup()
+
+    def test_reserve_add_project_scope_collides_with_ledger(self):
+        t = _Tmp()
+        try:
+            commands.cmd_init(repo_root=t.root, project="demo")
+            pid = commands.cmd_create_phase(repo_root=t.root, title="phase")
+            sid = commands.cmd_create_slice(repo_root=t.root, phase_id=pid, title="s")
+            # Seed an archived holder into the ledger directly.
+            from tasktool.model import LedgerReservation
+            from tasktool.serialize import load_project, save_project
+            proj = load_project(t.root / "docs/tasklist.json")
+            proj.reservations_ledger.append(LedgerReservation(
+                resource="route-slug", value="/offers", scope="project",
+                note=None, owner_id="P3.S4", owner_phase_id="P3",
+                archived_date="2026-05-01",
+            ))
+            save_project(proj, t.root / "docs/tasklist.json")
+            with self.assertRaises(commands.CommandError) as cm:
+                commands.cmd_reserve_add(
+                    repo_root=t.root, slice_id=f"{pid}.{sid}",
+                    resource_value="route-slug:/offers", scope="project",
+                )
+            msg = str(cm.exception)
+            self.assertIn("route-slug:/offers", msg)
+            self.assertIn("P3.S4", msg)
+        finally:
+            t.cleanup()
+
+    def test_reserve_add_phase_scope_does_not_consult_ledger(self):
+        t = _Tmp()
+        try:
+            commands.cmd_init(repo_root=t.root, project="demo")
+            pid = commands.cmd_create_phase(repo_root=t.root, title="phase")
+            sid = commands.cmd_create_slice(repo_root=t.root, phase_id=pid, title="s")
+            from tasktool.model import LedgerReservation
+            from tasktool.serialize import load_project, save_project
+            proj = load_project(t.root / "docs/tasklist.json")
+            proj.reservations_ledger.append(LedgerReservation(
+                resource="route-slug", value="/offers", scope="project",
+                note=None, owner_id="P3.S4", owner_phase_id="P3",
+                archived_date="2026-05-01",
+            ))
+            save_project(proj, t.root / "docs/tasklist.json")
+            # phase-scope add of the same value must NOT be blocked by the project ledger.
+            commands.cmd_reserve_add(
+                repo_root=t.root, slice_id=f"{pid}.{sid}",
+                resource_value="route-slug:/offers", scope="phase",
+            )
+        finally:
+            t.cleanup()
+
+    def test_force_requires_reason(self):
+        t = _Tmp()
+        try:
+            pid, (s0, s1) = self._phase(t, 2)
+            commands.cmd_reserve_add(
+                repo_root=t.root, slice_id=f"{pid}.{s0}",
+                resource_value="homepage-sort:15", scope="phase",
+            )
+            with self.assertRaises(commands.CommandError) as cm:
+                commands.cmd_reserve_add(
+                    repo_root=t.root, slice_id=f"{pid}.{s1}",
+                    resource_value="homepage-sort:15", scope="phase",
+                    force=True,  # no reason
+                )
+            self.assertIn("--reason", str(cm.exception))
+        finally:
+            t.cleanup()
+
+    def test_force_with_reason_overrides_and_records_note(self):
+        t = _Tmp()
+        try:
+            pid, (s0, s1) = self._phase(t, 2)
+            commands.cmd_reserve_add(
+                repo_root=t.root, slice_id=f"{pid}.{s0}",
+                resource_value="homepage-sort:15", scope="phase",
+            )
+            commands.cmd_reserve_add(
+                repo_root=t.root, slice_id=f"{pid}.{s1}",
+                resource_value="homepage-sort:15", scope="phase",
+                force=True, reason="intentional shared band",
+            )
+            p = load_project(t.root / "docs/tasklist.json")
+            s0_row = next(s for s in p.phases[0].slices if s.id == s0)
+            s1_row = next(s for s in p.phases[0].slices if s.id == s1)
+            # Reserving slice gained the reservation + an override note.
+            self.assertEqual(len(s1_row.reservations), 1)
+            self.assertIn("Reservation-override", s1_row.notes)
+            self.assertIn("homepage-sort:15", s1_row.notes)
+            self.assertIn(f"{pid}.{s0}", s1_row.notes)
+            self.assertIn("intentional shared band", s1_row.notes)
+            # Holder slice is NOT mutated.
+            self.assertEqual(len(s0_row.reservations), 1)
+            self.assertEqual(s0_row.notes, "")
+        finally:
+            t.cleanup()
+
+    def test_force_without_collision_still_requires_reason(self):
+        t = _Tmp()
+        try:
+            pid, (s0,) = self._phase(t, 1)
+            with self.assertRaises(commands.CommandError):
+                commands.cmd_reserve_add(
+                    repo_root=t.root, slice_id=f"{pid}.{s0}",
+                    resource_value="homepage-sort:9", scope="phase",
+                    force=True,  # force always requires reason
+                )
+        finally:
+            t.cleanup()
+
+    def test_reserve_remove_drops_matching(self):
+        t = _Tmp()
+        try:
+            pid, (s0,) = self._phase(t, 1)
+            commands.cmd_reserve_add(
+                repo_root=t.root, slice_id=f"{pid}.{s0}",
+                resource_value="homepage-sort:15", scope="phase",
+            )
+            commands.cmd_reserve_remove(
+                repo_root=t.root, slice_id=f"{pid}.{s0}",
+                resource_value="homepage-sort:15",
+            )
+            p = load_project(t.root / "docs/tasklist.json")
+            self.assertEqual(p.phases[0].slices[0].reservations, [])
+        finally:
+            t.cleanup()
+
+    def test_reserve_remove_releases_slot_for_sibling(self):
+        t = _Tmp()
+        try:
+            pid, (s0, s1) = self._phase(t, 2)
+            commands.cmd_reserve_add(
+                repo_root=t.root, slice_id=f"{pid}.{s0}",
+                resource_value="homepage-sort:15", scope="phase",
+            )
+            commands.cmd_reserve_remove(
+                repo_root=t.root, slice_id=f"{pid}.{s0}",
+                resource_value="homepage-sort:15",
+            )
+            # slot freed → sibling may now claim it
+            commands.cmd_reserve_add(
+                repo_root=t.root, slice_id=f"{pid}.{s1}",
+                resource_value="homepage-sort:15", scope="phase",
+            )
+        finally:
+            t.cleanup()
+
+    def test_reserve_list_renders(self):
+        t = _Tmp()
+        try:
+            pid, (s0,) = self._phase(t, 1)
+            commands.cmd_reserve_add(
+                repo_root=t.root, slice_id=f"{pid}.{s0}",
+                resource_value="homepage-sort:15", scope="phase",
+            )
+            out = commands.cmd_reserve_list(repo_root=t.root, phase_id=pid)
+            self.assertIn(f"{pid}.{s0}", out)
+            self.assertIn("homepage-sort:15", out)
+            self.assertIn("phase", out)
+        finally:
+            t.cleanup()
+
+    def test_reserve_add_refuses_cancelled_slice(self):
+        t = _Tmp()
+        try:
+            pid, (s0,) = self._phase(t, 1)
+            commands.cmd_cancel(repo_root=t.root, id=f"{pid}.{s0}", reason="dropped")
+            with self.assertRaises(commands.CommandError):
+                commands.cmd_reserve_add(
+                    repo_root=t.root, slice_id=f"{pid}.{s0}",
+                    resource_value="homepage-sort:15", scope="phase",
+                )
+        finally:
+            t.cleanup()
+
+    def test_reserve_remove_refuses_cancelled_slice(self):
+        t = _Tmp()
+        try:
+            pid, (s0,) = self._phase(t, 1)
+            commands.cmd_reserve_add(
+                repo_root=t.root, slice_id=f"{pid}.{s0}",
+                resource_value="homepage-sort:15", scope="phase",
+            )
+            commands.cmd_cancel(repo_root=t.root, id=f"{pid}.{s0}", reason="dropped")
+            with self.assertRaises(commands.CommandError):
+                commands.cmd_reserve_remove(
+                    repo_root=t.root, slice_id=f"{pid}.{s0}",
+                    resource_value="homepage-sort:15",
+                )
+        finally:
+            t.cleanup()
+
+
+class LedgerPopulationTests(unittest.TestCase):
+    def _archive_ready(self, t, pid, sid, *, cancel=False):
+        if cancel:
+            commands.cmd_cancel(repo_root=t.root, id=f"{pid}.{sid}", reason="dropped")
+        else:
+            commands.cmd_start(repo_root=t.root, id=f"{pid}.{sid}")
+            commands.cmd_close(repo_root=t.root, id=f"{pid}.{sid}", skip_review_gate=True)
+
+    def test_archive_phase_ladders_project_reservations_from_done_slices(self):
+        t = _Tmp()
+        try:
+            commands.cmd_init(repo_root=t.root, project="demo")
+            pid = commands.cmd_create_phase(repo_root=t.root, title="phase")
+            sid = commands.cmd_create_slice(repo_root=t.root, phase_id=pid, title="s")
+            commands.cmd_reserve_add(
+                repo_root=t.root, slice_id=f"{pid}.{sid}",
+                resource_value="route-slug:/offers", scope="project",
+            )
+            # phase-scoped reservation must NOT be laddered
+            commands.cmd_reserve_add(
+                repo_root=t.root, slice_id=f"{pid}.{sid}",
+                resource_value="homepage-sort:15", scope="phase",
+            )
+            self._archive_ready(t, pid, sid)
+            commands.cmd_archive_phase(repo_root=t.root, phase_id=pid, skip_review_gate=True)
+            p = load_project(t.root / "docs/tasklist.json")
+            ledger = p.reservations_ledger
+            self.assertEqual(len(ledger), 1)
+            lr = ledger[0]
+            self.assertEqual((lr.resource, lr.value, lr.scope), ("route-slug", "/offers", "project"))
+            self.assertEqual(lr.owner_id, f"{pid}.{sid}")
+            self.assertEqual(lr.owner_phase_id, pid)
+            self.assertTrue(lr.archived_date)
+        finally:
+            t.cleanup()
+
+    def test_archive_phase_excludes_cancelled_slice_reservations(self):
+        t = _Tmp()
+        try:
+            commands.cmd_init(repo_root=t.root, project="demo")
+            pid = commands.cmd_create_phase(repo_root=t.root, title="phase")
+            s_done = commands.cmd_create_slice(repo_root=t.root, phase_id=pid, title="done")
+            s_cx = commands.cmd_create_slice(repo_root=t.root, phase_id=pid, title="cancelled")
+            commands.cmd_reserve_add(
+                repo_root=t.root, slice_id=f"{pid}.{s_done}",
+                resource_value="route-slug:/a", scope="project",
+            )
+            commands.cmd_reserve_add(
+                repo_root=t.root, slice_id=f"{pid}.{s_cx}",
+                resource_value="route-slug:/b", scope="project",
+            )
+            self._archive_ready(t, pid, s_cx, cancel=True)
+            self._archive_ready(t, pid, s_done)
+            commands.cmd_archive_phase(repo_root=t.root, phase_id=pid, skip_review_gate=True)
+            p = load_project(t.root / "docs/tasklist.json")
+            values = {(lr.resource, lr.value) for lr in p.reservations_ledger}
+            self.assertEqual(values, {("route-slug", "/a")})
+        finally:
+            t.cleanup()
+
+    def test_archive_phase_dedupes_on_resource_value_scope_owner(self):
+        t = _Tmp()
+        try:
+            commands.cmd_init(repo_root=t.root, project="demo")
+            pid = commands.cmd_create_phase(repo_root=t.root, title="phase")
+            a = commands.cmd_create_slice(repo_root=t.root, phase_id=pid, title="a")
+            b = commands.cmd_create_slice(repo_root=t.root, phase_id=pid, title="b")
+            commands.cmd_reserve_add(
+                repo_root=t.root, slice_id=f"{pid}.{a}",
+                resource_value="cache-tag:home", scope="project",
+            )
+            # b force-shares the same project value → two distinct owners
+            commands.cmd_reserve_add(
+                repo_root=t.root, slice_id=f"{pid}.{b}",
+                resource_value="cache-tag:home", scope="project",
+                force=True, reason="shared cache tag",
+            )
+            self._archive_ready(t, pid, a)
+            self._archive_ready(t, pid, b)
+            commands.cmd_archive_phase(repo_root=t.root, phase_id=pid, skip_review_gate=True)
+            p = load_project(t.root / "docs/tasklist.json")
+            owners = sorted(lr.owner_id for lr in p.reservations_ledger)
+            self.assertEqual(owners, sorted([f"{pid}.{a}", f"{pid}.{b}"]))
+            self.assertEqual(len(p.reservations_ledger), 2)
+        finally:
+            t.cleanup()
+
+    def test_ledger_population_helper_is_idempotent_on_repeat(self):
+        from tasktool.commands import _ladder_project_reservations
+        from tasktool.model import Project, Phase, Slice, Reservation, Status
+        proj = Project(project="demo")
+        slc = Slice(id="S1", title="s", created="2026-06-02", status=Status.DONE)
+        slc.reservations.append(Reservation(resource="route-slug", value="/x", scope="project", note=None))
+        phase = Phase(id="P1", title="p", created="2026-06-02")
+        phase.slices.append(slc)
+        _ladder_project_reservations(proj, phase, archived_date="2026-06-02")
+        _ladder_project_reservations(proj, phase, archived_date="2026-06-02")
+        self.assertEqual(len(proj.reservations_ledger), 1)

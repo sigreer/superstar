@@ -571,3 +571,68 @@ def test_set_invalid_workflow_step_emits_controlled_cli_error(tmp_project_with_p
                 "set", "P6.S1", "--workflow-step", "bogus")
     assert r.returncode != 0
     assert "Traceback" not in r.stderr
+
+
+class SurfaceReserveCoordinateCliTests(unittest.TestCase):
+    def _phase_with_slices(self, t, n):
+        self.assertEqual(run_cli("init", "--project", "demo", cwd=t.root).returncode, 0)
+        self.assertEqual(run_cli("create", "phase", "--title", "P", cwd=t.root).returncode, 0)
+        for _ in range(n):
+            self.assertEqual(run_cli("create", "slice", "P1", "--title", "s", cwd=t.root).returncode, 0)
+
+    def test_surface_add_and_list_via_cli(self):
+        t = _CliTmp()
+        try:
+            self._phase_with_slices(t, 1)
+            r = run_cli("surface", "add", "P1.S1", "cms-block-registry", "directus-schema", cwd=t.root)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            r = run_cli("surface", "list", "P1", cwd=t.root)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertIn("cms-block-registry", r.stdout)
+        finally:
+            t.cleanup()
+
+    def test_reserve_collision_exits_nonzero(self):
+        t = _CliTmp()
+        try:
+            self._phase_with_slices(t, 2)
+            r = run_cli("reserve", "add", "P1.S1", "homepage-sort:15", cwd=t.root)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            r = run_cli("reserve", "add", "P1.S2", "homepage-sort:15", cwd=t.root)
+            self.assertNotEqual(r.returncode, 0)
+            self.assertIn("homepage-sort:15", r.stderr)
+            self.assertIn("P1.S1", r.stderr)
+        finally:
+            t.cleanup()
+
+    def test_force_without_reason_exits_nonzero(self):
+        t = _CliTmp()
+        try:
+            self._phase_with_slices(t, 2)
+            run_cli("reserve", "add", "P1.S1", "homepage-sort:15", cwd=t.root)
+            r = run_cli("reserve", "add", "P1.S2", "homepage-sort:15", "--force", cwd=t.root)
+            self.assertNotEqual(r.returncode, 0)
+        finally:
+            t.cleanup()
+
+    def test_force_with_reason_succeeds_via_cli(self):
+        t = _CliTmp()
+        try:
+            self._phase_with_slices(t, 2)
+            run_cli("reserve", "add", "P1.S1", "homepage-sort:15", cwd=t.root)
+            r = run_cli(
+                "reserve", "add", "P1.S2", "homepage-sort:15",
+                "--force", "--reason", "shared band", cwd=t.root,
+            )
+            self.assertEqual(r.returncode, 0, r.stderr)
+        finally:
+            t.cleanup()
+
+    def test_coordinate_set_and_clear_via_cli(self):
+        t = _CliTmp()
+        try:
+            self._phase_with_slices(t, 1)
+            self.assertEqual(run_cli("coordinate", "P1.S1", "--group", "cms", cwd=t.root).returncode, 0)
+            self.assertEqual(run_cli("coordinate", "P1.S1", "--clear", cwd=t.root).returncode, 0)
+        finally:
+            t.cleanup()

@@ -19,6 +19,7 @@ from tasktool.model import (
     ArchivedCrossCutting,
     Project, Phase, Slice, Task, CrossCutting, BlockedOn, Status, PlanningStatus,
     SliceWorkflowStep, PhaseWorkflowStep, ReviewStage,
+    Reservation, LedgerReservation,
     is_terminal,
 )
 from tasktool.serialize import load_project, save_project
@@ -1345,6 +1346,248 @@ def cmd_ratify(
             item.parallel_group = parallel_group or None
         _save(write_root, p)
 
+
+# ───── surface / reserve / coordinate (P7.S2) ─────
+
+def _require_slice(p: Project, slice_id: str, verb: str):
+    """Resolve `slice_id` to a slice row, refusing non-slice ids and cancelled rows.
+    Returns (qid, item)."""
+    qid, _container, item = _find_item(p, slice_id)
+    if parse_id(qid)[0] != "slice":
+        raise CommandError(f"{verb} only works on slices; {qid} is a {parse_id(qid)[0]}")
+    _refuse_if_cancelled(qid, item, verb)
+    return qid, item
+
+
+def cmd_surface_add(*, repo_root: Path, slice_id: str, surfaces: list[str]) -> None:
+    cleaned = [s.strip() for s in surfaces if s and s.strip()]
+    if not cleaned:
+        raise CommandError("surface add requires at least one non-empty surface")
+    with _write_context(repo_root) as write_root:
+        p = _load(write_root)
+        _qid, item = _require_slice(p, slice_id, "surface add")
+        for s in cleaned:
+            if s not in item.integration_surfaces:
+                item.integration_surfaces.append(s)
+        _save(write_root, p)
+
+
+def cmd_surface_remove(*, repo_root: Path, slice_id: str, surface: str) -> None:
+    surface = (surface or "").strip()
+    if not surface:
+        raise CommandError("surface remove requires a non-empty surface")
+    with _write_context(repo_root) as write_root:
+        p = _load(write_root)
+        _qid, item = _require_slice(p, slice_id, "surface remove")
+        if surface in item.integration_surfaces:
+            item.integration_surfaces.remove(surface)
+        _save(write_root, p)
+
+
+def _iter_phase_slices(p: Project, phase_id: str | None):
+    """Yield (phase, slice) for the given phase, or all active phases if None."""
+    for ph in p.phases:
+        if phase_id is not None and ph.id != phase_id:
+            continue
+        for slc in ph.slices:
+            yield ph, slc
+
+
+def cmd_surface_list(*, repo_root: Path, phase_id: str | None) -> str:
+    with _read_context(repo_root) as write_root:
+        p = _load(write_root)
+        if phase_id is not None and not any(ph.id == phase_id for ph in p.phases):
+            raise CommandError(f"phase {phase_id} not found")
+        lines: list[str] = []
+        for ph, slc in _iter_phase_slices(p, phase_id):
+            surfaces = ", ".join(slc.integration_surfaces) if slc.integration_surfaces else "(none)"
+            lines.append(f"{ph.id}.{slc.id}  [{slc.status.value}]  {surfaces}")
+        if not lines:
+            return "(no slices)\n"
+        return "\n".join(lines) + "\n"
+
+
+def cmd_coordinate(
+    *, repo_root: Path, slice_id: str,
+    group: str | None = None, clear: bool = False,
+) -> None:
+    if clear and group is not None:
+        raise CommandError("coordinate: --group and --clear are mutually exclusive")
+    if not clear and (group is None or not group.strip()):
+        raise CommandError("coordinate requires --group <name> or --clear")
+    with _write_context(repo_root) as write_root:
+        p = _load(write_root)
+        _qid, item = _require_slice(p, slice_id, "coordinate")
+        item.coordination_group = None if clear else group.strip()
+        _save(write_root, p)
+
+
+def _parse_resource_value(raw: str) -> tuple[str, str]:
+    """Split `<resource>:<value>` on the FIRST colon. Both halves must be non-empty."""
+    if ":" not in raw:
+        raise CommandError(
+            f"reservation must be <resource>:<value>, got {raw!r}"
+        )
+    resource, value = raw.split(":", 1)
+    resource, value = resource.strip(), value.strip()
+    if not resource or not value:
+        raise CommandError(
+            f"reservation must be <resource>:<value> with non-empty halves, got {raw!r}"
+        )
+    return resource, value
+
+
+def _phase_of_slice(p: Project, qid: str):
+    """Return the Phase containing the qualified slice id `qid`."""
+    phase_part, _slice_part, _ = split_qualified(qid)
+    return next((ph for ph in p.phases if ph.id == phase_part), None)
+
+
+def _phase_scope_holder(p: Project, phase, reserving_qid: str, resource: str, value: str):
+    """Return the qualified id of a non-cancelled slice in `phase` (other than the
+    reserving slice) that already holds `resource:value`, or None. Done slices count."""
+    for slc in phase.slices:
+        slc_qid = f"{phase.id}.{slc.id}"
+        if slc_qid == reserving_qid:
+            continue
+        if slc.status == Status.CANCELLED:
+            continue
+        for r in slc.reservations:
+            if r.resource == resource and r.value == value:
+                return slc_qid
+    return None
+
+
+def _project_scope_holder(p: Project, reserving_qid: str, resource: str, value: str):
+    """Return the holder id (qualified slice id, or a ledger owner descriptor) of a
+    project-scoped `resource:value` collision, or None.
+
+    Checks (a) every non-cancelled slice across ALL active phases except the
+    reserving slice, then (b) `Project.reservations_ledger` (archived holders).
+    A ledger match is reported via `_format_ledger_holder`."""
+    for ph in p.phases:
+        for slc in ph.slices:
+            slc_qid = f"{ph.id}.{slc.id}"
+            if slc_qid == reserving_qid:
+                continue
+            if slc.status == Status.CANCELLED:
+                continue
+            for r in slc.reservations:
+                if r.resource == resource and r.value == value:
+                    return slc_qid
+    for lr in p.reservations_ledger:
+        if lr.resource == resource and lr.value == value:
+            return _format_ledger_holder(lr)
+    return None
+
+
+def _format_ledger_holder(lr) -> str:
+    """Holder descriptor for a ledger entry, naming owner + archive date."""
+    return f"{lr.owner_id} (archived {lr.archived_date} from phase {lr.owner_phase_id})"
+
+
+def _ladder_project_reservations(p: Project, phase, *, archived_date: str) -> None:
+    """Append project-scoped reservations from the phase's NON-CANCELLED (done) slices
+    to `Project.reservations_ledger` as LedgerReservations.
+
+    Deduped on (resource, value, scope, owner_id): re-running is idempotent (same owner
+    ⇒ same key), and two distinct done slices that --force-shared a value both survive.
+    Cancelled slices contribute nothing."""
+    existing = {
+        (lr.resource, lr.value, lr.scope, lr.owner_id)
+        for lr in p.reservations_ledger
+    }
+    for slc in phase.slices:
+        if slc.status == Status.CANCELLED:
+            continue
+        owner_id = f"{phase.id}.{slc.id}"
+        for r in slc.reservations:
+            if r.scope != "project":
+                continue
+            key = (r.resource, r.value, r.scope, owner_id)
+            if key in existing:
+                continue
+            existing.add(key)
+            p.reservations_ledger.append(LedgerReservation(
+                resource=r.resource, value=r.value, scope=r.scope, note=r.note,
+                owner_id=owner_id, owner_phase_id=phase.id, archived_date=archived_date,
+            ))
+
+
+def cmd_reserve_add(
+    *, repo_root: Path, slice_id: str, resource_value: str,
+    scope: str = "phase", note: str | None = None,
+    force: bool = False, reason: str | None = None,
+) -> None:
+    if scope not in ("phase", "project"):
+        raise CommandError(f"reserve add: --scope must be phase or project, got {scope!r}")
+    resource, value = _parse_resource_value(resource_value)
+    with _write_context(repo_root) as write_root:
+        p = _load(write_root)
+        qid, item = _require_slice(p, slice_id, "reserve add")
+        # Self-dedupe keyed on (resource, value, scope): re-declaring the same
+        # tuple on the same slice is a no-op, but the SAME resource:value at a
+        # DIFFERENT scope (phase vs project) is a distinct, allowed reservation.
+        if any(
+            r.resource == resource and r.value == value and r.scope == scope
+            for r in item.reservations
+        ):
+            return
+        phase = _phase_of_slice(p, qid)
+        if scope == "project":
+            holder = _project_scope_holder(p, qid, resource, value)
+            holder_context = "project scope"
+        else:
+            holder = _phase_scope_holder(p, phase, qid, resource, value)
+            holder_context = f"phase {phase.id}"
+        if force:
+            if reason is None or not reason.strip():
+                raise CommandError("reserve add --force requires --reason \"...\"")
+        elif holder is not None:
+            raise CommandError(
+                f"reserve add: {resource}:{value} is already reserved by {holder} "
+                f"in {holder_context}; use --force --reason \"...\" to override"
+            )
+        item.reservations.append(
+            Reservation(resource=resource, value=value, scope=scope, note=note)
+        )
+        if force and holder is not None:
+            ts = _dt.datetime.now().isoformat(timespec="seconds")
+            line = (
+                f"Reservation-override {ts}: {resource}:{value} over {holder} "
+                f"— {reason.strip()}"
+            )
+            item.notes = (item.notes + "\n" + line).strip() if item.notes else line
+        _save(write_root, p)
+
+
+def cmd_reserve_remove(*, repo_root: Path, slice_id: str, resource_value: str) -> None:
+    resource, value = _parse_resource_value(resource_value)
+    with _write_context(repo_root) as write_root:
+        p = _load(write_root)
+        _qid, item = _require_slice(p, slice_id, "reserve remove")
+        item.reservations = [
+            r for r in item.reservations
+            if not (r.resource == resource and r.value == value)
+        ]
+        _save(write_root, p)
+
+
+def cmd_reserve_list(*, repo_root: Path, phase_id: str | None) -> str:
+    with _read_context(repo_root) as write_root:
+        p = _load(write_root)
+        if phase_id is not None and not any(ph.id == phase_id for ph in p.phases):
+            raise CommandError(f"phase {phase_id} not found")
+        lines: list[str] = []
+        for ph, slc in _iter_phase_slices(p, phase_id):
+            for r in slc.reservations:
+                note = f"  — {r.note}" if r.note else ""
+                lines.append(f"{ph.id}.{slc.id}  {r.resource}:{r.value}  [{r.scope}]{note}")
+        if not lines:
+            return "(no reservations)\n"
+        return "\n".join(lines) + "\n"
+
+
 def cmd_phase_planning_path(*, repo_root: Path, phase_id: str, path: str | None) -> None:
     with _write_context(repo_root) as write_root:
         p = _load(write_root)
@@ -2121,6 +2364,8 @@ def _cmd_archive_phase_at_root(
         phase.closed = phase.closed or _today()
     else:
         phase.closed = phase.closed or _today()
+
+    _ladder_project_reservations(p, phase, archived_date=_today())
 
     slug = _slugify(phase.title)
     archive_rel = f"docs/archived-tasks/{phase_id}-{slug}.md"

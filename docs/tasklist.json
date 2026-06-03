@@ -275,12 +275,11 @@
           "tasks": [],
           "title": "Data model + migration (schema v3): surfaces, reservations, coordination_group, base/landed SHAs, LedgerReservation",
           "workflow_step": "implement",
-          "worktree_branch": "worktree-p7-s1-data-model-migration-schema-v3-surfaces",
-          "worktree_path": ".worktrees/worktree-p7-s1-data-model-migration-schema-v3-surfaces"
+          "worktree_pruned_at": "2026-06-03"
         },
         {
           "blocked_on": null,
-          "closed": null,
+          "closed": "2026-06-03",
           "created": "2026-06-02",
           "depends_on": [
             "P7.S1"
@@ -295,12 +294,16 @@
             "docs/handoffs/2026-06-02-P7-S2-surface-reserve-coordinate-cli-prompt.md",
             "docs/reviewer/p7-s2-surface-reserve-coordinate-cli-plan"
           ],
-          "reviewer_chain": "docs/reviewer/p7-s2-surface-reserve-coordinate-cli-plan",
-          "started": null,
-          "status": "ready",
+          "review_active": true,
+          "review_stage": "passed",
+          "reviewer_chain": "docs/reviewer/p7-s2-surface-reserve-coordinate-cli-P7-S2-post-slice",
+          "started": "2026-06-03",
+          "status": "done",
           "tasks": [],
           "title": "surface / reserve / coordinate CLI; reservation refusal + --force --reason; ledger population on archive",
-          "workflow_step": "implement"
+          "workflow_step": "implement",
+          "worktree_branch": "worktree-p7-s2-surface-reserve-coordinate-cli",
+          "worktree_path": ".worktrees/worktree-p7-s2-surface-reserve-coordinate-cli"
         },
         {
           "blocked_on": null,
@@ -340,11 +343,13 @@
             "docs/reviewer/p7-s4-worktree-integration-detection-plan"
           ],
           "reviewer_chain": "docs/reviewer/p7-s4-worktree-integration-detection-plan",
-          "started": null,
-          "status": "ready",
+          "started": "2026-06-03",
+          "status": "in_progress",
           "tasks": [],
           "title": "worktree start base-sha + prune landed-sha stamping + worktree status --integration",
-          "workflow_step": "implement"
+          "workflow_step": "implement",
+          "worktree_branch": "worktree-p7-s4-worktree-start-base-sha-prune-landed",
+          "worktree_path": ".worktrees/worktree-p7-s4-worktree-start-base-sha-prune-landed"
         },
         {
           "blocked_on": null,
