@@ -2632,10 +2632,17 @@ def cmd_worktree_status_integration(*, repo_root: Path, id: str) -> str:
                 landed.append((sib_qid, signal, sib_item))
             elif signal in {"unknown", "unmerged-branch"}:
                 undetermined.append((sib_qid, signal, sib_item))
+        my_surfaces = set(getattr(item, "integration_surfaces", []) or [])
         if landed:
             lines.append("landed since worktree_base_sha:")
-            for sib_qid, signal, _sib in landed:
-                lines.append(f"  - {sib_qid} ({signal})")
+            for sib_qid, signal, sib in landed:
+                sib_surfaces = set(getattr(sib, "integration_surfaces", []) or [])
+                shared = sorted(my_surfaces & sib_surfaces)
+                suffix = (
+                    f" — shared integration surface: {', '.join(shared)}"
+                    if shared else ""
+                )
+                lines.append(f"  - {sib_qid} ({signal}){suffix}")
         else:
             lines.append("landed since worktree_base_sha: (none)")
         if undetermined:

@@ -168,3 +168,43 @@ def test_integration_ancestry_not_landed_when_sibling_merged_before_base_sha(tmp
     # It is also not "undetermined": its branch is genuinely merged into base,
     # just outside the window. It must not appear in the landed list at all.
     # (The signal `merged-before-window` is non-landed and not surfaced.)
+
+
+def _set_surfaces(repo: Path, slice_id: str, surfaces: list[str]) -> None:
+    path = repo / "docs" / "tasklist.json"
+    data = json.loads(path.read_text())
+    for ph in data["phases"]:
+        for s in ph["slices"]:
+            if s["id"] == slice_id:
+                s["integration_surfaces"] = surfaces
+    path.write_text(json.dumps(data, indent=2) + "\n")
+
+
+def test_integration_flags_surface_overlap_with_landed_sibling(tmp_path):
+    repo = _init_repo(tmp_path / "proj")
+    _seed(repo, "This slice", "Sibling slice")
+    _set_surfaces(repo, "S1", ["cms-block-registry", "theme-tail-css"])
+    _set_surfaces(repo, "S2", ["cms-block-registry"])
+    _run(repo, "git", "add", "-A")
+    _run(repo, "git", "commit", "-q", "-m", "surfaces")
+    _start_worktree(repo, "P1.S1")
+    _start_worktree(repo, "P1.S2")
+    _land_sibling(repo, "P1.S2")
+    out = _tasktool(repo, "worktree", "status", "P1.S1", "--integration").stdout
+    assert "shared integration surface" in out
+    assert "cms-block-registry" in out
+    assert "theme-tail-css" not in out  # not shared
+
+
+def test_integration_no_surface_overlap_when_disjoint(tmp_path):
+    repo = _init_repo(tmp_path / "proj")
+    _seed(repo, "This slice", "Sibling slice")
+    _set_surfaces(repo, "S1", ["theme-tail-css"])
+    _set_surfaces(repo, "S2", ["directus-schema"])
+    _run(repo, "git", "add", "-A")
+    _run(repo, "git", "commit", "-q", "-m", "surfaces")
+    _start_worktree(repo, "P1.S1")
+    _start_worktree(repo, "P1.S2")
+    _land_sibling(repo, "P1.S2")
+    out = _tasktool(repo, "worktree", "status", "P1.S1", "--integration").stdout
+    assert "shared integration surface" not in out
