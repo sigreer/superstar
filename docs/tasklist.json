@@ -302,8 +302,7 @@
           "tasks": [],
           "title": "surface / reserve / coordinate CLI; reservation refusal + --force --reason; ledger population on archive",
           "workflow_step": "implement",
-          "worktree_branch": "worktree-p7-s2-surface-reserve-coordinate-cli",
-          "worktree_path": ".worktrees/worktree-p7-s2-surface-reserve-coordinate-cli"
+          "worktree_pruned_at": "2026-06-03"
         },
         {
           "blocked_on": null,
