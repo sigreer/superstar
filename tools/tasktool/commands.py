@@ -2623,18 +2623,25 @@ def cmd_worktree_status_integration(*, repo_root: Path, id: str) -> str:
             + ("" if ahead == 1 else "s")
         )
         landed = []
+        undetermined = []
         for sib_qid, sib_item in _phase_siblings(p, phase_id, qid):
             did_land, signal = _sibling_landed_signal(
                 write_root, sib_item, base_sha=base_sha, base_head=base_head
             )
             if did_land:
                 landed.append((sib_qid, signal, sib_item))
+            elif signal in {"unknown", "unmerged-branch"}:
+                undetermined.append((sib_qid, signal, sib_item))
         if landed:
             lines.append("landed since worktree_base_sha:")
             for sib_qid, signal, _sib in landed:
                 lines.append(f"  - {sib_qid} ({signal})")
         else:
             lines.append("landed since worktree_base_sha: (none)")
+        if undetermined:
+            lines.append("undetermined siblings (could not prove landed):")
+            for sib_qid, signal, _sib in undetermined:
+                lines.append(f"  - {sib_qid} ({signal})")
         return "\n".join(lines) + "\n"
 
 

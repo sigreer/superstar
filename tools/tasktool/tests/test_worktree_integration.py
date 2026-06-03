@@ -100,3 +100,71 @@ def test_integration_reports_landed_sibling_via_landed_base_sha(tmp_path):
     assert "landed since worktree_base_sha:" in out
     assert "P1.S2" in out
     assert "(authoritative)" in out
+
+
+def test_integration_reports_landed_sibling_via_ancestry_fallback(tmp_path):
+    repo = _init_repo(tmp_path / "proj")
+    _seed(repo, "This slice", "Sibling slice")
+    _start_worktree(repo, "P1.S1")
+    sib_wt = _start_worktree(repo, "P1.S2")
+    data = json.loads((repo / "docs" / "tasklist.json").read_text())
+    sib = next(s for s in data["phases"][0]["slices"] if s["id"] == "S2")
+    branch = sib["worktree_branch"]
+    # Real commit, close, merge — but DO NOT prune (so no landed_base_sha stamp).
+    (sib_wt / "w").write_text("x")
+    _run(sib_wt, "git", "add", "w")
+    _run(sib_wt, "git", "commit", "-q", "-m", "w")
+    _tasktool(repo, "close", "P1.S2", "--skip-review-gate")
+    _run(repo, "git", "add", "docs/tasklist.json")
+    _run(repo, "git", "commit", "-q", "-m", "route mutations")
+    _run(repo, "git", "merge", "--no-ff", "-q", "-m", "m", branch)
+    out = _tasktool(repo, "worktree", "status", "P1.S1", "--integration").stdout
+    assert "P1.S2 (ancestry)" in out
+
+
+def test_integration_reports_unknown_for_done_sibling_without_branch_or_sha(tmp_path):
+    repo = _init_repo(tmp_path / "proj")
+    _seed(repo, "This slice", "Sibling slice")
+    _start_worktree(repo, "P1.S1")
+    # Sibling was started in-place (no branch) and closed; neither signal exists.
+    _tasktool(repo, "start", "P1.S2", "--in-place")
+    _tasktool(repo, "close", "P1.S2", "--skip-review-gate")
+    out = _tasktool(repo, "worktree", "status", "P1.S1", "--integration").stdout
+    # Not silently treated as landed: it must NOT appear in the landed list.
+    assert "P1.S2 (authoritative)" not in out
+    assert "P1.S2 (ancestry)" not in out
+    # And the unknown state is surfaced.
+    assert "P1.S2 (unknown)" in out
+
+
+def test_integration_ancestry_not_landed_when_sibling_merged_before_base_sha(tmp_path):
+    """F2 negative case: a done sibling whose branch is already an ancestor of
+    THIS slice's worktree_base_sha (it merged BEFORE this worktree branched)
+    must be reported NOT landed-since — `branch_is_merged(into=base_head)` is
+    true for it, so the half-open window is what excludes it."""
+    repo = _init_repo(tmp_path / "proj")
+    _seed(repo, "This slice", "Sibling slice")
+    # Start the SIBLING first, do its work, and MERGE it into main — all BEFORE
+    # this slice's worktree branches.
+    sib_wt = _start_worktree(repo, "P1.S2")
+    data = json.loads((repo / "docs" / "tasklist.json").read_text())
+    sib = next(s for s in data["phases"][0]["slices"] if s["id"] == "S2")
+    branch = sib["worktree_branch"]
+    (sib_wt / "w").write_text("x")
+    _run(sib_wt, "git", "add", "w")
+    _run(sib_wt, "git", "commit", "-q", "-m", "w")
+    _tasktool(repo, "close", "P1.S2", "--skip-review-gate")
+    _run(repo, "git", "add", "docs/tasklist.json")
+    _run(repo, "git", "commit", "-q", "-m", "route mutations")
+    _run(repo, "git", "merge", "--no-ff", "-q", "-m", "m", branch)
+    # NOTE: do NOT prune S2, so it has no landed_base_sha and falls to the
+    # ancestry branch. Its branch ref still exists and IS an ancestor of main.
+    # NOW this slice branches — base_sha = main HEAD, which already contains S2.
+    _start_worktree(repo, "P1.S1")
+    out = _tasktool(repo, "worktree", "status", "P1.S1", "--integration").stdout
+    # S2 merged before P1.S1 branched: it is NOT "landed since worktree_base_sha".
+    assert "P1.S2 (ancestry)" not in out
+    assert "P1.S2 (authoritative)" not in out
+    # It is also not "undetermined": its branch is genuinely merged into base,
+    # just outside the window. It must not appear in the landed list at all.
+    # (The signal `merged-before-window` is non-landed and not surfaced.)
