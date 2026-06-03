@@ -332,6 +332,7 @@
             "P7.S1"
           ],
           "id": "S4",
+          "landed_base_sha": "04973057889afff000c3f71ea4251cb49a665883",
           "notes": "Spec §4.D. Surfaces: commands, worktree. Record worktree_base_sha on start; stamp landed_base_sha on guarded merged-branch prune of a done slice only; worktree status --integration (landed_base_sha authoritative, branch-ancestry fallback, landed:unknown).",
           "parallel_group": "core-after-model",
           "plan_path": "docs/plans/2026-06-02-P7-S4-worktree-integration-detection.md",
@@ -349,8 +350,7 @@
           "tasks": [],
           "title": "worktree start base-sha + prune landed-sha stamping + worktree status --integration",
           "workflow_step": "implement",
-          "worktree_branch": "worktree-p7-s4-worktree-start-base-sha-prune-landed",
-          "worktree_path": ".worktrees/worktree-p7-s4-worktree-start-base-sha-prune-landed"
+          "worktree_pruned_at": "2026-06-03"
         },
         {
           "blocked_on": null,
