@@ -554,3 +554,15 @@ def test_rev_list_helpers_count_window_and_membership(tmp_path):
     assert commit_is_in_range(root, mid, base=base, head=head) is True
     # `base` itself is excluded by the half-open A..B window.
     assert commit_is_in_range(root, base, base=base, head=head) is False
+
+
+def test_prune_stamps_landed_base_sha_on_merged_done_slice(project_with_worktree):
+    repo, wt = project_with_worktree
+    _tasktool(repo, "close", "P1.S1", "--skip-review-gate")
+    _run(repo, "git", "merge", "--no-ff", "-q", "-m", "m",
+         "worktree-p1-s1-first-slice")
+    base_head = _run(repo, "git", "rev-parse", "main").strip()
+    res = _tasktool(repo, "worktree", "prune", "P1.S1")
+    assert res.returncode == 0
+    show = _tasktool(repo, "show", "P1.S1").stdout
+    assert f"landed_base_sha: {base_head}" in show

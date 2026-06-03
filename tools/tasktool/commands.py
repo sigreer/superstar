@@ -2630,6 +2630,9 @@ def cmd_worktree_prune(
             )
         wt_path = (write_root / path_str).resolve()
 
+        # Track whether the branch-merged guard actually ran and passed; only a
+        # proven merge (never a --force bypass) may stamp landed_base_sha.
+        merged_proven = False
         # Guard 1: slice status is terminal (done OR cancelled), unless --force.
         if not force:
             if not is_terminal(getattr(item, "status", None)):
@@ -2646,6 +2649,7 @@ def cmd_worktree_prune(
                     f"{qid}: branch {branch!r} is not merged into {parent!r}; "
                     f"merge first or pass --force"
                 )
+            merged_proven = True
 
             # Guard 3: clean worktree.
             if wt_path.exists():
@@ -2693,6 +2697,16 @@ def cmd_worktree_prune(
         item.worktree_path = None
         item.worktree_branch = None
         item.worktree_pruned_at = _today()
+        # Stamp landed_base_sha only when the merge is proven: (a) done status
+        # (never cancelled), (b) the branch-merged guard passed, (c) not --force.
+        # Otherwise leave landed_base_sha as-is (None).
+        if merged_proven and getattr(item, "status", None) == Status.DONE:
+            from tasktool.worktree import current_branch_head_sha
+            parent = _authoritative_parent_branch(write_root, qid)
+            try:
+                item.landed_base_sha = current_branch_head_sha(write_root, parent)
+            except _subprocess.CalledProcessError:
+                item.landed_base_sha = None
         # Clear any stale pending marker.
         item.worktree_prune_pending = False
         item.worktree_prune_pending_at = None
