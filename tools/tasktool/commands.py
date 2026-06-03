@@ -990,6 +990,16 @@ def _apply_start_default(write_root: Path, qid: str, item, *, resume: bool) -> N
             f"{qid}: branch {canonical_branch!r} already exists out-of-band; "
             f"adopt the existing worktree or delete the branch."
         )
+    # Ad-hoc (CrossCutting) rows reuse this helper but do not carry the
+    # worktree_base_sha field (S1 added it to Slice only); guard accordingly.
+    if hasattr(item, "worktree_base_sha"):
+        from tasktool.config import load_config
+        from tasktool.worktree import current_branch_head_sha
+        base_branch = load_config(write_root).tasklist.authoritative_branch
+        try:
+            item.worktree_base_sha = current_branch_head_sha(write_root, base_branch)
+        except _subprocess.CalledProcessError:
+            item.worktree_base_sha = None
     canonical_path.parent.mkdir(parents=True, exist_ok=True)
     _subprocess.run(
         ["git", "worktree", "add", "-b", canonical_branch, str(canonical_path)],

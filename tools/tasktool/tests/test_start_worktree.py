@@ -328,3 +328,12 @@ def test_ad_hoc_row_hidden_from_default_list_visible_with_all(tmp_path):
     r_all = run(root, "list", "--all")
     assert "Ad-hoc: shim-drift" not in r_default.stdout
     assert "Ad-hoc: shim-drift" in r_all.stdout
+
+
+def test_start_records_worktree_base_sha_for_default(tmp_path):
+    root = seed_repo(tmp_path)
+    base_head = _git(root, "rev-parse", "main").stdout.strip()
+    r = run(root, "start", "P1.S1")
+    assert r.returncode == 0, r.stdout + r.stderr
+    sl = tasklist(root)["phases"][0]["slices"][0]
+    assert sl["worktree_base_sha"] == base_head
