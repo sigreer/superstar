@@ -125,6 +125,7 @@ def _build_parser() -> argparse.ArgumentParser:
     p_wt_list.add_argument("--all", action="store_true", dest="show_all")
     p_wt_status = wt_sub.add_parser("status")
     p_wt_status.add_argument("id")
+    p_wt_status.add_argument("--integration", action="store_true")
     p_wt_adopt = wt_sub.add_parser("adopt")
     p_wt_adopt.add_argument("id")
     p_wt_adopt.add_argument("path")
@@ -429,7 +430,14 @@ def main(argv: list[str]) -> int:
             if args.wt_cmd == "list":
                 sys.stdout.write(commands.cmd_worktree_list(repo_root=root, show_all=args.show_all))
             elif args.wt_cmd == "status":
-                sys.stdout.write(commands.cmd_worktree_status(repo_root=root, id=args.id))
+                if args.integration:
+                    sys.stdout.write(
+                        commands.cmd_worktree_status_integration(repo_root=root, id=args.id)
+                    )
+                else:
+                    sys.stdout.write(
+                        commands.cmd_worktree_status(repo_root=root, id=args.id)
+                    )
             elif args.wt_cmd == "adopt":
                 commands.cmd_worktree_adopt(repo_root=root, id=args.id, path=Path(args.path))
             elif args.wt_cmd == "ensure-gitignore":

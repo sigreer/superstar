@@ -2537,6 +2537,34 @@ def cmd_worktree_status(*, repo_root: Path, id: str) -> str:
         return "\n".join(lines) + "\n"
 
 
+def cmd_worktree_status_integration(*, repo_root: Path, id: str) -> str:
+    from tasktool.config import load_config
+    from tasktool import worktree as wt
+    with _read_context(repo_root) as write_root:
+        p = _load(write_root)
+        qid, _container, item = _find_item(p, id)
+        phase_id = qid.split(".")[0]
+        base_branch = load_config(write_root).tasklist.authoritative_branch
+        base_sha = getattr(item, "worktree_base_sha", None)
+        lines = [f"{qid}: integration vs {base_branch}"]
+        if base_sha is None:
+            lines.append("worktree_base_sha: <not recorded> — cannot compute staleness")
+            return "\n".join(lines) + "\n"
+        lines.append(f"worktree_base_sha: {base_sha}")
+        try:
+            base_head = wt.current_branch_head_sha(write_root, base_branch)
+        except _subprocess.CalledProcessError:
+            lines.append(f"base HEAD: <unresolved branch {base_branch!r}>")
+            return "\n".join(lines) + "\n"
+        ahead = wt.rev_list_count(write_root, base_sha, base_head)
+        lines.append(
+            f"base ahead of worktree_base_sha: {ahead} commit"
+            + ("" if ahead == 1 else "s")
+        )
+        # Sibling landed-since reporting is added in Task 8/9.
+        return "\n".join(lines) + "\n"
+
+
 def cmd_worktree_adopt(*, repo_root: Path, id: str, path: Path) -> None:
     from tasktool.worktree_lifecycle import (
         RecordedState, classify_recorded_state, is_authoritative_checkout,
