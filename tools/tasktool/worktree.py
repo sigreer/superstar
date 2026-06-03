@@ -36,6 +36,34 @@ def current_branch_head_sha(root: Path, branch: str) -> str:
     return _git(root, "rev-parse", "--verify", f"refs/heads/{branch}").stdout.strip()
 
 
+def merge_base_sha(root: Path, a: str, b: str) -> str | None:
+    """Return the merge-base SHA of `a` and `b`, or None if they share no history."""
+    res = _git(root, "merge-base", a, b, check=False)
+    out = res.stdout.strip()
+    return out or None
+
+
+def rev_list_shas(root: Path, base: str, head: str) -> list[str]:
+    """Commits reachable from `head` but not `base` (the half-open `base..head`)."""
+    res = _git(root, "rev-list", f"{base}..{head}", check=False)
+    return [line.strip() for line in res.stdout.splitlines() if line.strip()]
+
+
+def rev_list_count(root: Path, base: str, head: str) -> int:
+    return len(rev_list_shas(root, base, head))
+
+
+def commit_is_in_range(root: Path, sha: str, *, base: str, head: str) -> bool:
+    """True iff `sha` is reachable from `head` but not from `base`."""
+    reachable_from_head = _git(
+        root, "merge-base", "--is-ancestor", sha, head, check=False
+    ).returncode == 0
+    reachable_from_base = _git(
+        root, "merge-base", "--is-ancestor", sha, base, check=False
+    ).returncode == 0
+    return reachable_from_head and not reachable_from_base
+
+
 def same_repository(left: Path, right: Path) -> bool:
     try:
         return git_common_dir(left) == git_common_dir(right)

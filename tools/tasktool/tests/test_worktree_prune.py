@@ -517,3 +517,40 @@ def test_current_branch_head_sha_matches_rev_parse(tmp_path):
     expected = _run(root, "git", "rev-parse", "main").strip()
     assert current_branch_head_sha(root, "main") == expected
     assert len(current_branch_head_sha(root, "main")) == 40
+
+
+def test_merge_base_sha_returns_fork_point(tmp_path):
+    from tasktool.worktree import merge_base_sha
+    root = _init_repo(tmp_path / "r")
+    fork = _run(root, "git", "rev-parse", "main").strip()
+    _run(root, "git", "checkout", "-q", "-b", "feat")
+    (root / "a").write_text("a")
+    _run(root, "git", "add", "a")
+    _run(root, "git", "commit", "-q", "-m", "feat work")
+    _run(root, "git", "checkout", "-q", "main")
+    (root / "b").write_text("b")
+    _run(root, "git", "add", "b")
+    _run(root, "git", "commit", "-q", "-m", "main work")
+    assert merge_base_sha(root, "feat", "main") == fork
+
+
+def test_rev_list_helpers_count_window_and_membership(tmp_path):
+    from tasktool.worktree import rev_list_count, rev_list_shas, commit_is_in_range
+    root = _init_repo(tmp_path / "r")
+    base = _run(root, "git", "rev-parse", "main").strip()
+    (root / "c1").write_text("1")
+    _run(root, "git", "add", "c1")
+    _run(root, "git", "commit", "-q", "-m", "c1")
+    mid = _run(root, "git", "rev-parse", "main").strip()
+    (root / "c2").write_text("2")
+    _run(root, "git", "add", "c2")
+    _run(root, "git", "commit", "-q", "-m", "c2")
+    head = _run(root, "git", "rev-parse", "main").strip()
+    # base..head spans exactly the two new commits.
+    assert rev_list_count(root, base, head) == 2
+    shas = rev_list_shas(root, base, head)
+    assert head in shas and mid in shas and base not in shas
+    # `mid` is reachable from head but not from base -> in range.
+    assert commit_is_in_range(root, mid, base=base, head=head) is True
+    # `base` itself is excluded by the half-open A..B window.
+    assert commit_is_in_range(root, base, base=base, head=head) is False
