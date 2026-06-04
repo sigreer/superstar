@@ -911,26 +911,25 @@ git commit -m "P7.S3: ratify --parallel-group surface overlap warning"
 
 ### 5.3 Manual CLI smoke (evidence for the post-slice review)
 
-- [ ] Exercise the warning paths in a **throwaway directory** — never against the real `docs/tasklist.json`. `TT` is the absolute path to the wrapper:
+- [ ] Exercise the warning paths in a **throwaway directory** — never against the real `docs/tasklist.json`. `TT` is the absolute path to the wrapper, and **every** invocation passes the global `--project-root "$SCRATCH"` flag so tasktool operates on the throwaway dir rather than walking up to the repo's authoritative tracker (a plain `cd "$SCRATCH"` is *not* enough: from inside the repo tree tasktool would still resolve and route to the configured repo root, exiting non-zero with an authoritative-routing error). If you have `SUPERSTAR_SUBAGENT_ROLE` set in your shell, unset it for these calls (`env -u SUPERSTAR_SUBAGENT_ROLE …`), since that var makes tasktool refuse mutations:
   ```sh
   TT="$PWD/tools/tasktool/tasktool"
   SCRATCH="$(mktemp -d)"
   (
-    cd "$SCRATCH" &&
-    "$TT" config init-local &&
-    "$TT" init --project smoke &&
-    "$TT" create phase --title "Smoke" &&
-    "$TT" create slice P1 --title "a" &&
-    "$TT" create slice P1 --title "b" &&
-    "$TT" surface add P1.S1 cms-block-registry &&
-    "$TT" surface add P1.S2 cms-block-registry &&
+    "$TT" --project-root "$SCRATCH" config init-local &&
+    "$TT" --project-root "$SCRATCH" init --project smoke &&
+    "$TT" --project-root "$SCRATCH" create phase --title "Smoke" &&
+    "$TT" --project-root "$SCRATCH" create slice P1 --title "a" &&
+    "$TT" --project-root "$SCRATCH" create slice P1 --title "b" &&
+    "$TT" --project-root "$SCRATCH" surface add P1.S1 cms-block-registry &&
+    "$TT" --project-root "$SCRATCH" surface add P1.S2 cms-block-registry &&
     echo "--- surface check (expect unguarded overlap P1.S1, P1.S2) ---" &&
-    "$TT" surface check P1 &&
+    "$TT" --project-root "$SCRATCH" surface check P1 &&
     echo "--- schedule (expect surface_overlap lines) ---" &&
-    "$TT" schedule P1 &&
+    "$TT" --project-root "$SCRATCH" schedule P1 &&
     echo "--- ratify into shared parallel_group (warning to stderr, must still exit 0) ---" &&
-    "$TT" ratify P1.S1 --parallel-group core &&
-    "$TT" ratify P1.S2 --parallel-group core
+    "$TT" --project-root "$SCRATCH" ratify P1.S1 --parallel-group core &&
+    "$TT" --project-root "$SCRATCH" ratify P1.S2 --parallel-group core
   )
   echo "smoke exit=$?"
   rm -rf "$SCRATCH"

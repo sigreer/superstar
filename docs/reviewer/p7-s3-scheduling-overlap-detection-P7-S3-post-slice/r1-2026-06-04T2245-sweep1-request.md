@@ -1,0 +1,1072 @@
+<!-- superstar-prompt:start -->
+You are acting as an independent senior engineering reviewer.
+
+Review stance:
+- Lead with findings, ordered by severity.
+- Focus on correctness, consistency, implementation risk, missing acceptance
+  gates, vague handoffs, ungrounded assumptions, unverified claims, and drift
+  from the codebase.
+- Give exact file/line references when possible.
+- If the document is sound, say that clearly and list residual risks.
+- Keep the review actionable. Avoid broad rewrites unless the current structure
+  creates concrete risk.
+
+Repository root:
+/home/simon/Dev/sigreer/skills/superstar/.worktrees/worktree-p7-s3-scheduling-overlap-detection-ready
+
+Target kind:
+post-slice
+
+Review mode:
+Post-slice review. Treat this as a completion gate for one
+slice of work. Compare the completed changes and stated evidence against the
+slice acceptance criteria. Prioritize: incomplete tasks, uncommitted or
+untracked artifacts, missing tests, failing or skipped verification, broken
+cross-site behavior, and claims not supported by the repo state.
+
+Target document:
+docs/plans/2026-06-04-P7-S3-scheduling-overlap-detection.md
+
+Additional context files:
+- docs/specs/2026-06-02-P7-integration-surface-parallel-safety-design.md
+- docs/tasklist.json
+
+Review output contract:
+1. Findings
+   - Tag each finding with a stable ID: `F1`, `F2`, `F3`, …. IDs must remain
+     stable if this review is iterated in subsequent rounds.
+   - Mark severity inline: `Severity: blocking | important | minor | nit`.
+2. Open questions / assumptions
+3. Suggested document edits
+4. Verification gaps / commands that should be run, if any
+
+End your review with this exact line, as plain text on its own line:
+
+    Overall verdict: <ready|ready with small edits|revise>
+
+Do not bold, italicise, prefix with `##`, split across lines, or drop the
+word "Overall". Do not write `**Verdict: ready**` or place the value on a
+new line after a heading.
+
+Read the files from disk. Do not rely only on the snippets in this prompt.
+
+
+## Target Preview
+
+### docs/plans/2026-06-04-P7-S3-scheduling-overlap-detection.md
+
+    1	# P7.S3 — Scheduling overlap detection Implementation Plan
+    2	
+    3	> **For agentic workers:** REQUIRED SUB-SKILL: Use superstar:subagent-driven-development (recommended) or superstar:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+    4	
+    5	**Goal:** Make `tasktool`'s scheduling reporters surface-aware: `ready-slices` and `schedule` warn when sibling slices share an integration surface with no dependency or coordination link, a new `surface check <phase>` gives a dedicated read-only audit (unguarded overlaps, coordinated surfaces, reservation contention), and `ratify --parallel-group` warns when a slice is placed in a parallel group it shares a surface with. All additions are **warning-only** — no new blocks (reservation contention is already prevented at declaration time by S2).
+    6	
+    7	**Architecture:** All logic lives in `tools/tasktool/commands.py`. A small set of pure helpers (`_dep_link`, `_shared_surfaces`, `_same_coord_group`, `_pair_surface_relation`, `_surface_overlap_map`, `_reservation_contention`, `_format_surface_relations`) classify the surface relationship between two slices; the existing reporters (`cmd_ready_slices`, `cmd_schedule`) and the new `cmd_surface_check` consume them. `cmd_ratify` gains a returned warning string emitted to stderr by the dispatch. CLI wiring (a `surface check` subparser + a ratify-warning print) goes in `tools/tasktool/cli.py`. Reads are non-mutating; only `ratify` writes (unchanged), so the new reporters use the bare `_load` pattern that `cmd_schedule` already uses.
+    8	
+    9	**Tech Stack:** Python 3, argparse, pytest
+   10	
+   11	---
+   12	
+   13	## Scheduling
+   14	
+   15	- **This slice is `P7.S3`.** It `depends_on` **`P7.S1`** (the schema-v3 data model: `Slice.integration_surfaces`, `Slice.coordination_group`, `Slice.reservations`, the `Reservation` type) **and `P7.S2`** (the `surface` / `reserve` / `coordinate` declaration commands that *write* the fields this slice reads — without them there is no data to warn on). Both deps are **`done`** as of this plan; confirmed against `tasktool schedule P7`. No dependency change is proposed; `depends_on` stays `[P7.S1, P7.S2]`.
+   16	- **No `parallel_group`.** S3 is serialized after S2 (it reports using the data S2 writes) and is the only ready slice that touches the scheduling reporters. It remains independently plannable/executable.
+   17	- **Surfaces this slice writes:** `commands` (it also adds a `surface check` subparser + ratify-warning print in `cli`, but the behavioural surface is `commands`, matching the spec's §5 table). **Reservations:** none.
+   18	- **Sibling-surface note (dog-fooding):** S3 shares **no** integration surface with any *currently ready* sibling. S6 later depends on S3 and writes `skills`; no overlap. Nothing to coordinate or serialize beyond the existing deps.
+   19	- **Ratify at close:** after plan review passes, `tasktool set P7.S3 --workflow-step implement`; at slice close the coordinator runs `tasktool ratify P7.S3` (no `--parallel-group`).
+   20	
+   21	### First action before any source edit
+   22	
+   23	- [ ] Run, from the repo root `/home/simon/Dev/sigreer/skills/superstar`:
+   24	  ```sh
+   25	  ./tools/tasktool/tasktool start P7.S3
+   26	  ```
+   27	  This creates/records the worktree and flips `P7.S3` to `in_progress`. `cd` into the printed worktree path and do all subsequent work there. (If the project is configured local-mode and the command prints `cd <path>`, follow it.)
+   28	
+   29	---
+   30	
+   31	## File Structure
+   32	
+   33	| File | Responsibility (in this slice) |
+   34	|------|-------------------------------|
+   35	| `tools/tasktool/commands.py` | New pure helpers: `_dep_link`, `_shared_surfaces`, `_same_coord_group`, `_pair_surface_relation`, `_surface_overlap_map`, `_reservation_contention`, `_format_surface_relations`. New command `cmd_surface_check`. Enrich `cmd_ready_slices` and `cmd_schedule` rows with `surface_overlap` / `coordinated`. `cmd_ratify` returns a warning string; new helper `_ratify_parallel_group_warning`. |
+   36	| `tools/tasktool/cli.py` | New `surface check` sub-subcommand (phase_id + `--format`); dispatch branch. `ratify` dispatch writes the returned warning to stderr. |
+   37	| `tools/tasktool/tests/test_commands.py` | Unit tests calling the command functions directly (matches the file's `_Tmp` + `load_project` style): overlap warning emitted/suppressed (dep link, coordination group), `surface check` JSON+text shape (unguarded / coordinated / reservation contention), `ratify --parallel-group` warning. |
+   38	| `tools/tasktool/tests/test_cli_integration.py` | End-to-end CLI tests via the existing `run_cli` helper: `surface check --format json` exit 0 + shape; `ratify --parallel-group` prints the warning to stderr but still exits 0. |
+   39	
+   40	**Source of truth is `tools/tasktool/`.** Do NOT edit the `plugins/superstar/` copy — it is synced at release. Every path below is relative to the repo root unless noted.
+   41	
+   42	---
+   43	
+   44	## Conventions you will reuse (read once before starting)
+   45	
+   46	These already exist in `tools/tasktool/commands.py`; the new code must follow them exactly.
+   47	
+   48	- **Read-only reporters use the bare load**, exactly as `cmd_schedule`/`cmd_ready_slices` do today: `p = _load(repo_root)` → `phase = _phase_by_id(p, phase_id)` → build string → return. No `_read_context`, no `_save`. `_phase_by_id` raises `CommandError(f"phase {phase_id} not found")` for an unknown phase — reuse it; do not re-implement the lookup.
+   49	- **Mutating commands** (only `cmd_ratify` here) keep the `with _write_context(repo_root) as write_root:` → `_load` → mutate → `_save` shape. Compute the warning string **inside** the context, after the mutation, before `_save`, and return it.
+   50	- **Terminal slices** are `done` or `cancelled`: `is_terminal(s.status)` (already imported from `tasktool.model`). A terminal slice is neither an overlap subject nor a candidate — a shipped or dropped slice cannot collide at execution time.
+   51	- **Qualified ids** are `f"{phase.id}.{s.id}"` (e.g. `P1.S3`). `depends_on` entries are qualified ids.
+   52	- **Errors:** raise `CommandError("...")`. `cli.main()` already catches it, prints `tasktool: <msg>` to stderr, exit 1.
+   53	- **JSON output:** mirror the neighbours — `import json as _j` locally (or use the module-level `_json`), `_j.dumps(obj, indent=2) + "\n"`.
+   54	- **`Phase`, `Slice`, `Status`, `is_terminal`, `Reservation`, `PlanningStatus`** are already imported at the top of `commands.py` (the `from tasktool.model import (...)` block). No new imports needed.
+   55	- **Test invocation:** from repo root,
+   56	  ```sh
+   57	  python -m pytest tools/tasktool/tests/test_commands.py -q
+   58	  ```
+   59	  (`pyproject.toml` sets `addopts = "--import-mode=importlib"`; `testpaths` includes `tools/tasktool/tests`.) If an import fails, prefix `PYTHONPATH=tools`.
+   60	- **CLI integration tests:** open `tools/tasktool/tests/test_cli_integration.py` and reuse its existing `run_cli(...)` helper and project-setup fixture verbatim — do not invent a new harness. Read the top of that file once to copy the exact call signature (it returns an object/tuple carrying exit code, stdout, stderr).
+   61	
+   62	---
+   63	
+   64	## Design reference — the surface-relation primitive
+   65	
+   66	Every warning in this slice reduces to one question about an **ordered pair** of slices `(a, b)`: *do they share a write surface that nothing has reconciled?* The single primitive `_pair_surface_relation` answers it; everything else maps over pairs.
+   67	
+   68	A pair is classified as:
+   69	
+   70	- **`None`** — no shared surface, **or** a shared surface that is already reconciled by a `depends_on` link in either direction (they are serialized, so parallel execution is impossible — nothing to warn about).
+   71	- **`"coordinated"`** — shared surface, no dep link, **same non-None `coordination_group`** (an intentional, declared agreement to coordinate — reported, never warned).
+   72	- **`"overlap"`** — shared surface, no dep link, **different/absent** coordination group (the unguarded case the spec wants flagged).
+   73	
+   74	Precedence is **dep-link first** (serialization fully reconciles), then coordination group, then overlap. This matches spec §4.C conditions (b) "no `depends_on` link in either direction" and (c) "not in the same `coordination_group`".
+   75	
+   76	---
+   77	
+   78	## Task 1 — Surface-relation helpers + `cmd_schedule` enrichment
+   79	
+   80	**Files:**
+   81	- Modify: `tools/tasktool/commands.py` (add helpers immediately after `_is_slice_ready_for_work`, ~line 1996; edit `cmd_schedule`, ~line 2021)
+   82	- Test: `tools/tasktool/tests/test_commands.py`
+   83	
+   84	- [ ] **Step 1: Write the failing tests**
+   85	
+   86	Add a new test class at the end of `tools/tasktool/tests/test_commands.py`. It builds a phase with four slices and declares surfaces/links, then asserts on `cmd_schedule` JSON.
+   87	
+   88	```python
+   89	class SurfaceOverlapSchedulingTests(unittest.TestCase):
+   90	    def setUp(self):
+   91	        self.t = _Tmp()
+   92	        commands.cmd_init(repo_root=self.t.root, project="demo")
+   93	        commands.cmd_create_phase(repo_root=self.t.root, title="P1")
+   94	        # S1, S2, S3, S4 all created at top level (no deps) unless added below.
+   95	        for _ in range(4):
+   96	            commands.cmd_create_slice(repo_root=self.t.root, phase_id="P1", title="s")
+   97	
+   98	    def tearDown(self):
+   99	        self.t.cleanup()
+  100	
+  101	    def _row(self, rows, qid):
+  102	        return next(r for r in rows if r["id"] == qid)
+  103	
+  104	    def test_schedule_warns_unguarded_surface_overlap(self):
+  105	        # S1 and S2 both write cms-block-registry, no dep, no coordination group.
+  106	        commands.cmd_surface_add(repo_root=self.t.root, slice_id="P1.S1",
+  107	                                 surfaces=["cms-block-registry"])
+  108	        commands.cmd_surface_add(repo_root=self.t.root, slice_id="P1.S2",
+  109	                                 surfaces=["cms-block-registry"])
+  110	        rows = json.loads(commands.cmd_schedule(
+  111	            repo_root=self.t.root, phase_id="P1", format="json"))
+  112	        s1 = self._row(rows, "P1.S1")
+  113	        self.assertEqual(
+  114	            s1["surface_overlap"],
+  115	            [{"sibling": "P1.S2", "surfaces": ["cms-block-registry"]}],
+  116	        )
+  117	        self.assertEqual(s1["coordinated"], [])
+  118	        # Symmetric: S2 also reports S1.
+  119	        self.assertEqual(
+  120	            self._row(rows, "P1.S2")["surface_overlap"],
+  121	            [{"sibling": "P1.S1", "surfaces": ["cms-block-registry"]}],
+  122	        )
+  123	
+  124	    def test_schedule_dep_link_suppresses_overlap(self):
+  125	        commands.cmd_surface_add(repo_root=self.t.root, slice_id="P1.S1",
+  126	                                 surfaces=["cms-block-registry"])
+  127	        commands.cmd_surface_add(repo_root=self.t.root, slice_id="P1.S2",
+  128	                                 surfaces=["cms-block-registry"])
+  129	        commands.cmd_deps(repo_root=self.t.root, slice_id="P1.S2", add="P1.S1")
+  130	        rows = json.loads(commands.cmd_schedule(
+  131	            repo_root=self.t.root, phase_id="P1", format="json"))
+  132	        self.assertEqual(self._row(rows, "P1.S1")["surface_overlap"], [])
+  133	        self.assertEqual(self._row(rows, "P1.S2")["surface_overlap"], [])
+  134	
+  135	    def test_schedule_coordination_group_reports_coordinated_not_warned(self):
+  136	        commands.cmd_surface_add(repo_root=self.t.root, slice_id="P1.S1",
+  137	                                 surfaces=["cms-block-registry"])
+  138	        commands.cmd_surface_add(repo_root=self.t.root, slice_id="P1.S2",
+  139	                                 surfaces=["cms-block-registry"])
+  140	        commands.cmd_coordinate(repo_root=self.t.root, slice_id="P1.S1", group="cms")
+  141	        commands.cmd_coordinate(repo_root=self.t.root, slice_id="P1.S2", group="cms")
+  142	        rows = json.loads(commands.cmd_schedule(
+  143	            repo_root=self.t.root, phase_id="P1", format="json"))
+  144	        s1 = self._row(rows, "P1.S1")
+  145	        self.assertEqual(s1["surface_overlap"], [])
+  146	        self.assertEqual(
+  147	            s1["coordinated"],
+  148	            [{"sibling": "P1.S2", "surfaces": ["cms-block-registry"], "group": "cms"}],
+  149	        )
+  150	
+  151	    def test_schedule_text_shows_overlap_line(self):
+  152	        commands.cmd_surface_add(repo_root=self.t.root, slice_id="P1.S1",
+  153	                                 surfaces=["cms-block-registry"])
+  154	        commands.cmd_surface_add(repo_root=self.t.root, slice_id="P1.S2",
+  155	                                 surfaces=["cms-block-registry"])
+  156	        out = commands.cmd_schedule(repo_root=self.t.root, phase_id="P1")
+  157	        self.assertIn("surface_overlap: P1.S2 (cms-block-registry)", out)
+  158	
+  159	    def test_schedule_done_slice_not_a_candidate(self):
+  160	        # A done slice that shares a surface must not be reported as an overlap.
+  161	        commands.cmd_surface_add(repo_root=self.t.root, slice_id="P1.S1",
+  162	                                 surfaces=["cms-block-registry"])
+  163	        commands.cmd_surface_add(repo_root=self.t.root, slice_id="P1.S2",
+  164	                                 surfaces=["cms-block-registry"])
+  165	        commands.cmd_start(repo_root=self.t.root, id="P1.S2")
+  166	        commands.cmd_close(repo_root=self.t.root, id="P1.S2", skip_review_gate=True)
+  167	        rows = json.loads(commands.cmd_schedule(
+  168	            repo_root=self.t.root, phase_id="P1", format="json"))
+  169	        self.assertEqual(self._row(rows, "P1.S1")["surface_overlap"], [])
+  170	
+  171	    def test_schedule_waiting_slice_is_candidate_not_subject(self):
+  172	        # S2 waits on S4 (not done) => not ready-for-work => not a warning SUBJECT,
+  173	        # but it is still a CANDIDATE a ready sibling (S1) can collide with.
+  174	        commands.cmd_deps(repo_root=self.t.root, slice_id="P1.S2", add="P1.S4")
+  175	        commands.cmd_surface_add(repo_root=self.t.root, slice_id="P1.S1",
+  176	                                 surfaces=["cms-block-registry"])
+  177	        commands.cmd_surface_add(repo_root=self.t.root, slice_id="P1.S2",
+  178	                                 surfaces=["cms-block-registry"])
+  179	        rows = json.loads(commands.cmd_schedule(
+  180	            repo_root=self.t.root, phase_id="P1", format="json"))
+  181	        # S1 (ready subject) reports the overlap with not-yet-ready S2.
+  182	        self.assertEqual(
+  183	            self._row(rows, "P1.S1")["surface_overlap"],
+  184	            [{"sibling": "P1.S2", "surfaces": ["cms-block-registry"]}],
+  185	        )
+  186	        # S2 is not ready-for-work, so it is not a subject: no relations on its row.
+  187	        self.assertEqual(self._row(rows, "P1.S2")["surface_overlap"], [])
+  188	        self.assertEqual(self._row(rows, "P1.S2")["coordinated"], [])
+  189	```
+  190	
+  191	> Note: `cmd_create_slice` with no `depends_on` makes top-level slices. There is no dep link between `P1.S1` and `P1.S2` (S2 depends on S4, not S1), so the surface overlap is genuinely unguarded. `json` is already imported at the top of `test_commands.py` (used by `test_schedule_emits_cancelled_deps`).
+  192	
+  193	- [ ] **Step 2: Run the tests to verify they fail**
+  194	
+  195	Run: `python -m pytest tools/tasktool/tests/test_commands.py -k SurfaceOverlapScheduling -q`
+  196	Expected: FAIL — `KeyError: 'surface_overlap'` (the key does not exist yet).
+  197	
+  198	- [ ] **Step 3: Add the helpers**
+  199	
+  200	In `tools/tasktool/commands.py`, immediately **after** `_is_slice_ready_for_work` (the function ending at ~line 1996, just before `def cmd_ready_slices`), insert:
+  201	
+  202	```python
+  203	def _dep_link(a_qid: str, a: Slice, b_qid: str, b: Slice) -> bool:
+  204	    """True if either slice declares the other as a dependency (link in either
+  205	    direction). A dep link serializes the pair, so a shared surface is reconciled."""
+  206	    return b_qid in (a.depends_on or []) or a_qid in (b.depends_on or [])
+  207	
+  208	
+  209	def _shared_surfaces(a: Slice, b: Slice) -> list[str]:
+  210	    """Sorted intersection of two slices' declared integration surfaces."""
+  211	    return sorted(set(a.integration_surfaces or []) & set(b.integration_surfaces or []))
+  212	
+  213	
+  214	def _same_coord_group(a: Slice, b: Slice) -> bool:
+  215	    """True if both slices name the same, non-None coordination_group."""
+  216	    return a.coordination_group is not None and a.coordination_group == b.coordination_group
+  217	
+  218	
+  219	def _pair_surface_relation(
+  220	    a_qid: str, a: Slice, b_qid: str, b: Slice,
+  221	) -> tuple[str | None, list[str]]:
+  222	    """Classify the surface relationship between two slices (spec 4.C).
+  223	
+  224	    Returns (kind, shared_surfaces):
+  225	      - (None, [])           no shared surface
+  226	      - (None, [...])        shared surface but a depends_on link serializes them
+  227	      - ("coordinated", ...) shared surface, no dep link, same coordination_group
+  228	      - ("overlap", ...)     shared surface, no dep link, different/absent group
+  229	
+  230	    Precedence is dep-link first (serialization fully reconciles), then
+  231	    coordination group, then unguarded overlap.
+  232	    """
+  233	    shared = _shared_surfaces(a, b)
+  234	    if not shared:
+  235	        return None, []
+  236	    if _dep_link(a_qid, a, b_qid, b):
+  237	        return None, shared
+  238	    if _same_coord_group(a, b):
+  239	        return "coordinated", shared
+  240	    return "overlap", shared
+  241	
+  242	
+  243	def _surface_overlap_map(phase: Phase) -> dict:
+  244	    """Classify surface relationships for the phase's scheduling reporters (spec
+  245	    4.C: "for each ready/in-progress slice ... other non-terminal slices").
+  246	
+  247	    SUBJECTS are narrowed to the slices eligible for parallel dispatch right now —
+  248	    ready-for-work or in-progress. A blocked, dependency-waiting, superseded, or
+  249	    terminal slice is never a subject (it will not be dispatched now, so a warning
+  250	    on its row is noise). CANDIDATES are every non-terminal sibling, so a ready
+  251	    subject is still warned about a not-yet-ready sibling that writes the same
+  252	    surface.
+  253	
+  254	    Returns subject_qid -> {"surface_overlap": [...], "coordinated": [...]} where
+  255	    each overlap entry is {"sibling": qid, "surfaces": [...]} and each coordinated
+  256	    entry additionally carries "group".
+  257	    """
+  258	    candidates = [
+  259	        (f"{phase.id}.{s.id}", s) for s in phase.slices if not is_terminal(s.status)
+  260	    ]
+  261	    out: dict = {}
+  262	    for s in phase.slices:
+  263	        # Subject predicate: ready-for-work (deps met, not terminal/blocked/
+  264	        # superseded — see _is_slice_ready_for_work) OR actively in progress.
+  265	        if not (s.status == Status.IN_PROGRESS or _is_slice_ready_for_work(phase, s)):
+  266	            continue
+  267	        a_qid = f"{phase.id}.{s.id}"
+  268	        overlap: list = []
+  269	        coordinated: list = []
+  270	        for b_qid, b in candidates:
+  271	            if b_qid == a_qid:
+  272	                continue
+  273	            kind, shared = _pair_surface_relation(a_qid, s, b_qid, b)
+  274	            if kind == "overlap":
+  275	                overlap.append({"sibling": b_qid, "surfaces": shared})
+  276	            elif kind == "coordinated":
+  277	                coordinated.append(
+  278	                    {"sibling": b_qid, "surfaces": shared, "group": s.coordination_group}
+  279	                )
+  280	        out[a_qid] = {"surface_overlap": overlap, "coordinated": coordinated}
+  281	    return out
+  282	
+  283	
+  284	def _format_surface_relations(row: dict) -> list[str]:
+  285	    """Indented text lines describing a scheduling row's surface relationships.
+  286	    Empty when the row has neither overlaps nor coordinated siblings."""
+  287	    lines: list[str] = []
+  288	    for e in row.get("surface_overlap", []):
+  289	        lines.append(
+  290	            f"    surface_overlap: {e['sibling']} ({', '.join(e['surfaces'])})"
+  291	        )
+  292	    for e in row.get("coordinated", []):
+  293	        lines.append(
+  294	            f"    coordinated: {e['sibling']} ({', '.join(e['surfaces'])}) "
+  295	            f"[group={e['group']}]"
+  296	        )
+  297	    return lines
+  298	```
+  299	
+  300	- [ ] **Step 4: Enrich `cmd_schedule`**
+  301	
+  302	Replace the body of `cmd_schedule` (currently ~lines 2021–2063) with this version. The changes: compute `overlap_map` once, attach `surface_overlap`/`coordinated` to each row, and append `_format_surface_relations(row)` lines under each text row.
+  303	
+  304	```python
+  305	def cmd_schedule(*, repo_root: Path, phase_id: str, format: str = "text") -> str:
+  306	    p = _load(repo_root)
+  307	    phase = _phase_by_id(p, phase_id)
+  308	    done = _done_slice_ids(phase)
+  309	    cancelled = _cancelled_slice_ids(phase)
+  310	    overlap_map = _surface_overlap_map(phase)
+  311	    rows = []
+  312	    for s in phase.slices:
+  313	        waiting_on = [
+  314	            dep for dep in s.depends_on if dep not in done and dep not in cancelled
+  315	        ]
+  316	        cancelled_deps = [dep for dep in s.depends_on if dep in cancelled]
+  317	        ready = _is_slice_ready_for_work(phase, s) and not cancelled_deps
+  318	        qid = f"{phase.id}.{s.id}"
+  319	        rel = overlap_map.get(qid, {"surface_overlap": [], "coordinated": []})
+  320	        rows.append({
+  321	            "id": qid,
+  322	            "status": s.status.value,
+  323	            "planning_status": s.planning_status.value,
+  324	            "parallel_group": s.parallel_group,
+  325	            "depends_on": s.depends_on,
+  326	            "waiting_on": waiting_on,
+  327	            "cancelled_deps": cancelled_deps,
+  328	            "ready": ready,
+  329	            "title": s.title,
+  330	            "surface_overlap": rel["surface_overlap"],
+  331	            "coordinated": rel["coordinated"],
+  332	        })
+  333	    if format == "json":
+  334	        import json as _j
+  335	        return _j.dumps(rows, indent=2) + "\n"
+  336	    lines = [f"# {phase.id} — {phase.title}", ""]
+  337	    if phase.planning_path:
+  338	        lines.append(f"planning: {phase.planning_path}")
+  339	    for row in rows:
+  340	        ready = "ready" if row["ready"] else "waiting"
+  341	        deps = ", ".join(row["depends_on"]) if row["depends_on"] else "-"
+  342	        waits = ", ".join(row["waiting_on"]) if row["waiting_on"] else "-"
+  343	        cancelled_str = (
+  344	            ", ".join(row["cancelled_deps"]) if row["cancelled_deps"] else "-"
+  345	        )
+  346	        group = row["parallel_group"] or "-"
+  347	        lines.append(
+  348	            f"{row['id']}  [{row['status']}/{row['planning_status']}]  "
+  349	            f"group={group}  {ready}  deps={deps}  waiting_on={waits}  "
+  350	            f"cancelled_deps={cancelled_str}  {row['title']}"
+  351	        )
+  352	        lines.extend(_format_surface_relations(row))
+  353	    return "\n".join(lines).rstrip() + "\n"
+  354	```
+  355	
+  356	- [ ] **Step 5: Run the tests to verify they pass**
+  357	
+  358	Run: `python -m pytest tools/tasktool/tests/test_commands.py -k SurfaceOverlapScheduling -q`
+  359	Expected: PASS (all five).
+  360	
+  361	- [ ] **Step 6: Run the existing scheduling tests to confirm no regression**
+  362	
+  363	Run: `python -m pytest tools/tasktool/tests/test_commands.py -k Scheduling -q`
+  364	Expected: PASS (the original `SchedulingTests` plus the new class). The added JSON keys and indented text lines are additive; the existing `assertIn`/`next(...)` assertions still hold.
+  365	
+  366	- [ ] **Step 7: Commit**
+  367	
+  368	```bash
+  369	git add tools/tasktool/commands.py tools/tasktool/tests/test_commands.py
+  370	git commit -m "P7.S3: surface-relation helpers + schedule overlap warnings"
+  371	```
+  372	
+  373	---
+  374	
+  375	## Task 2 — `cmd_ready_slices` enrichment
+  376	
+  377	**Files:**
+  378	- Modify: `tools/tasktool/commands.py` (`cmd_ready_slices`, ~line 1998)
+  379	- Test: `tools/tasktool/tests/test_commands.py`
+  380	
+  381	- [ ] **Step 1: Write the failing test**
+  382	
+  383	Add to `SurfaceOverlapSchedulingTests`:
+  384	
+  385	```python
+  386	    def test_ready_slices_warns_unguarded_overlap(self):
+  387	        commands.cmd_surface_add(repo_root=self.t.root, slice_id="P1.S1",
+  388	                                 surfaces=["cms-block-registry"])
+  389	        commands.cmd_surface_add(repo_root=self.t.root, slice_id="P1.S2",
+  390	                                 surfaces=["cms-block-registry"])
+  391	        rows = json.loads(commands.cmd_ready_slices(
+  392	            repo_root=self.t.root, phase_id="P1", format="json"))
+  393	        s1 = self._row(rows, "P1.S1")
+  394	        self.assertEqual(
+  395	            s1["surface_overlap"],
+  396	            [{"sibling": "P1.S2", "surfaces": ["cms-block-registry"]}],
+  397	        )
+  398	
+  399	    def test_ready_slices_text_shows_overlap_line(self):
+  400	        commands.cmd_surface_add(repo_root=self.t.root, slice_id="P1.S1",
+  401	                                 surfaces=["cms-block-registry"])
+  402	        commands.cmd_surface_add(repo_root=self.t.root, slice_id="P1.S2",
+  403	                                 surfaces=["cms-block-registry"])
+  404	        out = commands.cmd_ready_slices(repo_root=self.t.root, phase_id="P1")
+  405	        self.assertIn("P1.S1", out)
+  406	        self.assertIn("surface_overlap: P1.S2 (cms-block-registry)", out)
+  407	```
+  408	
+  409	- [ ] **Step 2: Run the test to verify it fails**
+  410	
+  411	Run: `python -m pytest tools/tasktool/tests/test_commands.py -k "ready_slices_warns or ready_slices_text_shows" -q`
+  412	Expected: FAIL — `KeyError: 'surface_overlap'`.
+  413	
+  414	- [ ] **Step 3: Enrich `cmd_ready_slices`**
+  415	
+  416	Replace the body of `cmd_ready_slices` (currently ~lines 1998–2019) with:
+  417	
+  418	```python
+  419	def cmd_ready_slices(*, repo_root: Path, phase_id: str, format: str = "text") -> str:
+  420	    p = _load(repo_root)
+  421	    phase = _phase_by_id(p, phase_id)
+  422	    overlap_map = _surface_overlap_map(phase)
+  423	    rows = []
+  424	    for s in phase.slices:
+  425	        if not _is_slice_ready_for_work(phase, s):
+  426	            continue
+  427	        qid = f"{phase.id}.{s.id}"
+  428	        rel = overlap_map.get(qid, {"surface_overlap": [], "coordinated": []})
+  429	        rows.append({
+  430	            "id": qid,
+  431	            "status": s.status.value,
+  432	            "planning_status": s.planning_status.value,
+  433	            "parallel_group": s.parallel_group,
+  434	            "title": s.title,
+  435	            "surface_overlap": rel["surface_overlap"],
+  436	            "coordinated": rel["coordinated"],
+  437	        })
+  438	    if format == "json":
+  439	        import json as _j
+  440	        return _j.dumps(rows, indent=2) + "\n"
+  441	    out_lines: list[str] = []
+  442	    for r in rows:
+  443	        out_lines.append(
+  444	            f"{r['id']}  [{r['status']}/{r['planning_status']}]  "
+  445	            f"{r['parallel_group'] or '-'}  {r['title']}"
+  446	        )
+  447	        out_lines.extend(_format_surface_relations(r))
+  448	    return ("\n".join(out_lines) + "\n") if out_lines else ""
+  449	```
+  450	
+  451	> The original returned `"".join(f"…\n" …)`, i.e. `""` when there were no rows. The `("\n".join(...) + "\n") if out_lines else ""` form preserves both the per-line newline and the empty-output case.
+  452	
+  453	- [ ] **Step 4: Run the tests to verify they pass**
+  454	
+  455	Run: `python -m pytest tools/tasktool/tests/test_commands.py -k "ready_slices" -q`
+  456	Expected: PASS — both the new tests and the original `test_ready_slices_respects_dependencies` / `test_ready_slices_omits_slice_with_cancelled_dep` (which use `assertIn`/`assertNotIn` and are unaffected by the additive fields and reformatted-but-equivalent line).
+  457	
+  458	- [ ] **Step 5: Commit**
+  459	
+  460	```bash
+  461	git add tools/tasktool/commands.py tools/tasktool/tests/test_commands.py
+  462	git commit -m "P7.S3: ready-slices surface overlap warnings"
+  463	```
+  464	
+  465	---
+  466	
+  467	## Task 3 — `cmd_surface_check` + reservation-contention helper + CLI wiring
+  468	
+  469	**Files:**
+  470	- Modify: `tools/tasktool/commands.py` (add `_reservation_contention` and `cmd_surface_check`, after `cmd_surface_list`, ~line 1407)
+  471	- Modify: `tools/tasktool/cli.py` (add `surface check` subparser ~line 196; dispatch ~line 497)
+  472	- Test: `tools/tasktool/tests/test_commands.py`, `tools/tasktool/tests/test_cli_integration.py`
+  473	
+  474	- [ ] **Step 1: Write the failing tests (command level)**
+  475	
+  476	Add to `SurfaceOverlapSchedulingTests`:
+  477	
+  478	```python
+  479	    def test_surface_check_json_shape(self):
+  480	        # S1 <-> S2 unguarded overlap; S3 <-> S4 coordinated.
+  481	        commands.cmd_surface_add(repo_root=self.t.root, slice_id="P1.S1",
+  482	                                 surfaces=["cms-block-registry"])
+  483	        commands.cmd_surface_add(repo_root=self.t.root, slice_id="P1.S2",
+  484	                                 surfaces=["cms-block-registry"])
+  485	        commands.cmd_surface_add(repo_root=self.t.root, slice_id="P1.S3",
+  486	                                 surfaces=["directus-schema"])
+  487	        commands.cmd_surface_add(repo_root=self.t.root, slice_id="P1.S4",
+  488	                                 surfaces=["directus-schema"])
+  489	        commands.cmd_coordinate(repo_root=self.t.root, slice_id="P1.S3", group="cms")
+  490	        commands.cmd_coordinate(repo_root=self.t.root, slice_id="P1.S4", group="cms")
+  491	        report = json.loads(commands.cmd_surface_check(
+  492	            repo_root=self.t.root, phase_id="P1", format="json"))
+  493	        self.assertEqual(report["phase"], "P1")
+  494	        self.assertEqual(
+  495	            report["unguarded_overlaps"],
+  496	            [{"slices": ["P1.S1", "P1.S2"], "surfaces": ["cms-block-registry"]}],
+  497	        )
+  498	        self.assertEqual(
+  499	            report["coordinated_surfaces"],
+  500	            [{"slices": ["P1.S3", "P1.S4"], "surfaces": ["directus-schema"],
+  501	              "group": "cms"}],
+  502	        )
+  503	        self.assertEqual(report["reservation_contention"], [])
+  504	
+  505	    def test_surface_check_reports_forced_reservation_contention(self):
+  506	        # A --force override is the only way two non-cancelled slices hold the
+  507	        # same resource:value; surface check surfaces it for audit.
+  508	        commands.cmd_reserve_add(repo_root=self.t.root, slice_id="P1.S1",
+  509	                                 resource_value="homepage-sort:15", scope="phase")
+  510	        commands.cmd_reserve_add(repo_root=self.t.root, slice_id="P1.S2",
+  511	                                 resource_value="homepage-sort:15", scope="phase",
+  512	                                 force=True, reason="intentional shared slot")
+  513	        report = json.loads(commands.cmd_surface_check(
+  514	            repo_root=self.t.root, phase_id="P1", format="json"))
+  515	        self.assertEqual(
+  516	            report["reservation_contention"],
+  517	            [{"resource": "homepage-sort", "value": "15",
+  518	              "slices": ["P1.S1", "P1.S2"]}],
+  519	        )
+  520	
+  521	    def test_surface_check_same_slice_dual_scope_is_not_contention(self):
+  522	        # One slice may hold the same resource:value at BOTH phase and project
+  523	        # scope (S2 allows it). That is one holder, not contention — the qid is
+  524	        # de-duplicated per (resource, value), so reservation_contention stays empty.
+  525	        commands.cmd_reserve_add(repo_root=self.t.root, slice_id="P1.S1",
+  526	                                 resource_value="homepage-sort:15", scope="phase")
+  527	        commands.cmd_reserve_add(repo_root=self.t.root, slice_id="P1.S1",
+  528	                                 resource_value="homepage-sort:15", scope="project")
+  529	        report = json.loads(commands.cmd_surface_check(
+  530	            repo_root=self.t.root, phase_id="P1", format="json"))
+  531	        self.assertEqual(report["reservation_contention"], [])
+  532	
+  533	    def test_surface_check_text_sections(self):
+  534	        commands.cmd_surface_add(repo_root=self.t.root, slice_id="P1.S1",
+  535	                                 surfaces=["cms-block-registry"])
+  536	        commands.cmd_surface_add(repo_root=self.t.root, slice_id="P1.S2",
+  537	                                 surfaces=["cms-block-registry"])
+  538	        out = commands.cmd_surface_check(repo_root=self.t.root, phase_id="P1")
+  539	        self.assertIn("Unguarded surface overlaps", out)
+  540	        self.assertIn("P1.S1, P1.S2: cms-block-registry", out)
+  541	        self.assertIn("(none)", out)  # coordinated + contention sections empty
+  542	
+  543	    def test_surface_check_unknown_phase_raises(self):
+  544	        with self.assertRaises(commands.CommandError):
+  545	            commands.cmd_surface_check(repo_root=self.t.root, phase_id="P9")
+  546	```
+  547	
+  548	> Confirm the `cmd_reserve_add` keyword signature against `commands.py` before relying on it: it is `cmd_reserve_add(*, repo_root, slice_id, resource_value, scope="phase", note=None, force=False, reason=None)`. If `--force` requires `reason` (it does — S2), pass both.
+  549	
+  550	- [ ] **Step 2: Run the tests to verify they fail**
+  551	
+  552	Run: `python -m pytest tools/tasktool/tests/test_commands.py -k surface_check -q`
+  553	Expected: FAIL — `AttributeError: module 'tasktool.commands' has no attribute 'cmd_surface_check'`.
+  554	
+  555	- [ ] **Step 3: Add `_reservation_contention` and `cmd_surface_check`**
+  556	
+  557	In `tools/tasktool/commands.py`, **after** `cmd_surface_list` (the function ending ~line 1407) and before `cmd_coordinate`, add:
+  558	
+  559	```python
+  560	def _reservation_contention(phase: Phase) -> list:
+  561	    """Resource:value pairs claimed by more than one non-cancelled slice in `phase`.
+  562	
+  563	    Empty under normal operation — `reserve add` refuses duplicates (S2). It is
+  564	    non-empty only when a `--force` override created a deliberate collision, which
+  565	    this audit surfaces. A single slice holding the same resource:value at both
+  566	    phase and project scope is NOT contention, so qids are de-duplicated per pair.
+  567	    """
+  568	    holders: dict = {}
+  569	    for s in phase.slices:
+  570	        if s.status == Status.CANCELLED:
+  571	            continue
+  572	        qid = f"{phase.id}.{s.id}"
+  573	        for r in s.reservations:
+  574	            qids = holders.setdefault((r.resource, r.value), [])
+  575	            if qid not in qids:
+  576	                qids.append(qid)
+  577	    return [
+  578	        {"resource": res, "value": val, "slices": qids}
+  579	        for (res, val), qids in holders.items()
+  580	        if len(qids) > 1
+  581	    ]
+  582	
+  583	
+  584	def cmd_surface_check(*, repo_root: Path, phase_id: str, format: str = "text") -> str:
+  585	    """Read-only audit (spec 4.C): unguarded surface overlaps, coordinated
+  586	    surfaces, and reservation contention within a phase. Warning surface only —
+  587	    never mutates, never refuses."""
+  588	    p = _load(repo_root)
+  589	    phase = _phase_by_id(p, phase_id)
+  590	    actives = [
+  591	        (f"{phase.id}.{s.id}", s) for s in phase.slices if not is_terminal(s.status)
+  592	    ]
+  593	    unguarded: list = []
+  594	    coordinated: list = []
+  595	    for i in range(len(actives)):
+  596	        a_qid, a = actives[i]
+  597	        for j in range(i + 1, len(actives)):
+  598	            b_qid, b = actives[j]
+  599	            kind, shared = _pair_surface_relation(a_qid, a, b_qid, b)
+  600	            if kind == "overlap":
+
+[truncated: 375 additional lines]
+
+## Context Previews
+
+### docs/specs/2026-06-02-P7-integration-surface-parallel-safety-design.md
+
+    1	# P7 — Integration-surface-aware parallel slice safety
+    2	
+    3	**Status:** design (spec)
+    4	**Date:** 2026-06-02
+    5	**Phase ID:** `P7`
+    6	
+    7	## 1. Problem
+    8	
+    9	`tasktool` decides whether slices may run in parallel from **declared feature
+   10	dependencies** (`Slice.depends_on`) and the `parallel_group` tag. Those answer
+   11	"does S4's feature need S3's feature first?" They do **not** answer the question
+   12	that actually governs safe parallel execution: **what shared write surface does
+   13	each slice mutate?**
+   14	
+   15	This gap produced a real failure in the `multistore` project, phase P20. Four
+   16	storefront-marketing slices (`P20.S2`–`P20.S5`) each declared a dependency only
+   17	on the bootstrap slice `P20.S1`, so `tasktool ready-slices`/`schedule` reported
+   18	them as independently executable. They were feature-distinct (slider, promo
+   19	bands, overlays, blog) but **integration-overlapping**: every one of them wrote
+   20	the same centralized CMS-block machinery — block contracts, parser allowlists,
+   21	Directus schema/seed files, renderer dispatch, theme CSS tails, and the homepage
+   22	ordering array.
+   23	
+   24	The observed consequences:
+   25	
+   26	1. **Conflict-bomb merges.** `P20.S4`'s merge conflicted across `page-renderer.tsx`,
+   27	   theme CSS, reviewer-request artifacts, `docs/tasklist.json`, Directus
+   28	   bootstrap/schema/seed files, content-contract schemas/types, and parser tests.
+   29	2. **Stale-base merges.** `P20.S4` was completed in a worktree that branched from
+   30	   `main` *before* `P20.S2`/`P20.S3` and their cleanup landed. The worktree
+   31	   snapshot was older than `main`, so the merge replayed churn that was already
+   32	   integrated.
+   33	3. **A real semantic collision, not just textual churn.** `P20.S3` and `P20.S4`
+   34	   independently chose homepage sort slot `15`. Nothing forced the second slice
+   35	   onto a free slot at planning time; the collision was discovered and resolved
+   36	   at merge.
+   37	4. **Merge-unsafe reviewer artifacts.** Generated reviewer-request files
+   38	   add/add-conflicted despite not being behavioral code.
+   39	
+   40	The root cause is **dependency modeling by feature intent rather than by
+   41	integration surface.** "Slider" and "promo bands" were non-dependent product
+   42	slices, but they both wrote the same registry, schema, seed arrays, ordering
+   43	slots, parser unions, and theme areas. The tool allowed parallel execution
+   44	because the declared dependencies were technically satisfied.
+   45	
+   46	## 2. Goals
+   47	
+   48	1. **Prevention.** Let planning declare, per slice, the **integration surfaces**
+   49	   it writes and the **scarce resources** it allocates. `tasktool` warns when
+   50	   sibling ready/in-progress slices share a surface with no dependency or
+   51	   coordination link, and *refuses* a duplicate scarce-resource allocation.
+   52	2. **Recovery.** When a sibling slice has landed on the base branch since a
+   53	   slice's worktree branched, surface that fact reliably and provide a
+   54	   conservative "integrate current main" path before the post-slice review/merge,
+   55	   plus a documented centralized-registry merge playbook.
+   56	3. **Merge-safe reviewer artifacts.** Generated reviewer-request files must never
+   57	   add/add-conflict between sibling worktrees.
+   58	4. **Plan ↔ tracker coherence.** Declared surfaces/reservations must be reflected
+   59	   in planning artifacts so the plan and the tracker cannot silently diverge.
+   60	
+   61	## 3. Non-goals (explicit)
+   62	
+   63	- **Directus-specific verifier diagnostics and stale-token handling.** These were
+   64	  real `multistore` pain points (a stale `DIRECTUS_ADMIN_TOKEN` shadowing valid
+   65	  admin credentials made a non-code problem look like a schema failure), but they
+   66	  are project-specific. Superstar core is general-purpose and zero-dependency;
+   67	  Directus tooling belongs in the `multistore` project, not here.
+   68	- **Automatic merge-conflict resolution.** The tooling detects and routes; it does
+   69	  not auto-merge semantic conflicts.
+   70	- **Path-glob surface *inference* as the primary model.** Explicit declaration is
+   71	  the source of truth. A path-glob comparison survives only as a deferred,
+   72	  warning-only post-implementation *audit* (§4.G), never as the planning model.
+   73	- **A "touches existing resource" reservation kind.** Reservations model scarce
+   74	  *allocations* (claiming a new value). Modifying a shared existing resource is a
+   75	  *surface/coordination* concern, not an allocation, so maintenance work is not
+   76	  falsely blocked. A future "touches-existing" field is noted, not built here.
+   77	- **`worktree sync` as an unconditional command.** Detection ships first; the
+   78	  mutating sync command is gated behind strict preconditions and is the explicit
+   79	  deferral candidate if scope tightens.
+   80	
+   81	## 4. Design
+   82	
+   83	### 4.A Data model (`model.py`, schema `v2 → v3`; `migrate.py`)
+   84	
+   85	Add to `Slice`:
+   86	
+   87	- `integration_surfaces: list[str]` — conventional surface tags naming shared
+   88	  write areas the slice mutates. Free-form strings, but a recommended vocabulary
+   89	  is documented in `tasklist-discipline` (e.g. `cms-block-registry`,
+   90	  `directus-schema`, `page-renderer-dispatch`, `theme-tail-css`,
+   91	  `content-contract-types`, `reviewer-artifacts`). Default `[]`.
+   92	- `reservations: list[Reservation]` where
+   93	  `Reservation = {resource: str, value: str, scope: "phase" | "project", note: str | None}`.
+   94	  A reservation is a **scarce allocation claim** on a single value
+   95	  (`homepage-sort:15`, `directus-collection:homepage_slider`, `route-slug:/offers`,
+   96	  `block-kind:slider`, `cache-tag:home`). Default `[]`.
+   97	- `coordination_group: str | None` — names a set of slices that *intentionally*
+   98	  share an integration surface and agree to coordinate (serialize reviews,
+   99	  designate an integration owner, run the registry merge playbook). Distinct from
+  100	  `parallel_group`, which asserts independent parallelism. Default `None`.
+  101	- `worktree_base_sha: str | None` — the base-branch commit the slice's worktree
+  102	  was created from, recorded at `tasktool start`. Enables reliable
+  103	  "a sibling landed since this slice branched" detection that survives later
+  104	  rebases/merges, instead of fragile merge-base inference. Default `None`.
+  105	- `landed_base_sha: str | None` — the base-branch commit at which this slice's
+  106	  work landed, recorded at post-merge prune (see §4.D). This is the authoritative
+  107	  "this slice shipped to base" signal that `closed` (a date) cannot provide.
+  108	  Default `None`.
+  109	
+  110	Add to `Project`:
+  111	
+  112	- `reservations_ledger: list[LedgerReservation]` where
+  113	  `LedgerReservation = Reservation + {owner_id: str, owner_phase_id: str, archived_date: str}`.
+  114	  Project-scoped reservations are copied here when their owning phase is archived,
+  115	  so project-scope uniqueness checks — and the refusal message that must name the
+  116	  holder (§4.B) — survive removal of shipped phases from the active tracker. The
+  117	  extra fields preserve the owning slice/phase and archive date for the refusal
+  118	  message and audit trail. Default `[]`.
+  119	
+  120	Schema bump to `v3`. Migration is additive: missing fields default to empty/`None`
+  121	and `reservations_ledger` to `[]`. Round-trip and v1/v2 compatibility tests
+  122	extended.
+  123	
+  124	**Serialization rule (F5).** New fields follow the existing omit-when-default
+  125	convention in `serialize.py`: an empty `integration_surfaces`/`reservations`,
+  126	a `None` `coordination_group`/`worktree_base_sha`/`landed_base_sha`, and an empty
+  127	`Project.reservations_ledger` are **omitted** on serialization, exactly as
+  128	default-valued worktree/workflow keys are today. Historical rows therefore gain no
+  129	churn on round-trip; a row's bytes change only once it actually declares a surface,
+  130	reservation, coordination group, or base SHA.
+  131	
+  132	### 4.B Declaration CLI (`cli.py` + `commands.py`)
+  133	
+  134	```sh
+  135	tasktool surface add <slice-id> <surface> [<surface>...]
+  136	tasktool surface remove <slice-id> <surface>
+  137	tasktool surface list [<phase-id>]
+  138	
+  139	tasktool reserve add <slice-id> <resource>:<value> [--scope phase|project] [--note "..."] [--force --reason "..."]
+  140	tasktool reserve remove <slice-id> <resource>:<value>
+  141	tasktool reserve list [<phase-id>]
+  142	
+  143	tasktool coordinate <slice-id> --group <name>     # set coordination_group
+  144	tasktool coordinate <slice-id> --clear
+  145	```
+  146	
+  147	- `surface`/`coordinate` are declaration-only; they never refuse.
+  148	- **`reserve add` refuses** when the same `resource:value` is already held by
+  149	  another **non-cancelled** slice within the relevant scope:
+  150	  - `scope: phase` (default) — checks other non-cancelled slices in the same
+  151	    phase. Done slices count: a done slice shipped that value to `main`, so the
+  152	    slot is taken.
+  153	  - `scope: project` — checks all non-cancelled slices across **active** phases
+  154	    *and* `Project.reservations_ledger`.
+  155	  The refusal names the holding slice (from the slice row, or from the ledger's
+  156	  `owner_id`/`owner_phase_id`/`archived_date` for archived holders) and the value.
+  157	- **Override (F3).** `--force` is the only way to add a colliding reservation and
+  158	  **requires** `--reason "<text>"`. It mutates **only the reserving slice**: it
+  159	  appends the reservation and records a timestamped note
+  160	  `Reservation-override <ISO-ts>: <resource>:<value> over <holder-id> — <reason>`.
+  161	  The holder slice is **not** mutated. `--force` without `--reason` is refused.
+  162	  Without `--force`, a collision is a hard refusal (exit non-zero). This refusal
+  163	  is the gate that would have forced `P20.S4` off slot `15` at planning time.
+  164	- **Cancelled work never enters the ledger.** On `tasktool archive-phase`,
+  165	  project-scoped reservations from the phase's **non-cancelled (`done`)** slices
+  166	  are appended to `Project.reservations_ledger` as `LedgerReservation`s, carrying
+  167	  `owner_id`/`owner_phase_id`/`archived_date`. Cancelled slices ship nothing, so
+  168	  their reservations — including `--force` overrides — are released and never
+  169	  laddered.
+  170	- **Ledger dedupe preserves every holder (F7).** Dedup is keyed on
+  171	  `resource:value:scope:owner_id`, **not** `resource:value:scope`. Re-archiving the
+  172	  same phase is idempotent (same owner ⇒ same key), but two distinct `done` slices
+  173	  that intentionally `--force`-shared a project-scoped value both survive in the
+  174	  ledger, so the owner-metadata audit trail is never silently collapsed to one
+  175	  holder. A project-scope `reserve add` collision check that matches any ledger
+  176	  entry on `resource:value:scope` (regardless of owner) still refuses — multiple
+  177	  recorded holders strengthen, not weaken, the refusal message.
+  178	
+  179	### 4.C Scheduling overlap detection (`commands.py`)
+  180	
+  181	Augment the existing scheduling reporters; **surface overlap is a warning, not a
+  182	block** (surfaces are coarse — two slices may touch the same registry in
+  183	non-conflicting ways), while **reservation contention is already prevented at
+  184	declaration time**.
+  185	
+  186	- `cmd_ready_slices` and `cmd_schedule`: for each ready/in-progress slice, compute
+  187	  the set of other non-terminal slices that (a) share ≥1 integration surface,
+  188	  (b) have **no** `depends_on` link in either direction, and (c) are **not** in
+  189	  the same `coordination_group`. Emit a `surface_overlap` field/warning listing
+  190	  the sibling(s) and shared surface(s). Slices in a shared `coordination_group`
+  191	  are reported as `coordinated`, not warned.
+  192	- New `tasktool surface check <phase-id>` — a dedicated read-only report:
+  193	  - every unguarded surface overlap (siblings sharing a surface without a dep or
+  194	    coordination link),
+  195	  - every coordinated surface (shared surface within a `coordination_group`),
+  196	  - reservation contention within the phase (should be empty if `reserve add`
+  197	    refusal held; surfaced for audit and for `--force` overrides).
+  198	  Text and `--format json`. Intended to be run during ratification and before
+  199	  parallel dispatch.
+  200	- `cmd_ratify --parallel-group <g>`: when adding a slice whose surfaces overlap
+
+[truncated: 211 additional lines]
+### docs/tasklist.json
+
+    1	{
+    2	  "archived_cross_cutting": [
+    3	    {
+    4	      "archived_date": "2026-05-21",
+    5	      "archived_path": "docs/archived-tasks/X15-archive-closed-cross-cutting-items.md",
+    6	      "id": "X15",
+    7	      "title": "Archive closed cross-cutting items"
+    8	    },
+    9	    {
+   10	      "archived_date": "2026-05-21",
+   11	      "archived_path": "docs/archived-tasks/X16-stamp-installed-shims-and-enforce-versio.md",
+   12	      "id": "X16",
+   13	      "title": "Stamp installed shims and enforce version drift refusal"
+   14	    },
+   15	    {
+   16	      "archived_date": "2026-05-23",
+   17	      "archived_path": "docs/archived-tasks/X18-harden-external-reviewer-caller-detectio.md",
+   18	      "id": "X18",
+   19	      "title": "Harden external reviewer caller detection for Codex"
+   20	    },
+   21	    {
+   22	      "archived_date": "2026-05-23",
+   23	      "archived_path": "docs/archived-tasks/X20-install-codex-todo-snapshot-hook.md",
+   24	      "id": "X20",
+   25	      "title": "Install Codex todo snapshot hook"
+   26	    },
+   27	    {
+   28	      "archived_date": "2026-05-23",
+   29	      "archived_path": "docs/archived-tasks/X19-install-todowrite-snapshot-hook-via-depl.md",
+   30	      "id": "X19",
+   31	      "title": "Install TodoWrite snapshot hook via deploy.sh"
+   32	    },
+   33	    {
+   34	      "archived_date": "2026-05-23",
+   35	      "archived_path": "docs/archived-tasks/X21-fix-codex-todo-snapshot-async-hook-regis.md",
+   36	      "id": "X21",
+   37	      "title": "Fix Codex todo snapshot async hook registration"
+   38	    },
+   39	    {
+   40	      "archived_date": "2026-05-24",
+   41	      "archived_path": "docs/archived-tasks/X22-add-cancelled-terminal-status-to-tasktoo.md",
+   42	      "id": "X22",
+   43	      "title": "Add cancelled terminal status to tasktool"
+   44	    },
+   45	    {
+   46	      "archived_date": "2026-05-24",
+   47	      "archived_path": "docs/archived-tasks/X23-document-cancelled-lifecycle-and-admin-c.md",
+   48	      "id": "X23",
+   49	      "title": "Document cancelled lifecycle and admin closeout guidance"
+   50	    },
+   51	    {
+   52	      "archived_date": "2026-05-26",
+   53	      "archived_path": "docs/archived-tasks/X24-use-global-tasktool-shim-in-superstar-gu.md",
+   54	      "id": "X24",
+   55	      "title": "Use global tasktool shim in Superstar guidance"
+   56	    },
+   57	    {
+   58	      "archived_date": "2026-05-26",
+   59	      "archived_path": "docs/archived-tasks/X25-duck-media-audio-during-tasktool-tts-and.md",
+   60	      "id": "X25",
+   61	      "title": "Duck media audio during tasktool TTS and verify Codex plugin payload"
+   62	    },
+   63	    {
+   64	      "archived_date": "2026-05-26",
+   65	      "archived_path": "docs/archived-tasks/X26-fix-codex-marketplace-payload-refresh-fo.md",
+   66	      "id": "X26",
+   67	      "title": "Fix Codex marketplace payload refresh for Superstar"
+   68	    },
+   69	    {
+   70	      "archived_date": "2026-05-26",
+   71	      "archived_path": "docs/archived-tasks/X1-default-external-review-prompt-transport.md",
+   72	      "id": "X1",
+   73	      "title": "Default external-review prompt transport to stdin"
+   74	    },
+   75	    {
+   76	      "archived_date": "2026-05-26",
+   77	      "archived_path": "docs/archived-tasks/X2-add-repo-local-tasktool-launcher.md",
+   78	      "id": "X2",
+   79	      "title": "Add repo-local tasktool launcher"
+   80	    },
+   81	    {
+   82	      "archived_date": "2026-05-26",
+   83	      "archived_path": "docs/archived-tasks/X3-spot-fix-parse-bold-external-review-verd.md",
+   84	      "id": "X3",
+   85	      "title": "Spot fix: parse bold external-review verdict headings"
+   86	    },
+   87	    {
+   88	      "archived_date": "2026-05-26",
+   89	      "archived_path": "docs/archived-tasks/X4-spot-fix-broaden-legacy-tasklist-importe.md",
+   90	      "id": "X4",
+   91	      "title": "Spot fix: broaden legacy tasklist importer compatibility"
+   92	    },
+   93	    {
+   94	      "archived_date": "2026-05-26",
+   95	      "archived_path": "docs/archived-tasks/X5-add-finished-agent-notification-hook.md",
+   96	      "id": "X5",
+   97	      "title": "Add finished-agent notification hook"
+   98	    },
+   99	    {
+  100	      "archived_date": "2026-05-26",
+  101	      "archived_path": "docs/archived-tasks/X6-fix-codex-finished-agent-hook-compatibil.md",
+  102	      "id": "X6",
+  103	      "title": "Fix Codex finished-agent hook compatibility"
+  104	    },
+  105	    {
+  106	      "archived_date": "2026-05-26",
+  107	      "archived_path": "docs/archived-tasks/X7-fix-superstar-codex-plugin-payload-versi.md",
+  108	      "id": "X7",
+  109	      "title": "Fix Superstar Codex plugin payload version drift"
+  110	    },
+  111	    {
+  112	      "archived_date": "2026-05-26",
+  113	      "archived_path": "docs/archived-tasks/X8-move-semantic-notifications-from-agent-h.md",
+  114	      "id": "X8",
+  115	      "title": "Move semantic notifications from agent hooks to tasktool status changes"
+  116	    },
+  117	    {
+  118	      "archived_date": "2026-05-26",
+  119	      "archived_path": "docs/archived-tasks/X9-coalesce-bursty-tasktool-audio-notificat.md",
+  120	      "id": "X9",
+  121	      "title": "Coalesce bursty tasktool audio notifications"
+  122	    },
+  123	    {
+  124	      "archived_date": "2026-05-26",
+  125	      "archived_path": "docs/archived-tasks/X10-harden-external-review-verdict-parser-an.md",
+  126	      "id": "X10",
+  127	      "title": "Harden external-review verdict parser and prompt against Claude formatting variants"
+  128	    },
+  129	    {
+  130	      "archived_date": "2026-05-26",
+  131	      "archived_path": "docs/archived-tasks/X11-make-external-review-bridge-global.md",
+  132	      "id": "X11",
+  133	      "title": "Make external-review bridge global"
+  134	    },
+  135	    {
+  136	      "archived_date": "2026-05-26",
+  137	      "archived_path": "docs/archived-tasks/X12-tasktool-require-authoritative-checkout-.md",
+  138	      "id": "X12",
+  139	      "title": "tasktool: require authoritative-checkout routing for mutations"
+  140	    },
+  141	    {
+  142	      "archived_date": "2026-05-26",
+  143	      "archived_path": "docs/archived-tasks/X13-fix-tasktool-close-repeated-refs-parsing.md",
+  144	      "id": "X13",
+  145	      "title": "Fix tasktool close repeated refs parsing"
+  146	    },
+  147	    {
+  148	      "archived_date": "2026-05-26",
+  149	      "archived_path": "docs/archived-tasks/X14-stabilize-local-claude-codex-plugin-curr.md",
+  150	      "id": "X14",
+  151	      "title": "Stabilize local Claude/Codex plugin current entrypoints"
+  152	    },
+  153	    {
+  154	      "archived_date": "2026-05-26",
+  155	      "archived_path": "docs/archived-tasks/X17-make-spec-and-plan-artifact-handling-tra.md",
+  156	      "id": "X17",
+  157	      "title": "Make spec and plan artifact handling transactional"
+  158	    },
+  159	    {
+  160	      "archived_date": "2026-05-26",
+  161	      "archived_path": "docs/archived-tasks/X27-add-tasktool-tts-for-workflow-artifacts-.md",
+  162	      "id": "X27",
+  163	      "title": "Add tasktool TTS for workflow artifacts and step changes"
+  164	    },
+  165	    {
+  166	      "archived_date": "2026-05-26",
+  167	      "archived_path": "docs/archived-tasks/X28-prefer-explicit-notification-ding-sound-.md",
+  168	      "id": "X28",
+  169	      "title": "Prefer explicit notification ding sound file"
+  170	    }
+  171	  ],
+  172	  "archived_phases": [
+  173	    {
+  174	      "archived_date": "2026-05-18",
+  175	      "archived_path": "docs/archived-tasks/P2-tasktool-json-backed-task-management-cli.md",
+  176	      "id": "P2",
+  177	      "title": "tasktool: JSON-backed task management CLI"
+  178	    },
+  179	    {
+  180	      "archived_date": "2026-05-19",
+  181	      "archived_path": "docs/archived-tasks/P4-tasktool-coordination-and-lifecycle-auth.md",
+  182	      "id": "P4",
+  183	      "title": "Tasktool coordination and lifecycle authority"
+  184	    },
+  185	    {
+  186	      "archived_date": "2026-05-19",
+  187	      "archived_path": "docs/archived-tasks/P3-phase-planning-workflow.md",
+  188	      "id": "P3",
+  189	      "title": "Phase planning workflow"
+  190	    },
+  191	    {
+  192	      "archived_date": "2026-05-20",
+  193	      "archived_path": "docs/archived-tasks/P1-external-reviewer-work-historical.md",
+  194	      "id": "P1",
+  195	      "title": "External-reviewer work (historical)"
+  196	    },
+  197	    {
+  198	      "archived_date": "2026-05-21",
+  199	      "archived_path": "docs/archived-tasks/P5-tasktool-owned-worktree-lifecycle-using-.md",
+  200	      "id": "P5",
+
+[truncated: 252 additional lines]
+
+<!-- superstar-prompt:end -->
