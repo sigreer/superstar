@@ -1331,10 +1331,47 @@ def cmd_deps(
             item.depends_on.remove(dep)
         _save(write_root, p)
 
+def _ratify_parallel_group_warning(p: Project, qid: str, item: Slice) -> str | None:
+    """If `item` now sits in a parallel_group alongside a sibling it shares an
+    integration surface with — and they are not reconciled by a depends_on link or
+    a shared coordination_group — return a steer warning (spec 4.C). parallel_group
+    asserts independence; a shared write surface contradicts that. Warning only;
+    ratify still succeeds. Returns None when there is nothing to warn about."""
+    group = item.parallel_group
+    if not group:
+        return None
+    phase_id = qid.split(".")[0]
+    phase = _phase_by_id(p, phase_id)
+    conflicts: list = []
+    for s in phase.slices:
+        s_qid = f"{phase_id}.{s.id}"
+        if s_qid == qid or is_terminal(s.status):
+            continue
+        if s.parallel_group != group:
+            continue
+        kind, shared = _pair_surface_relation(qid, item, s_qid, s)
+        if kind == "overlap":
+            conflicts.append((s_qid, shared))
+    if not conflicts:
+        return None
+    lines = [
+        f"tasktool: ratify warning: {qid} shares an integration surface with "
+        f"sibling(s) already in parallel_group {group!r}, with no depends_on or "
+        f"coordination_group link:"
+    ]
+    for s_qid, shared in conflicts:
+        lines.append(f"  - {s_qid}: {', '.join(shared)}")
+    lines.append(
+        "Either add a depends_on (serialize) or a coordination_group (coordinate); "
+        "parallel_group asserts independence."
+    )
+    return "\n".join(lines) + "\n"
+
+
 def cmd_ratify(
     *, repo_root: Path, slice_id: str,
     status: str = "ratified", parallel_group: str | None = None,
-) -> None:
+) -> str | None:
     with _write_context(repo_root) as write_root:
         p = _load(write_root)
         qid, _container, item = _find_item(p, slice_id)
@@ -1344,7 +1381,9 @@ def cmd_ratify(
         item.planning_status = PlanningStatus(status)
         if parallel_group is not None:
             item.parallel_group = parallel_group or None
+        warning = _ratify_parallel_group_warning(p, qid, item)
         _save(write_root, p)
+        return warning
 
 
 # ───── surface / reserve / coordinate (P7.S2) ─────

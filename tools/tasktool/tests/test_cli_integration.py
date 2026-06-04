@@ -662,3 +662,22 @@ class SurfaceCheckCliTests(unittest.TestCase):
             )
         finally:
             t.cleanup()
+
+
+class RatifyWarningCliTests(unittest.TestCase):
+    def test_ratify_parallel_group_warning_to_stderr(self):
+        t = _CliTmp()
+        try:
+            run_cli("init", "--project", "demo", cwd=t.root)
+            run_cli("create", "phase", "--title", "P", cwd=t.root)
+            run_cli("create", "slice", "P1", "--title", "a", cwd=t.root)
+            run_cli("create", "slice", "P1", "--title", "b", cwd=t.root)
+            run_cli("surface", "add", "P1.S1", "cms-block-registry", cwd=t.root)
+            run_cli("surface", "add", "P1.S2", "cms-block-registry", cwd=t.root)
+            run_cli("ratify", "P1.S1", "--parallel-group", "core", cwd=t.root)
+            r = run_cli("ratify", "P1.S2", "--parallel-group", "core", cwd=t.root)
+            self.assertEqual(r.returncode, 0, r.stderr)   # warning does NOT refuse
+            self.assertIn("ratify warning", r.stderr)
+            self.assertIn("cms-block-registry", r.stderr)
+        finally:
+            t.cleanup()

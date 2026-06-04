@@ -2443,3 +2443,45 @@ class SurfaceOverlapSchedulingTests(unittest.TestCase):
     def test_surface_check_unknown_phase_raises(self):
         with self.assertRaises(commands.CommandError):
             commands.cmd_surface_check(repo_root=self.t.root, phase_id="P9")
+
+    def test_ratify_parallel_group_warns_on_surface_overlap(self):
+        # S1 already in group 'core' with a shared surface; ratifying S2 into the
+        # same group with the same surface and no dep/coordination link warns.
+        commands.cmd_surface_add(repo_root=self.t.root, slice_id="P1.S1",
+                                 surfaces=["cms-block-registry"])
+        commands.cmd_surface_add(repo_root=self.t.root, slice_id="P1.S2",
+                                 surfaces=["cms-block-registry"])
+        commands.cmd_ratify(repo_root=self.t.root, slice_id="P1.S1",
+                            parallel_group="core")
+        warning = commands.cmd_ratify(repo_root=self.t.root, slice_id="P1.S2",
+                                      parallel_group="core")
+        self.assertIsNotNone(warning)
+        self.assertIn("P1.S2", warning)
+        self.assertIn("P1.S1", warning)
+        self.assertIn("cms-block-registry", warning)
+        self.assertIn("core", warning)
+        # The mutation still applied despite the warning.
+        p = load_project(self.t.root / "docs/tasklist.json")
+        s2 = p.phases[0].slices[1]
+        self.assertEqual(s2.parallel_group, "core")
+        self.assertEqual(s2.planning_status.value, "ratified")
+
+    def test_ratify_no_warning_when_dep_link_present(self):
+        commands.cmd_surface_add(repo_root=self.t.root, slice_id="P1.S1",
+                                 surfaces=["cms-block-registry"])
+        commands.cmd_surface_add(repo_root=self.t.root, slice_id="P1.S2",
+                                 surfaces=["cms-block-registry"])
+        commands.cmd_deps(repo_root=self.t.root, slice_id="P1.S2", add="P1.S1")
+        commands.cmd_ratify(repo_root=self.t.root, slice_id="P1.S1",
+                            parallel_group="core")
+        warning = commands.cmd_ratify(repo_root=self.t.root, slice_id="P1.S2",
+                                      parallel_group="core")
+        self.assertIsNone(warning)
+
+    def test_ratify_no_warning_without_parallel_group(self):
+        commands.cmd_surface_add(repo_root=self.t.root, slice_id="P1.S1",
+                                 surfaces=["cms-block-registry"])
+        commands.cmd_surface_add(repo_root=self.t.root, slice_id="P1.S2",
+                                 surfaces=["cms-block-registry"])
+        warning = commands.cmd_ratify(repo_root=self.t.root, slice_id="P1.S2")
+        self.assertIsNone(warning)

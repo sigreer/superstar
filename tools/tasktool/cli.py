@@ -481,10 +481,12 @@ def main(argv: list[str]) -> int:
         elif args.cmd == "deps":
             commands.cmd_deps(repo_root=root, slice_id=args.slice_id, add=args.add, remove=args.remove)
         elif args.cmd == "ratify":
-            commands.cmd_ratify(
+            warning = commands.cmd_ratify(
                 repo_root=root, slice_id=args.slice_id,
                 status=args.status, parallel_group=args.parallel_group,
             )
+            if warning:
+                sys.stderr.write(warning)
         elif args.cmd == "surface":
             if args.surface_cmd == "add":
                 commands.cmd_surface_add(
