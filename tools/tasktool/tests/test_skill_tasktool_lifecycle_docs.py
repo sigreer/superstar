@@ -218,3 +218,14 @@ def test_tasklist_discipline_documents_surface_reserve_coordinate() -> None:
     # the three new red-flag claims
     assert "feature independence" in text
     assert "duplicate" in text.lower()
+
+
+def test_phase_planning_and_writing_plans_document_surface_tables() -> None:
+    for skill in ["phase-planning", "writing-plans"]:
+        text = skill_text(skill)
+        assert "surface/reservation table" in text, (
+            f"{skill} must require a surface/reservation table"
+        )
+        assert "tasktool surface check <phase-id>" in text, (
+            f"{skill} must tell the author to run surface check before ratifying"
+        )
