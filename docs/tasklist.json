@@ -315,14 +315,19 @@
           "id": "S3",
           "notes": "Spec §4.C. Surfaces: commands. ready-slices/schedule surface_overlap warnings; surface check <phase>; ratify --parallel-group warning; coordination_group suppression. Warning-only (no block).",
           "parallel_group": null,
-          "plan_path": null,
+          "plan_path": "docs/plans/2026-06-04-P7-S3-scheduling-overlap-detection.md",
           "planning_status": "proposed",
-          "refs": [],
-          "reviewer_chain": null,
+          "refs": [
+            "docs/plans/2026-06-04-P7-S3-scheduling-overlap-detection.md",
+            "docs/handoffs/2026-06-04-P7-S3-scheduling-overlap-detection-prompt.md",
+            "docs/reviewer/p7-s3-scheduling-overlap-detection-plan"
+          ],
+          "reviewer_chain": "docs/reviewer/p7-s3-scheduling-overlap-detection-plan",
           "started": null,
           "status": "ready",
           "tasks": [],
-          "title": "Scheduling overlap detection: ready-slices/schedule warnings, surface check, ratify warning, coordination suppression"
+          "title": "Scheduling overlap detection: ready-slices/schedule warnings, surface check, ratify warning, coordination suppression",
+          "workflow_step": "implement"
         },
         {
           "blocked_on": null,
