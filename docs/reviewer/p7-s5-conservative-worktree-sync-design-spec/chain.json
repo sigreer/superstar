@@ -1,0 +1,151 @@
+{
+  "schema_version": 1,
+  "chain": "p7-s5-conservative-worktree-sync-design-spec",
+  "kind": "spec",
+  "target": "docs/specs/2026-06-04-P7-S5-conservative-worktree-sync-design.md",
+  "work_id": "P7.S5",
+  "legacy_migrated": false,
+  "rounds": [
+    {
+      "round": 1,
+      "reviewers": [
+        {
+          "role": "primary",
+          "sweep_group": null,
+          "parent_round": 1,
+          "request": "r1-2026-06-04T2351-request.md",
+          "response": "r1-2026-06-04T2351-response.md",
+          "verdict": "ready with small edits",
+          "verdict_valid": true,
+          "returncode": 0,
+          "status": "ok",
+          "provider": "claude",
+          "caller_provider": "codex",
+          "model": null,
+          "sandbox": {
+            "repo_root": "/home/simon/Dev/sigreer/skills/superstar",
+            "scratch_dir": "/tmp/superstar-reviewer-p7-s5-conservative-worktree-sync-design-spec-r1-primary-5qx9vr36",
+            "response_dir": "docs/reviewer/p7-s5-conservative-worktree-sync-design-spec/.reviewer-output/r1-primary",
+            "mode": "plan-read-only"
+          },
+          "started_at": "2026-06-04T22:51:46.183Z",
+          "finished_at": "2026-06-04T22:55:47.454Z",
+          "duration_ms": 241271,
+          "estimated_usage": {
+            "formula": "ceil(chars / 4)",
+            "prompt_chars": 31939,
+            "response_chars": 10148,
+            "estimated_input_tokens": 7985,
+            "estimated_output_tokens": 2537,
+            "estimated_total_tokens": 10522
+          },
+          "exact_usage": {
+            "input_tokens": 9508,
+            "cache_creation_input_tokens": 77111,
+            "cache_read_input_tokens": 301016,
+            "output_tokens": 17342,
+            "server_tool_use": {
+              "web_search_requests": 0,
+              "web_fetch_requests": 0
+            },
+            "service_tier": "standard",
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 77111,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "inference_geo": "not_available",
+            "iterations": [
+              {
+                "input_tokens": 2,
+                "output_tokens": 8820,
+                "cache_read_input_tokens": 75513,
+                "cache_creation_input_tokens": 1598,
+                "cache_creation": {
+                  "ephemeral_5m_input_tokens": 0,
+                  "ephemeral_1h_input_tokens": 1598
+                },
+                "type": "message"
+              }
+            ],
+            "speed": "standard",
+            "total_tokens": 404977,
+            "provider": "claude"
+          },
+          "usage_capture_status": "exact",
+          "usage_capture_error": null
+        }
+      ],
+      "status": "ok",
+      "returncode": 0,
+      "started_at": "2026-06-04T22:51:46.183Z",
+      "finished_at": "2026-06-04T22:55:47.454Z",
+      "duration_ms": 241271,
+      "provider": "claude",
+      "caller_provider": "codex",
+      "model": null,
+      "estimated_usage": {
+        "formula": "ceil(chars / 4)",
+        "prompt_chars": 31939,
+        "response_chars": 10148,
+        "estimated_input_tokens": 7985,
+        "estimated_output_tokens": 2537,
+        "estimated_total_tokens": 10522
+      },
+      "exact_usage": {
+        "input_tokens": 9508,
+        "cache_creation_input_tokens": 77111,
+        "cache_read_input_tokens": 301016,
+        "output_tokens": 17342,
+        "server_tool_use": {
+          "web_search_requests": 0,
+          "web_fetch_requests": 0
+        },
+        "service_tier": "standard",
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 77111,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "inference_geo": "not_available",
+        "iterations": [
+          {
+            "input_tokens": 2,
+            "output_tokens": 8820,
+            "cache_read_input_tokens": 75513,
+            "cache_creation_input_tokens": 1598,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 1598
+            },
+            "type": "message"
+          }
+        ],
+        "speed": "standard",
+        "total_tokens": 404977,
+        "provider": "claude"
+      },
+      "usage_capture_status": "exact",
+      "usage_capture_error": null,
+      "merged_verdict": "ready with small edits",
+      "merged_findings": null,
+      "request": "r1-2026-06-04T2351-request.md",
+      "response": "r1-2026-06-04T2351-response.md",
+      "resolution": null,
+      "resolution_parse_status": null,
+      "resolution_waiver": false,
+      "head_sha_at_request": "9c1737312fd2f737a84efbd970dae6c5ae1e5309",
+      "head_sha_after_round": "9c1737312fd2f737a84efbd970dae6c5ae1e5309",
+      "worktree_dirty_at_request": true,
+      "verdict": "ready with small edits",
+      "verdict_valid": true,
+      "findings_count": 8,
+      "blocking_findings_count": 0,
+      "base_ref": null,
+      "base_ref_source": null,
+      "diff_included": false
+    }
+  ],
+  "sweep_checkpoints": {
+    "first-round": "pending",
+    "final-ready": "pending"
+  }
+}

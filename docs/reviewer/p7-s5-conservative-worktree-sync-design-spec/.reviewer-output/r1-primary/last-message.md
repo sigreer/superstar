@@ -1,0 +1,50 @@
+I've read the target spec, the parent P7 spec, and verified the spec's specific codebase claims against `worktree.py`, `commands.py`, `cli.py`, `config.py`, `model.py`, and `serialize.py`. The grounding is strong — every named helper, field, and reuse target exists as described. Below is the review.
+
+---
+
+Independent reviewer report — `docs/specs/2026-06-04-P7-S5-conservative-worktree-sync-design.md`
+
+Summary: This is a well-scoped, well-grounded spec. Every referenced helper exists and behaves as the spec claims: `worktree.working_tree_dirty` (worktree.py:186) does cover tracked+untracked+branch-attributed stash; `worktree.tasklist_has_unsafe_dirty_state` (worktree.py:110) does refuse unstaged-only and permit staged-only; `current_branch_head_sha` (worktree.py:34) resolves an arbitrary branch ref; `_health_for` (commands.py:2674) returns `live` for a consistent linked worktree; the `worktree_base_sha`/`landed_base_sha`/`worktree_in_place` fields exist (model.py:113,120,121); `cmd_worktree_status_integration` (commands.py:2834) is the S4 reader the spec relies on for post-sync verification; and the CLI already has the `add_mutually_exclusive_group(required=True)` idiom (cli.py:176,220) plus a `worktree` subparser (cli.py:122). No `sync` command exists yet, so there's no collision. The findings below are refinements, not structural problems.
+
+1. Findings
+
+F1 — Severity: important. Internal inconsistency between Goal 6 and §6 success semantics under concurrent base advancement. Goal 6 says advance `worktree_base_sha` to "the base-branch HEAD that was **integrated**." §6 says run `git merge <base_branch>` / `git rebase <base_branch>` (the *ref*) but then set `worktree_base_sha = base_head_before` (a SHA captured *before* the git op). If `main` advances between capture and the git op (an external `git commit` to base is not covered by `tasktool_lock`), the merge/rebase integrates the *new* tip while the row records the *old* tip. Later `cmd_worktree_status_integration` computes `rev_list_count(base_sha, base_head)` with the current tip (commands.py:2853) and reports the slice as still N commits behind — a false-positive staleness that directly contradicts §4.E's stated intent ("subsequent `status --integration` runs do not repeatedly re-report already-integrated base commits"). Fix: integrate the captured SHA, i.e. `git merge <base_head_before>` / `git rebase <base_head_before>`, so "integrated SHA" and "recorded SHA" are identical by construction. The window is narrow but the fix is trivial and removes the ambiguity Goal 6 vs §6 currently carries.
+
+F2 — Severity: important. Refusal rule 6 (`working_tree_dirty`) contradicts the rule-8 "staged-only tasklist is allowed" carve-out when the target worktree *is* the authoritative checkout (the in-place / single-checkout case, test #9.4). `working_tree_dirty` (worktree.py:199-200) flags *any* non-empty `git status --porcelain` line, including a staged `docs/tasklist.json` — exactly the state §5's closing paragraph and rule 8 say sync must accept. For a *linked* worktree this never bites (the staged tracker mutation lives in the separate authoritative checkout, not in the slice worktree). But for an in-place slice in a single-mutation-mode repo, target == `write_root`, so rule 6 will refuse the routine staged-tracker state that tasktool itself produces, and Testing-strategy item 4 ("in-place slice syncs in the repo root and advances `worktree_base_sha`") will fail the moment the setup stages a tracker mutation first. Reconcile: when the target worktree coincides with the authoritative checkout, the dirty check must exclude staged `docs/tasklist.json` (or compose `working_tree_dirty` minus the staged-tasklist allowance), and §5 should say so explicitly.
+
+F3 — Severity: important. `git merge <base_branch>` can block on an editor in non-interactive tasktool. A non-fast-forward merge opens the commit-message editor by default; under tasktool there is no TTY, so the command would hang (or fail unpredictably depending on `core.editor`). §6 says "Run exactly one git operation: `git merge <base_branch>`" with no `--no-edit`. Specify `git merge --no-edit` (and ideally a deterministic message), and confirm the subprocess runs with a non-interactive editor environment. Rebase is fine unless it conflicts (which routes to the §7 failure path). Relatedly, do **not** hold `tasktool_lock` across the git merge/rebase — a slow/large merge would block all other tasktool operations; acquire the lock only for the tasklist load-mutate-save after the git op succeeds.
+
+F4 — Severity: minor. Rule 7 re-specifies raw `git ls-files -u`, but `worktree.has_unmerged_paths(root)` (worktree.py:105) already implements exactly that, and §8 instructs reuse of existing helpers for "unresolved merge detection." Name `has_unmerged_paths` in rule 7 so the implementer doesn't add a redundant helper.
+
+F5 — Severity: minor. In-place sync semantics are underspecified. §5 rule 2 admits an in-place slice, and test #4 exercises it, but the spec never states (a) which branch the in-place sync integrates base *into*, (b) that when the in-place checkout is itself on the base branch the operation is a no-op `git merge main` into `main` (still exit-zero, still advances the SHA — harmless but worth stating so the test author isn't surprised), and (c) how the authoritative tasklist write routes when the in-place checkout is the only checkout. Pin these down; they also determine how test #4 must be constructed.
+
+F6 — Severity: minor. §7 omits the manual-recovery two-step. After git returns non-zero, a user who resolves the conflict and commits the merge *outside* tasktool leaves `worktree_base_sha` stale (it only advances on a zero-exit `tasktool worktree sync`). The remedy — rerun `tasktool worktree sync`, which now finds "Already up to date" and advances the SHA — is correct but non-obvious. State it in §7 so users aren't left with a permanently stale base SHA.
+
+F7 — Severity: nit. `git rebase` rewrites the slice branch's commit SHAs. This can invalidate references held by an in-flight review/PR. The §6 follow-up ("rerun verification") partially covers it; a one-line note that `--rebase` rewrites history would set expectations.
+
+F8 — Severity: nit. §6's "save the tasklist" doesn't state that the save uses the standard locked authoritative write path (the routing §4 alludes to). Make explicit that the row advance goes through the normal locked authoritative write context, sequenced *after* the git op — this pairs with F3's "don't hold the lock across git."
+
+2. Open questions / assumptions
+
+- Assumption: for a linked worktree, `git merge`/`git rebase` runs in the resolved `(write_root / item.worktree_path)` directory (the `_health_for` pattern, commands.py:2684), while the tasklist mutation runs in `write_root`. The spec says "in the target worktree" and §8 lists "target worktree resolution," so this is implied but never spelled out — worth one explicit sentence.
+- Question (F2-adjacent): in routed multi-worktree projects, is `worktree sync` on an in-place slice even meaningful, or should the spec note it as a degenerate/no-op case? It affects whether test #4 should target single-checkout mode specifically.
+- Assumption: `base_branch` (e.g. `main`) is a shared ref across all linked worktrees, so capturing its HEAD in `write_root` and merging it in the target worktree reference the same commit. This holds for native git worktrees; no concern, just noting the dependency.
+
+3. Suggested document edits
+
+- §6: change `git merge <base_branch>` → `git merge --no-edit <base_head_before>` and `git rebase <base_branch>` → `git rebase <base_head_before>`; add a sentence that the integrated SHA equals `base_head_before` by construction (resolves F1, F3).
+- §5: add a clause to rule 6 that staged `docs/tasklist.json` is excluded from the dirty check when the target worktree is the authoritative checkout; reference `has_unmerged_paths` in rule 7 (resolves F2, F4).
+- §5/§6: add one sentence on which directory each git op and the tasklist save run in, and that the lock is not held across the git op (resolves F8 and the open assumption).
+- §5 or new sub-note: specify in-place sync target branch + no-op-on-base case (resolves F5).
+- §7: add the "rerun `tasktool worktree sync` after manual conflict resolution to advance the base SHA" note; note that `--rebase` rewrites history (resolves F6, F7).
+- §9: make test #4 explicit about single-checkout mode and about a staged-tracker mutation being present (ties to F2/F5), and consider adding a test that a staged-only `docs/tasklist.json` in the in-place/authoritative checkout does **not** cause refusal.
+
+4. Verification gaps / commands that should be run
+
+- Confirm tasktool's non-interactive subprocess environment for the new git op (no editor): the implementer should verify a non-fast-forward `--merge` does not block (e.g. force a real merge commit in a test repo and assert it completes). This is the highest-risk runtime gap (F3).
+- Add the F2 regression: in a single-checkout repo, stage a `docs/tasklist.json` mutation, then assert `worktree sync` of an in-place slice is *not* refused.
+- Existing test scaffolding to mirror is confirmed present: `test_worktree_integration.py` and `test_worktree_prune.py` referenced in §9 exist alongside the helpers; the new `test_worktree_sync.py` can reuse their `tasktool init-local` repo-builder style.
+
+Residual risk if F1–F3 are addressed: low. The command is detection-gated, additive, reuses vetted helpers, and the failure path is conservative (no SHA advance on non-zero git). The remaining findings are minor/nit and can be folded into the plan without restructuring the spec.
+
+Overall verdict: ready with small edits
