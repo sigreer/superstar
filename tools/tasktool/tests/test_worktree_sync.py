@@ -74,3 +74,30 @@ def test_sync_requires_exactly_one_strategy(tmp_path):
     both = run(repo, "worktree", "sync", "P1.S1", "--merge", "--rebase")
     assert both.returncode != 0
     assert "not allowed with argument" in both.stderr
+
+
+def test_dirty_helper_allows_staged_tasklist_only(tmp_path):
+    from tasktool.worktree import working_tree_dirty_for_sync
+    repo = init_repo(tmp_path / "repo")
+    data = json.loads((repo / "docs" / "tasklist.json").read_text())
+    data["north_star"] = "staged tracker update"
+    (repo / "docs" / "tasklist.json").write_text(json.dumps(data, indent=2) + "\n")
+    git(repo, "add", "docs/tasklist.json")
+    dirty, items = working_tree_dirty_for_sync(repo, allow_staged_tasklist=True)
+    assert dirty is False, items
+
+
+def test_dirty_helper_refuses_unstaged_tasklist_and_untracked_files(tmp_path):
+    from tasktool.worktree import working_tree_dirty_for_sync
+    repo = init_repo(tmp_path / "repo")
+    data = json.loads((repo / "docs" / "tasklist.json").read_text())
+    data["north_star"] = "unstaged tracker update"
+    (repo / "docs" / "tasklist.json").write_text(json.dumps(data, indent=2) + "\n")
+    dirty, items = working_tree_dirty_for_sync(repo, allow_staged_tasklist=True)
+    assert dirty is True
+    assert "docs/tasklist.json" in items
+    git(repo, "add", "docs/tasklist.json")
+    (repo / "scratch.txt").write_text("scratch\n")
+    dirty, items = working_tree_dirty_for_sync(repo, allow_staged_tasklist=True)
+    assert dirty is True
+    assert "scratch.txt" in items
