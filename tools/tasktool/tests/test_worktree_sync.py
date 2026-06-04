@@ -162,3 +162,47 @@ def test_sync_refuses_unstaged_authoritative_tasklist(tmp_path):
     r = run(repo, "worktree", "sync", "P1.S1", "--merge")
     assert r.returncode != 0
     assert "docs/tasklist.json has unstaged changes" in (r.stdout + r.stderr)
+
+
+def test_sync_merge_integrates_captured_base_sha_and_advances_row(tmp_path):
+    repo = init_repo(tmp_path / "repo")
+    wt = start_linked(repo)
+    base_head = advance_main(repo, "base-change", "base")
+    (wt / "slice-work").write_text("slice\n")
+    git(wt, "add", "slice-work")
+    git(wt, "commit", "-q", "-m", "slice work")
+    old_base = slice_row(repo)["worktree_base_sha"]
+    r = run(repo, "worktree", "sync", "P1.S1", "--merge")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert f"integrated main at {base_head}" in r.stdout
+    assert slice_row(repo)["worktree_base_sha"] == base_head
+    assert slice_row(repo)["worktree_base_sha"] != old_base
+    assert (wt / "base-change").read_text() == "base\n"
+
+
+def test_sync_rebase_integrates_captured_base_sha_and_advances_row(tmp_path):
+    repo = init_repo(tmp_path / "repo")
+    wt = start_linked(repo)
+    base_head = advance_main(repo, "base-change", "base")
+    (wt / "slice-work").write_text("slice\n")
+    git(wt, "add", "slice-work")
+    git(wt, "commit", "-q", "-m", "slice work")
+    r = run(repo, "worktree", "sync", "P1.S1", "--rebase")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert f"integrated main at {base_head}" in r.stdout
+    assert slice_row(repo)["worktree_base_sha"] == base_head
+    assert (wt / "base-change").read_text() == "base\n"
+
+
+def test_sync_merge_non_fast_forward_is_non_interactive(tmp_path):
+    repo = init_repo(tmp_path / "repo")
+    wt = start_linked(repo)
+    advance_main(repo, "main-only", "base")
+    (wt / "slice-only").write_text("slice\n")
+    git(wt, "add", "slice-only")
+    git(wt, "commit", "-q", "-m", "slice work")
+    r = run(repo, "worktree", "sync", "P1.S1", "--merge")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "follow-up:" in r.stdout
+    log = git(wt, "log", "-1", "--format=%s").strip()
+    assert log.startswith("Merge")

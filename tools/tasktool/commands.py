@@ -2923,6 +2923,30 @@ def _preflight_worktree_sync(
     return base_head
 
 
+def _run_sync_git(*, target: Path, strategy: str, base_head: str) -> None:
+    env = _os.environ.copy()
+    env["GIT_EDITOR"] = "true"
+    env["GIT_SEQUENCE_EDITOR"] = "true"
+    if strategy == "merge":
+        args = ["git", "merge", "--no-edit", base_head]
+    else:
+        args = ["git", "rebase", base_head]
+    try:
+        _subprocess.run(
+            args,
+            cwd=target,
+            text=True,
+            capture_output=True,
+            check=True,
+            env=env,
+        )
+    except _subprocess.CalledProcessError as exc:
+        detail = (exc.stderr or exc.stdout or "").strip()
+        raise CommandError(
+            f"git {strategy} failed; resolve or abort git state, then rerun sync: {detail}"
+        ) from exc
+
+
 def cmd_worktree_sync(
     *, repo_root: Path, id: str, merge: bool = False, rebase: bool = False
 ) -> str:
@@ -2943,9 +2967,23 @@ def cmd_worktree_sync(
             target=target,
             base_branch=base_branch,
         )
+    strategy = "merge" if merge else "rebase"
+    _run_sync_git(target=target, strategy=strategy, base_head=base_head)
+
+    with _write_context(repo_root) as write_root:
+        p = _load(write_root)
+        qid, _container, item = _find_item(p, id)
+        item.worktree_base_sha = base_head
+        _save(write_root, p)
+
     return (
-        f"{qid}: sync preflight passed ({'merge' if merge else 'rebase'} {base_head})\n"
+        f"{qid}: synchronized by {strategy}; integrated {base_branch} at {base_head}\n"
         f"previous worktree_base_sha: {previous_base}\n"
+        f"new worktree_base_sha: {base_head}\n"
+        "follow-up:\n"
+        f"  tasktool worktree status {qid} --integration\n"
+        "  rerun focused verification for files changed by the base integration\n"
+        "  regenerate derived artifacts if this project has snapshots, checksums, schemas, or lock files\n"
     )
 
 
