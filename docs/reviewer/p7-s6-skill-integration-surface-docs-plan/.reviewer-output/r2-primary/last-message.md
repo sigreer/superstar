@@ -1,0 +1,27 @@
+1. Findings
+
+F1 (Severity: blocking) RESOLVED. Task 0 now starts execution with `tasktool start P7.S6` before any file edits, and confirms `in_progress` state afterward (`docs/plans/2026-06-04-P7-S6-skill-integration-surface-docs.md:44-64`).
+
+F2 (Severity: important) RESOLVED. Ratification is no longer an implementation closeout step; the plan explicitly moves it to the plan-settle boundary after plan review passes, and Task 5 states execution does not re-ratify (`docs/plans/2026-06-04-P7-S6-skill-integration-surface-docs.md:22-27`, `:460-489`).
+
+F3 (Severity: important) RESOLVED. The risky final `git add -A` tracker commit step has been removed. The implementation closeout is now read-only with respect to tracker ratification (`docs/plans/2026-06-04-P7-S6-skill-integration-surface-docs.md:486-489`).
+
+2. Open questions / assumptions
+
+I assume the plan author will actually run the plan-settle `tasktool ratify P7.S6` after this review passes and commit that tracker mutation before handing off execution. Current disk state still shows `planning_status: proposed`, which is expected during this active plan-review round.
+
+3. Suggested document edits
+
+None required.
+
+4. Verification gaps / commands that should be run, if any
+
+I verified from disk that the referenced CLI surfaces exist:
+- `tasktool surface check --help`
+- `tasktool reserve add --help`
+- `tasktool coordinate --help`
+- `tasktool worktree status --help`
+
+Implementation-time verification listed in Task 5 remains appropriate.
+
+Overall verdict: ready
