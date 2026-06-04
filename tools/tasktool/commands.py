@@ -2885,10 +2885,68 @@ def cmd_worktree_status_integration(*, repo_root: Path, id: str) -> str:
         return "\n".join(lines) + "\n"
 
 
+def _sync_target_path(write_root: Path, qid: str, item) -> Path:
+    if getattr(item, "worktree_in_place", False):
+        return write_root
+    path_str = getattr(item, "worktree_path", None)
+    if not path_str:
+        raise CommandError(f"{qid}: no recorded worktree to sync")
+    if _health_for(write_root, item) != "live":
+        raise CommandError(
+            f"{qid}: recorded worktree is not live; run `tasktool worktree status {qid}`"
+        )
+    return (write_root / path_str).resolve()
+
+
+def _preflight_worktree_sync(
+    *, write_root: Path, qid: str, item, target: Path, base_branch: str
+) -> str:
+    from tasktool import worktree as wt
+    base_sha = getattr(item, "worktree_base_sha", None)
+    if not base_sha:
+        raise CommandError(f"{qid}: worktree_base_sha is not recorded; cannot sync safely")
+    try:
+        base_head = wt.current_branch_head_sha(write_root, base_branch)
+    except _subprocess.CalledProcessError as exc:
+        raise CommandError(f"{qid}: cannot resolve base branch {base_branch!r}") from exc
+    if wt.has_unmerged_paths(target):
+        raise CommandError(f"{qid}: target worktree has unresolved merge entries")
+    allow_staged_tasklist = target.resolve() == write_root.resolve()
+    dirty, items = wt.working_tree_dirty_for_sync(
+        target, allow_staged_tasklist=allow_staged_tasklist
+    )
+    if dirty:
+        pretty = ", ".join(items[:5]) + (" ..." if len(items) > 5 else "")
+        raise CommandError(f"{qid}: target worktree is not clean: {pretty}")
+    if wt.tasklist_has_unsafe_dirty_state(write_root):
+        raise CommandError("authoritative docs/tasklist.json has unstaged changes")
+    return base_head
+
+
 def cmd_worktree_sync(
     *, repo_root: Path, id: str, merge: bool = False, rebase: bool = False
 ) -> str:
-    raise CommandError("worktree sync is not implemented yet")
+    if merge == rebase:
+        raise CommandError("choose exactly one of --merge or --rebase")
+    with _read_context(repo_root) as write_root:
+        p = _load(write_root)
+        qid, _container, item = _find_item(p, id)
+        if parse_id(qid)[0] != "slice":
+            raise CommandError(f"{qid}: worktree sync only supports slices")
+        base_branch = _authoritative_parent_branch(write_root, qid)
+        target = _sync_target_path(write_root, qid, item)
+        previous_base = getattr(item, "worktree_base_sha", None)
+        base_head = _preflight_worktree_sync(
+            write_root=write_root,
+            qid=qid,
+            item=item,
+            target=target,
+            base_branch=base_branch,
+        )
+    return (
+        f"{qid}: sync preflight passed ({'merge' if merge else 'rebase'} {base_head})\n"
+        f"previous worktree_base_sha: {previous_base}\n"
+    )
 
 
 def cmd_worktree_adopt(*, repo_root: Path, id: str, path: Path) -> None:

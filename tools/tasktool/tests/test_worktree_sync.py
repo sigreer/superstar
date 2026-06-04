@@ -110,3 +110,55 @@ def test_dirty_helper_refuses_unstaged_tasklist_and_untracked_files(tmp_path):
     dirty, items = working_tree_dirty_for_sync(repo, allow_staged_tasklist=True)
     assert dirty is True
     assert "scratch.txt" in items
+
+
+def test_sync_refuses_missing_worktree_base_sha(tmp_path):
+    repo = init_repo(tmp_path / "repo")
+    start_linked(repo)
+    path = repo / "docs" / "tasklist.json"
+    data = json.loads(path.read_text())
+    data["phases"][0]["slices"][0].pop("worktree_base_sha", None)
+    path.write_text(json.dumps(data, indent=2) + "\n")
+    git(repo, "add", "docs/tasklist.json")
+    r = run(repo, "worktree", "sync", "P1.S1", "--merge")
+    assert r.returncode != 0
+    assert "worktree_base_sha" in (r.stdout + r.stderr)
+
+
+def test_sync_refuses_non_slice_id(tmp_path):
+    repo = init_repo(tmp_path / "repo")
+    r = run(repo, "worktree", "sync", "P1", "--merge")
+    assert r.returncode != 0
+    assert "worktree sync only supports slices" in (r.stdout + r.stderr)
+
+
+def test_sync_refuses_unhealthy_recorded_worktree(tmp_path):
+    repo = init_repo(tmp_path / "repo")
+    wt = start_linked(repo)
+    git(repo, "worktree", "remove", "--force", str(wt))
+    r = run(repo, "worktree", "sync", "P1.S1", "--merge")
+    assert r.returncode != 0
+    assert "recorded worktree is not live" in (r.stdout + r.stderr)
+
+
+def test_sync_refuses_dirty_linked_worktree(tmp_path):
+    repo = init_repo(tmp_path / "repo")
+    wt = start_linked(repo)
+    advance_main(repo, "base-change")
+    (wt / "dirty.txt").write_text("dirty\n")
+    r = run(repo, "worktree", "sync", "P1.S1", "--merge")
+    assert r.returncode != 0
+    assert "not clean" in (r.stdout + r.stderr)
+    assert "dirty.txt" in (r.stdout + r.stderr)
+
+
+def test_sync_refuses_unstaged_authoritative_tasklist(tmp_path):
+    repo = init_repo(tmp_path / "repo")
+    start_linked(repo)
+    advance_main(repo, "base-change")
+    data = json.loads((repo / "docs" / "tasklist.json").read_text())
+    data["north_star"] = "unstaged"
+    (repo / "docs" / "tasklist.json").write_text(json.dumps(data, indent=2) + "\n")
+    r = run(repo, "worktree", "sync", "P1.S1", "--merge")
+    assert r.returncode != 0
+    assert "docs/tasklist.json has unstaged changes" in (r.stdout + r.stderr)
