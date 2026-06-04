@@ -1995,6 +1995,103 @@ def _is_slice_ready_for_work(phase: Phase, s: Slice) -> bool:
         return False
     return all(dep in _done_slice_ids(phase) for dep in s.depends_on)
 
+def _dep_link(a_qid: str, a: Slice, b_qid: str, b: Slice) -> bool:
+    """True if either slice declares the other as a dependency (link in either
+    direction). A dep link serializes the pair, so a shared surface is reconciled."""
+    return b_qid in (a.depends_on or []) or a_qid in (b.depends_on or [])
+
+
+def _shared_surfaces(a: Slice, b: Slice) -> list[str]:
+    """Sorted intersection of two slices' declared integration surfaces."""
+    return sorted(set(a.integration_surfaces or []) & set(b.integration_surfaces or []))
+
+
+def _same_coord_group(a: Slice, b: Slice) -> bool:
+    """True if both slices name the same, non-None coordination_group."""
+    return a.coordination_group is not None and a.coordination_group == b.coordination_group
+
+
+def _pair_surface_relation(
+    a_qid: str, a: Slice, b_qid: str, b: Slice,
+) -> tuple[str | None, list[str]]:
+    """Classify the surface relationship between two slices (spec 4.C).
+
+    Returns (kind, shared_surfaces):
+      - (None, [])           no shared surface
+      - (None, [...])        shared surface but a depends_on link serializes them
+      - ("coordinated", ...) shared surface, no dep link, same coordination_group
+      - ("overlap", ...)     shared surface, no dep link, different/absent group
+
+    Precedence is dep-link first (serialization fully reconciles), then
+    coordination group, then unguarded overlap.
+    """
+    shared = _shared_surfaces(a, b)
+    if not shared:
+        return None, []
+    if _dep_link(a_qid, a, b_qid, b):
+        return None, shared
+    if _same_coord_group(a, b):
+        return "coordinated", shared
+    return "overlap", shared
+
+
+def _surface_overlap_map(phase: Phase) -> dict:
+    """Classify surface relationships for the phase's scheduling reporters (spec
+    4.C: "for each ready/in-progress slice ... other non-terminal slices").
+
+    SUBJECTS are narrowed to the slices eligible for parallel dispatch right now —
+    ready-for-work or in-progress. A blocked, dependency-waiting, superseded, or
+    terminal slice is never a subject (it will not be dispatched now, so a warning
+    on its row is noise). CANDIDATES are every non-terminal sibling, so a ready
+    subject is still warned about a not-yet-ready sibling that writes the same
+    surface.
+
+    Returns subject_qid -> {"surface_overlap": [...], "coordinated": [...]} where
+    each overlap entry is {"sibling": qid, "surfaces": [...]} and each coordinated
+    entry additionally carries "group".
+    """
+    candidates = [
+        (f"{phase.id}.{s.id}", s) for s in phase.slices if not is_terminal(s.status)
+    ]
+    out: dict = {}
+    for s in phase.slices:
+        # Subject predicate: ready-for-work (deps met, not terminal/blocked/
+        # superseded — see _is_slice_ready_for_work) OR actively in progress.
+        if not (s.status == Status.IN_PROGRESS or _is_slice_ready_for_work(phase, s)):
+            continue
+        a_qid = f"{phase.id}.{s.id}"
+        overlap: list = []
+        coordinated: list = []
+        for b_qid, b in candidates:
+            if b_qid == a_qid:
+                continue
+            kind, shared = _pair_surface_relation(a_qid, s, b_qid, b)
+            if kind == "overlap":
+                overlap.append({"sibling": b_qid, "surfaces": shared})
+            elif kind == "coordinated":
+                coordinated.append(
+                    {"sibling": b_qid, "surfaces": shared, "group": s.coordination_group}
+                )
+        out[a_qid] = {"surface_overlap": overlap, "coordinated": coordinated}
+    return out
+
+
+def _format_surface_relations(row: dict) -> list[str]:
+    """Indented text lines describing a scheduling row's surface relationships.
+    Empty when the row has neither overlaps nor coordinated siblings."""
+    lines: list[str] = []
+    for e in row.get("surface_overlap", []):
+        lines.append(
+            f"    surface_overlap: {e['sibling']} ({', '.join(e['surfaces'])})"
+        )
+    for e in row.get("coordinated", []):
+        lines.append(
+            f"    coordinated: {e['sibling']} ({', '.join(e['surfaces'])}) "
+            f"[group={e['group']}]"
+        )
+    return lines
+
+
 def cmd_ready_slices(*, repo_root: Path, phase_id: str, format: str = "text") -> str:
     p = _load(repo_root)
     phase = _phase_by_id(p, phase_id)
@@ -2023,6 +2120,7 @@ def cmd_schedule(*, repo_root: Path, phase_id: str, format: str = "text") -> str
     phase = _phase_by_id(p, phase_id)
     done = _done_slice_ids(phase)
     cancelled = _cancelled_slice_ids(phase)
+    overlap_map = _surface_overlap_map(phase)
     rows = []
     for s in phase.slices:
         waiting_on = [
@@ -2030,8 +2128,10 @@ def cmd_schedule(*, repo_root: Path, phase_id: str, format: str = "text") -> str
         ]
         cancelled_deps = [dep for dep in s.depends_on if dep in cancelled]
         ready = _is_slice_ready_for_work(phase, s) and not cancelled_deps
+        qid = f"{phase.id}.{s.id}"
+        rel = overlap_map.get(qid, {"surface_overlap": [], "coordinated": []})
         rows.append({
-            "id": f"{phase.id}.{s.id}",
+            "id": qid,
             "status": s.status.value,
             "planning_status": s.planning_status.value,
             "parallel_group": s.parallel_group,
@@ -2040,6 +2140,8 @@ def cmd_schedule(*, repo_root: Path, phase_id: str, format: str = "text") -> str
             "cancelled_deps": cancelled_deps,
             "ready": ready,
             "title": s.title,
+            "surface_overlap": rel["surface_overlap"],
+            "coordinated": rel["coordinated"],
         })
     if format == "json":
         import json as _j
@@ -2060,6 +2162,7 @@ def cmd_schedule(*, repo_root: Path, phase_id: str, format: str = "text") -> str
             f"group={group}  {ready}  deps={deps}  waiting_on={waits}  "
             f"cancelled_deps={cancelled_str}  {row['title']}"
         )
+        lines.extend(_format_surface_relations(row))
     return "\n".join(lines).rstrip() + "\n"
 
 def cmd_phase_status(*, repo_root: Path, recent: int = 3, format: str = "text") -> str:

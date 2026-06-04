@@ -2251,3 +2251,105 @@ class LedgerPopulationTests(unittest.TestCase):
         _ladder_project_reservations(proj, phase, archived_date="2026-06-02")
         _ladder_project_reservations(proj, phase, archived_date="2026-06-02")
         self.assertEqual(len(proj.reservations_ledger), 1)
+
+
+class SurfaceOverlapSchedulingTests(unittest.TestCase):
+    def setUp(self):
+        self.t = _Tmp()
+        commands.cmd_init(repo_root=self.t.root, project="demo")
+        commands.cmd_create_phase(repo_root=self.t.root, title="P1")
+        # S1, S2, S3, S4 all created at top level (no deps) unless added below.
+        for _ in range(4):
+            commands.cmd_create_slice(repo_root=self.t.root, phase_id="P1", title="s")
+
+    def tearDown(self):
+        self.t.cleanup()
+
+    def _row(self, rows, qid):
+        return next(r for r in rows if r["id"] == qid)
+
+    def test_schedule_warns_unguarded_surface_overlap(self):
+        # S1 and S2 both write cms-block-registry, no dep, no coordination group.
+        commands.cmd_surface_add(repo_root=self.t.root, slice_id="P1.S1",
+                                 surfaces=["cms-block-registry"])
+        commands.cmd_surface_add(repo_root=self.t.root, slice_id="P1.S2",
+                                 surfaces=["cms-block-registry"])
+        rows = json.loads(commands.cmd_schedule(
+            repo_root=self.t.root, phase_id="P1", format="json"))
+        s1 = self._row(rows, "P1.S1")
+        self.assertEqual(
+            s1["surface_overlap"],
+            [{"sibling": "P1.S2", "surfaces": ["cms-block-registry"]}],
+        )
+        self.assertEqual(s1["coordinated"], [])
+        # Symmetric: S2 also reports S1.
+        self.assertEqual(
+            self._row(rows, "P1.S2")["surface_overlap"],
+            [{"sibling": "P1.S1", "surfaces": ["cms-block-registry"]}],
+        )
+
+    def test_schedule_dep_link_suppresses_overlap(self):
+        commands.cmd_surface_add(repo_root=self.t.root, slice_id="P1.S1",
+                                 surfaces=["cms-block-registry"])
+        commands.cmd_surface_add(repo_root=self.t.root, slice_id="P1.S2",
+                                 surfaces=["cms-block-registry"])
+        commands.cmd_deps(repo_root=self.t.root, slice_id="P1.S2", add="P1.S1")
+        rows = json.loads(commands.cmd_schedule(
+            repo_root=self.t.root, phase_id="P1", format="json"))
+        self.assertEqual(self._row(rows, "P1.S1")["surface_overlap"], [])
+        self.assertEqual(self._row(rows, "P1.S2")["surface_overlap"], [])
+
+    def test_schedule_coordination_group_reports_coordinated_not_warned(self):
+        commands.cmd_surface_add(repo_root=self.t.root, slice_id="P1.S1",
+                                 surfaces=["cms-block-registry"])
+        commands.cmd_surface_add(repo_root=self.t.root, slice_id="P1.S2",
+                                 surfaces=["cms-block-registry"])
+        commands.cmd_coordinate(repo_root=self.t.root, slice_id="P1.S1", group="cms")
+        commands.cmd_coordinate(repo_root=self.t.root, slice_id="P1.S2", group="cms")
+        rows = json.loads(commands.cmd_schedule(
+            repo_root=self.t.root, phase_id="P1", format="json"))
+        s1 = self._row(rows, "P1.S1")
+        self.assertEqual(s1["surface_overlap"], [])
+        self.assertEqual(
+            s1["coordinated"],
+            [{"sibling": "P1.S2", "surfaces": ["cms-block-registry"], "group": "cms"}],
+        )
+
+    def test_schedule_text_shows_overlap_line(self):
+        commands.cmd_surface_add(repo_root=self.t.root, slice_id="P1.S1",
+                                 surfaces=["cms-block-registry"])
+        commands.cmd_surface_add(repo_root=self.t.root, slice_id="P1.S2",
+                                 surfaces=["cms-block-registry"])
+        out = commands.cmd_schedule(repo_root=self.t.root, phase_id="P1")
+        self.assertIn("surface_overlap: P1.S2 (cms-block-registry)", out)
+
+    def test_schedule_done_slice_not_a_candidate(self):
+        # A done slice that shares a surface must not be reported as an overlap.
+        commands.cmd_surface_add(repo_root=self.t.root, slice_id="P1.S1",
+                                 surfaces=["cms-block-registry"])
+        commands.cmd_surface_add(repo_root=self.t.root, slice_id="P1.S2",
+                                 surfaces=["cms-block-registry"])
+        commands.cmd_start(repo_root=self.t.root, id="P1.S2")
+        commands.cmd_close(repo_root=self.t.root, id="P1.S2", skip_review_gate=True)
+        rows = json.loads(commands.cmd_schedule(
+            repo_root=self.t.root, phase_id="P1", format="json"))
+        self.assertEqual(self._row(rows, "P1.S1")["surface_overlap"], [])
+
+    def test_schedule_waiting_slice_is_candidate_not_subject(self):
+        # S2 waits on S4 (not done) => not ready-for-work => not a warning SUBJECT,
+        # but it is still a CANDIDATE a ready sibling (S1) can collide with.
+        commands.cmd_deps(repo_root=self.t.root, slice_id="P1.S2", add="P1.S4")
+        commands.cmd_surface_add(repo_root=self.t.root, slice_id="P1.S1",
+                                 surfaces=["cms-block-registry"])
+        commands.cmd_surface_add(repo_root=self.t.root, slice_id="P1.S2",
+                                 surfaces=["cms-block-registry"])
+        rows = json.loads(commands.cmd_schedule(
+            repo_root=self.t.root, phase_id="P1", format="json"))
+        # S1 (ready subject) reports the overlap with not-yet-ready S2.
+        self.assertEqual(
+            self._row(rows, "P1.S1")["surface_overlap"],
+            [{"sibling": "P1.S2", "surfaces": ["cms-block-registry"]}],
+        )
+        # S2 is not ready-for-work, so it is not a subject: no relations on its row.
+        self.assertEqual(self._row(rows, "P1.S2")["surface_overlap"], [])
+        self.assertEqual(self._row(rows, "P1.S2")["coordinated"], [])
