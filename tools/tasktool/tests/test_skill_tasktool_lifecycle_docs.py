@@ -162,3 +162,19 @@ def test_subagent_early_exit_load_matches_fixture() -> None:
     assert "tasktool start" in span and (
         "do not call" in span.lower() or "do not" in span.lower()
     ), "early-exit block must forbid `tasktool start` from a subagent"
+
+
+def test_registry_merge_playbook_exists() -> None:
+    playbook = (
+        ROOT
+        / "skills"
+        / "subagent-driven-development"
+        / "references"
+        / "registry-merge-playbook.md"
+    )
+    assert playbook.is_file(), f"registry merge playbook must exist at {playbook}"
+    body = playbook.read_text(encoding="utf-8")
+    # The playbook's load-bearing instructions.
+    assert "preserve both" in body.lower()
+    assert "regenerate" in body.lower()
+    assert "rerun" in body.lower()
