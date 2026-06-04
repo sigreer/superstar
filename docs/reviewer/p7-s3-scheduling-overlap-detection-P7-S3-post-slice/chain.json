@@ -189,10 +189,119 @@
       "base_ref": "336eba153b866127dbdc934b4dd4ec23bc546d15",
       "base_ref_source": "auto",
       "diff_included": true
+    },
+    {
+      "round": 3,
+      "reviewers": [
+        {
+          "role": "primary",
+          "sweep_group": null,
+          "parent_round": 3,
+          "request": "r3-2026-06-04T2311-primary-request.md",
+          "response": "r3-2026-06-04T2311-primary-response.md",
+          "verdict": "ready",
+          "verdict_valid": true,
+          "returncode": 0,
+          "status": "ok",
+          "provider": "codex",
+          "caller_provider": "claude",
+          "model": null,
+          "sandbox": {
+            "repo_root": "/home/simon/Dev/sigreer/skills/superstar/.worktrees/worktree-p7-s3-scheduling-overlap-detection-ready",
+            "scratch_dir": "/tmp/claude-1000/superstar-reviewer-p7-s3-scheduling-overlap-detection-P7-S3-post-slice-r3-primary-wi7dk_7s",
+            "response_dir": "docs/reviewer/p7-s3-scheduling-overlap-detection-P7-S3-post-slice/.reviewer-output/r3-primary",
+            "mode": "workspace-write-with-read-access"
+          },
+          "started_at": "2026-06-04T22:11:50.015Z",
+          "finished_at": "2026-06-04T22:13:28.747Z",
+          "duration_ms": 98732,
+          "estimated_usage": {
+            "formula": "ceil(chars / 4)",
+            "prompt_chars": 181974,
+            "response_chars": 2742,
+            "estimated_input_tokens": 45494,
+            "estimated_output_tokens": 686,
+            "estimated_total_tokens": 46180
+          },
+          "exact_usage": null,
+          "usage_capture_status": "estimated_only",
+          "usage_capture_error": null
+        },
+        {
+          "role": "sweep",
+          "sweep_group": 1,
+          "parent_round": 3,
+          "request": "r3-2026-06-04T2311-sweep1-request.md",
+          "response": "r3-2026-06-04T2311-sweep1-response.md",
+          "verdict": "ready",
+          "verdict_valid": true,
+          "returncode": 0,
+          "status": "ok",
+          "provider": "codex",
+          "caller_provider": "claude",
+          "model": null,
+          "sandbox": {
+            "repo_root": "/home/simon/Dev/sigreer/skills/superstar/.worktrees/worktree-p7-s3-scheduling-overlap-detection-ready",
+            "scratch_dir": "/tmp/claude-1000/superstar-reviewer-p7-s3-scheduling-overlap-detection-P7-S3-post-slice-r3-sweep1-04ggbeby",
+            "response_dir": "docs/reviewer/p7-s3-scheduling-overlap-detection-P7-S3-post-slice/.reviewer-output/r3-sweep1",
+            "mode": "workspace-write-with-read-access"
+          },
+          "started_at": "2026-06-04T22:13:28.750Z",
+          "finished_at": "2026-06-04T22:18:23.176Z",
+          "duration_ms": 294426,
+          "estimated_usage": {
+            "formula": "ceil(chars / 4)",
+            "prompt_chars": 60015,
+            "response_chars": 1779,
+            "estimated_input_tokens": 15004,
+            "estimated_output_tokens": 445,
+            "estimated_total_tokens": 15449
+          },
+          "exact_usage": null,
+          "usage_capture_status": "estimated_only",
+          "usage_capture_error": null
+        }
+      ],
+      "status": "ok",
+      "returncode": 0,
+      "started_at": "2026-06-04T22:11:50.015Z",
+      "finished_at": "2026-06-04T22:13:28.747Z",
+      "duration_ms": 98732,
+      "provider": "codex",
+      "caller_provider": "claude",
+      "model": null,
+      "estimated_usage": {
+        "formula": "ceil(chars / 4)",
+        "prompt_chars": 181974,
+        "response_chars": 2742,
+        "estimated_input_tokens": 45494,
+        "estimated_output_tokens": 686,
+        "estimated_total_tokens": 46180
+      },
+      "exact_usage": null,
+      "usage_capture_status": "estimated_only",
+      "usage_capture_error": null,
+      "merged_verdict": "ready",
+      "merged_findings": "r3-merged-findings.md",
+      "request": "r3-2026-06-04T2311-primary-request.md",
+      "response": "r3-2026-06-04T2311-primary-response.md",
+      "resolution": "r2-resolution.md",
+      "resolution_parse_status": "ok",
+      "resolution_waiver": false,
+      "head_sha_at_request": "f82182ed9baf50f9c51c9eb2915d2781944ca60e",
+      "head_sha_after_round": "f82182ed9baf50f9c51c9eb2915d2781944ca60e",
+      "worktree_dirty_at_request": false,
+      "verdict": "ready",
+      "verdict_valid": true,
+      "findings_count": null,
+      "blocking_findings_count": null,
+      "base_ref": "e823c3185678f0d14bf4fcaf805bce80522df188",
+      "base_ref_source": "auto",
+      "diff_included": true
     }
   ],
   "sweep_checkpoints": {
     "first-round": "completed",
-    "final-ready": "pending"
+    "final-ready": "completed"
   }
 }
