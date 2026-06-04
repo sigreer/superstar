@@ -199,3 +199,22 @@ def test_subagent_driven_development_has_integrate_main_checkpoint() -> None:
     integ = text.index("tasktool worktree status <slice-id> --integration")
     close = text.index("tasktool close <slice-id>")
     assert integ < close, "integrate-main checkpoint must precede the close gate"
+
+
+def test_tasklist_discipline_documents_surface_reserve_coordinate() -> None:
+    text = skill_text("tasklist-discipline")
+    # daily-commands surface
+    assert "tasktool surface add <slice-id>" in text
+    assert "tasktool surface check <phase-id>" in text
+    assert "tasktool reserve add <slice-id>" in text
+    assert "tasktool coordinate <slice-id> --group" in text
+    # conceptual model + vocabulary
+    assert "integration_surfaces" in text
+    assert "reservations" in text
+    assert "cms-block-registry" in text
+    # coordination_group vs parallel_group distinction is spelled out
+    assert "coordination_group" in text
+    assert "parallel_group" in text
+    # the three new red-flag claims
+    assert "feature independence" in text
+    assert "duplicate" in text.lower()
