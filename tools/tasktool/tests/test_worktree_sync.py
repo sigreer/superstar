@@ -87,6 +87,15 @@ def test_dirty_helper_allows_staged_tasklist_only(tmp_path):
     assert dirty is False, items
 
 
+def test_dirty_helper_refuses_staged_tasklist_deletion(tmp_path):
+    from tasktool.worktree import working_tree_dirty_for_sync
+    repo = init_repo(tmp_path / "repo")
+    git(repo, "rm", "docs/tasklist.json")
+    dirty, items = working_tree_dirty_for_sync(repo, allow_staged_tasklist=True)
+    assert dirty is True
+    assert "docs/tasklist.json" in items
+
+
 def test_dirty_helper_refuses_unstaged_tasklist_and_untracked_files(tmp_path):
     from tasktool.worktree import working_tree_dirty_for_sync
     repo = init_repo(tmp_path / "repo")

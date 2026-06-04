@@ -231,8 +231,7 @@ def working_tree_dirty_for_sync(
         staged_only_tasklist = (
             allow_staged_tasklist
             and path == "docs/tasklist.json"
-            and code[0] != " "
-            and code[1] == " "
+            and code in {"A ", "M "}
         )
         if staged_only_tasklist:
             continue
