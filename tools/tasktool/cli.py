@@ -129,6 +129,11 @@ def _build_parser() -> argparse.ArgumentParser:
     p_wt_adopt = wt_sub.add_parser("adopt")
     p_wt_adopt.add_argument("id")
     p_wt_adopt.add_argument("path")
+    p_wt_sync = wt_sub.add_parser("sync")
+    p_wt_sync.add_argument("id")
+    sync_mode = p_wt_sync.add_mutually_exclusive_group(required=True)
+    sync_mode.add_argument("--merge", action="store_true")
+    sync_mode.add_argument("--rebase", action="store_true")
     wt_sub.add_parser("ensure-gitignore")
     p_wt_legacy = wt_sub.add_parser("check-legacy")
     p_wt_legacy.add_argument("--project", required=True)
@@ -443,6 +448,15 @@ def main(argv: list[str]) -> int:
                     )
             elif args.wt_cmd == "adopt":
                 commands.cmd_worktree_adopt(repo_root=root, id=args.id, path=Path(args.path))
+            elif args.wt_cmd == "sync":
+                sys.stdout.write(
+                    commands.cmd_worktree_sync(
+                        repo_root=root,
+                        id=args.id,
+                        merge=args.merge,
+                        rebase=args.rebase,
+                    )
+                )
             elif args.wt_cmd == "ensure-gitignore":
                 sys.stdout.write(commands.cmd_worktree_ensure_gitignore(repo_root=root))
             elif args.wt_cmd == "check-legacy":

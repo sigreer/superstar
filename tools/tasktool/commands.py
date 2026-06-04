@@ -2885,6 +2885,12 @@ def cmd_worktree_status_integration(*, repo_root: Path, id: str) -> str:
         return "\n".join(lines) + "\n"
 
 
+def cmd_worktree_sync(
+    *, repo_root: Path, id: str, merge: bool = False, rebase: bool = False
+) -> str:
+    raise CommandError("worktree sync is not implemented yet")
+
+
 def cmd_worktree_adopt(*, repo_root: Path, id: str, path: Path) -> None:
     from tasktool.worktree_lifecycle import (
         RecordedState, classify_recorded_state, is_authoritative_checkout,
