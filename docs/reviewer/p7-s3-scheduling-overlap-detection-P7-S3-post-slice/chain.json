@@ -114,6 +114,81 @@
       "base_ref": null,
       "base_ref_source": null,
       "diff_included": false
+    },
+    {
+      "round": 2,
+      "reviewers": [
+        {
+          "role": "primary",
+          "sweep_group": null,
+          "parent_round": 2,
+          "request": "r2-2026-06-04T2303-request.md",
+          "response": "r2-2026-06-04T2303-response.md",
+          "verdict": "revise",
+          "verdict_valid": true,
+          "returncode": 0,
+          "status": "ok",
+          "provider": "codex",
+          "caller_provider": "claude",
+          "model": null,
+          "sandbox": {
+            "repo_root": "/home/simon/Dev/sigreer/skills/superstar/.worktrees/worktree-p7-s3-scheduling-overlap-detection-ready",
+            "scratch_dir": "/tmp/claude-1000/superstar-reviewer-p7-s3-scheduling-overlap-detection-P7-S3-post-slice-r2-primary-0sia7207",
+            "response_dir": "docs/reviewer/p7-s3-scheduling-overlap-detection-P7-S3-post-slice/.reviewer-output/r2-primary",
+            "mode": "workspace-write-with-read-access"
+          },
+          "started_at": "2026-06-04T22:03:04.519Z",
+          "finished_at": "2026-06-04T22:07:23.139Z",
+          "duration_ms": 258619,
+          "estimated_usage": {
+            "formula": "ceil(chars / 4)",
+            "prompt_chars": 184340,
+            "response_chars": 3326,
+            "estimated_input_tokens": 46085,
+            "estimated_output_tokens": 832,
+            "estimated_total_tokens": 46917
+          },
+          "exact_usage": null,
+          "usage_capture_status": "estimated_only",
+          "usage_capture_error": null
+        }
+      ],
+      "status": "ok",
+      "returncode": 0,
+      "started_at": "2026-06-04T22:03:04.519Z",
+      "finished_at": "2026-06-04T22:07:23.139Z",
+      "duration_ms": 258619,
+      "provider": "codex",
+      "caller_provider": "claude",
+      "model": null,
+      "estimated_usage": {
+        "formula": "ceil(chars / 4)",
+        "prompt_chars": 184340,
+        "response_chars": 3326,
+        "estimated_input_tokens": 46085,
+        "estimated_output_tokens": 832,
+        "estimated_total_tokens": 46917
+      },
+      "exact_usage": null,
+      "usage_capture_status": "estimated_only",
+      "usage_capture_error": null,
+      "merged_verdict": "revise",
+      "merged_findings": null,
+      "request": "r2-2026-06-04T2303-request.md",
+      "response": "r2-2026-06-04T2303-response.md",
+      "resolution": "r1-resolution.md",
+      "resolution_parse_status": "ok",
+      "resolution_waiver": false,
+      "head_sha_at_request": "e823c3185678f0d14bf4fcaf805bce80522df188",
+      "head_sha_after_round": "e823c3185678f0d14bf4fcaf805bce80522df188",
+      "worktree_dirty_at_request": false,
+      "verdict": "revise",
+      "verdict_valid": true,
+      "findings_count": null,
+      "blocking_findings_count": null,
+      "base_ref": "336eba153b866127dbdc934b4dd4ec23bc546d15",
+      "base_ref_source": "auto",
+      "diff_included": true
     }
   ],
   "sweep_checkpoints": {
