@@ -636,3 +636,29 @@ class SurfaceReserveCoordinateCliTests(unittest.TestCase):
             self.assertEqual(run_cli("coordinate", "P1.S1", "--clear", cwd=t.root).returncode, 0)
         finally:
             t.cleanup()
+
+
+class SurfaceCheckCliTests(unittest.TestCase):
+    def _setup(self, t):
+        self.assertEqual(run_cli("init", "--project", "demo", cwd=t.root).returncode, 0)
+        run_cli("create", "phase", "--title", "P", cwd=t.root)
+        run_cli("create", "slice", "P1", "--title", "a", cwd=t.root)
+        run_cli("create", "slice", "P1", "--title", "b", cwd=t.root)
+
+    def test_surface_check_cli_json(self):
+        t = _CliTmp()
+        try:
+            self._setup(t)
+            self.assertEqual(
+                run_cli("surface", "add", "P1.S1", "cms-block-registry", cwd=t.root).returncode, 0)
+            self.assertEqual(
+                run_cli("surface", "add", "P1.S2", "cms-block-registry", cwd=t.root).returncode, 0)
+            r = run_cli("surface", "check", "P1", "--format", "json", cwd=t.root)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            report = json.loads(r.stdout)
+            self.assertEqual(
+                report["unguarded_overlaps"],
+                [{"slices": ["P1.S1", "P1.S2"], "surfaces": ["cms-block-registry"]}],
+            )
+        finally:
+            t.cleanup()

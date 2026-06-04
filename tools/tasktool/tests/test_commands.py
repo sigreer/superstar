@@ -2375,3 +2375,71 @@ class SurfaceOverlapSchedulingTests(unittest.TestCase):
         out = commands.cmd_ready_slices(repo_root=self.t.root, phase_id="P1")
         self.assertIn("P1.S1", out)
         self.assertIn("surface_overlap: P1.S2 (cms-block-registry)", out)
+
+    def test_surface_check_json_shape(self):
+        # S1 <-> S2 unguarded overlap; S3 <-> S4 coordinated.
+        commands.cmd_surface_add(repo_root=self.t.root, slice_id="P1.S1",
+                                 surfaces=["cms-block-registry"])
+        commands.cmd_surface_add(repo_root=self.t.root, slice_id="P1.S2",
+                                 surfaces=["cms-block-registry"])
+        commands.cmd_surface_add(repo_root=self.t.root, slice_id="P1.S3",
+                                 surfaces=["directus-schema"])
+        commands.cmd_surface_add(repo_root=self.t.root, slice_id="P1.S4",
+                                 surfaces=["directus-schema"])
+        commands.cmd_coordinate(repo_root=self.t.root, slice_id="P1.S3", group="cms")
+        commands.cmd_coordinate(repo_root=self.t.root, slice_id="P1.S4", group="cms")
+        report = json.loads(commands.cmd_surface_check(
+            repo_root=self.t.root, phase_id="P1", format="json"))
+        self.assertEqual(report["phase"], "P1")
+        self.assertEqual(
+            report["unguarded_overlaps"],
+            [{"slices": ["P1.S1", "P1.S2"], "surfaces": ["cms-block-registry"]}],
+        )
+        self.assertEqual(
+            report["coordinated_surfaces"],
+            [{"slices": ["P1.S3", "P1.S4"], "surfaces": ["directus-schema"],
+              "group": "cms"}],
+        )
+        self.assertEqual(report["reservation_contention"], [])
+
+    def test_surface_check_reports_forced_reservation_contention(self):
+        # A --force override is the only way two non-cancelled slices hold the
+        # same resource:value; surface check surfaces it for audit.
+        commands.cmd_reserve_add(repo_root=self.t.root, slice_id="P1.S1",
+                                 resource_value="homepage-sort:15", scope="phase")
+        commands.cmd_reserve_add(repo_root=self.t.root, slice_id="P1.S2",
+                                 resource_value="homepage-sort:15", scope="phase",
+                                 force=True, reason="intentional shared slot")
+        report = json.loads(commands.cmd_surface_check(
+            repo_root=self.t.root, phase_id="P1", format="json"))
+        self.assertEqual(
+            report["reservation_contention"],
+            [{"resource": "homepage-sort", "value": "15",
+              "slices": ["P1.S1", "P1.S2"]}],
+        )
+
+    def test_surface_check_same_slice_dual_scope_is_not_contention(self):
+        # One slice may hold the same resource:value at BOTH phase and project
+        # scope. That is one holder, not contention — qid de-duplicated per
+        # (resource, value), so reservation_contention stays empty.
+        commands.cmd_reserve_add(repo_root=self.t.root, slice_id="P1.S1",
+                                 resource_value="homepage-sort:15", scope="phase")
+        commands.cmd_reserve_add(repo_root=self.t.root, slice_id="P1.S1",
+                                 resource_value="homepage-sort:15", scope="project")
+        report = json.loads(commands.cmd_surface_check(
+            repo_root=self.t.root, phase_id="P1", format="json"))
+        self.assertEqual(report["reservation_contention"], [])
+
+    def test_surface_check_text_sections(self):
+        commands.cmd_surface_add(repo_root=self.t.root, slice_id="P1.S1",
+                                 surfaces=["cms-block-registry"])
+        commands.cmd_surface_add(repo_root=self.t.root, slice_id="P1.S2",
+                                 surfaces=["cms-block-registry"])
+        out = commands.cmd_surface_check(repo_root=self.t.root, phase_id="P1")
+        self.assertIn("Unguarded surface overlaps", out)
+        self.assertIn("P1.S1, P1.S2: cms-block-registry", out)
+        self.assertIn("(none)", out)  # coordinated + contention sections empty
+
+    def test_surface_check_unknown_phase_raises(self):
+        with self.assertRaises(commands.CommandError):
+            commands.cmd_surface_check(repo_root=self.t.root, phase_id="P9")

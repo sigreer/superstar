@@ -194,6 +194,9 @@ def _build_parser() -> argparse.ArgumentParser:
     p_surface_remove.add_argument("surface")
     p_surface_list = surface_sub.add_parser("list")
     p_surface_list.add_argument("phase_id", nargs="?")
+    p_surface_check = surface_sub.add_parser("check")
+    p_surface_check.add_argument("phase_id")
+    p_surface_check.add_argument("--format", choices=["text", "json"], default="text")
 
     # ── reserve (P7.S2) ──
     p_reserve = sub.add_parser("reserve")
@@ -494,6 +497,10 @@ def main(argv: list[str]) -> int:
             elif args.surface_cmd == "list":
                 sys.stdout.write(commands.cmd_surface_list(
                     repo_root=root, phase_id=args.phase_id,
+                ))
+            elif args.surface_cmd == "check":
+                sys.stdout.write(commands.cmd_surface_check(
+                    repo_root=root, phase_id=args.phase_id, format=args.format,
                 ))
         elif args.cmd == "reserve":
             if args.reserve_cmd == "add":

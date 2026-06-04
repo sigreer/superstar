@@ -1407,6 +1407,89 @@ def cmd_surface_list(*, repo_root: Path, phase_id: str | None) -> str:
         return "\n".join(lines) + "\n"
 
 
+def _reservation_contention(phase: Phase) -> list:
+    """Resource:value pairs claimed by more than one non-cancelled slice in `phase`.
+
+    Empty under normal operation — `reserve add` refuses duplicates (S2). It is
+    non-empty only when a `--force` override created a deliberate collision, which
+    this audit surfaces. A single slice holding the same resource:value at both
+    phase and project scope is NOT contention, so qids are de-duplicated per pair.
+    """
+    holders: dict = {}
+    for s in phase.slices:
+        if s.status == Status.CANCELLED:
+            continue
+        qid = f"{phase.id}.{s.id}"
+        for r in s.reservations:
+            qids = holders.setdefault((r.resource, r.value), [])
+            if qid not in qids:
+                qids.append(qid)
+    return [
+        {"resource": res, "value": val, "slices": qids}
+        for (res, val), qids in holders.items()
+        if len(qids) > 1
+    ]
+
+
+def cmd_surface_check(*, repo_root: Path, phase_id: str, format: str = "text") -> str:
+    """Read-only audit (spec 4.C): unguarded surface overlaps, coordinated
+    surfaces, and reservation contention within a phase. Warning surface only —
+    never mutates, never refuses."""
+    p = _load(repo_root)
+    phase = _phase_by_id(p, phase_id)
+    actives = [
+        (f"{phase.id}.{s.id}", s) for s in phase.slices if not is_terminal(s.status)
+    ]
+    unguarded: list = []
+    coordinated: list = []
+    for i in range(len(actives)):
+        a_qid, a = actives[i]
+        for j in range(i + 1, len(actives)):
+            b_qid, b = actives[j]
+            kind, shared = _pair_surface_relation(a_qid, a, b_qid, b)
+            if kind == "overlap":
+                unguarded.append({"slices": [a_qid, b_qid], "surfaces": shared})
+            elif kind == "coordinated":
+                coordinated.append(
+                    {"slices": [a_qid, b_qid], "surfaces": shared,
+                     "group": a.coordination_group}
+                )
+    contention = _reservation_contention(phase)
+    if format == "json":
+        import json as _j
+        return _j.dumps({
+            "phase": phase.id,
+            "unguarded_overlaps": unguarded,
+            "coordinated_surfaces": coordinated,
+            "reservation_contention": contention,
+        }, indent=2) + "\n"
+    lines = [f"# {phase.id} surface check", ""]
+    lines.append("Unguarded surface overlaps (add a depends_on or coordination_group):")
+    if unguarded:
+        for e in unguarded:
+            lines.append(f"  - {', '.join(e['slices'])}: {', '.join(e['surfaces'])}")
+    else:
+        lines.append("  (none)")
+    lines.append("Coordinated surfaces (shared within a coordination_group):")
+    if coordinated:
+        for e in coordinated:
+            lines.append(
+                f"  - {', '.join(e['slices'])}: {', '.join(e['surfaces'])} "
+                f"[group={e['group']}]"
+            )
+    else:
+        lines.append("  (none)")
+    lines.append("Reservation contention (expected empty unless --force was used):")
+    if contention:
+        for e in contention:
+            lines.append(
+                f"  - {e['resource']}:{e['value']} held by {', '.join(e['slices'])}"
+            )
+    else:
+        lines.append("  (none)")
+    return "\n".join(lines) + "\n"
+
+
 def cmd_coordinate(
     *, repo_root: Path, slice_id: str,
     group: str | None = None, clear: bool = False,
