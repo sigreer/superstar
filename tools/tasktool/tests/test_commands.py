@@ -2353,3 +2353,25 @@ class SurfaceOverlapSchedulingTests(unittest.TestCase):
         # S2 is not ready-for-work, so it is not a subject: no relations on its row.
         self.assertEqual(self._row(rows, "P1.S2")["surface_overlap"], [])
         self.assertEqual(self._row(rows, "P1.S2")["coordinated"], [])
+
+    def test_ready_slices_warns_unguarded_overlap(self):
+        commands.cmd_surface_add(repo_root=self.t.root, slice_id="P1.S1",
+                                 surfaces=["cms-block-registry"])
+        commands.cmd_surface_add(repo_root=self.t.root, slice_id="P1.S2",
+                                 surfaces=["cms-block-registry"])
+        rows = json.loads(commands.cmd_ready_slices(
+            repo_root=self.t.root, phase_id="P1", format="json"))
+        s1 = self._row(rows, "P1.S1")
+        self.assertEqual(
+            s1["surface_overlap"],
+            [{"sibling": "P1.S2", "surfaces": ["cms-block-registry"]}],
+        )
+
+    def test_ready_slices_text_shows_overlap_line(self):
+        commands.cmd_surface_add(repo_root=self.t.root, slice_id="P1.S1",
+                                 surfaces=["cms-block-registry"])
+        commands.cmd_surface_add(repo_root=self.t.root, slice_id="P1.S2",
+                                 surfaces=["cms-block-registry"])
+        out = commands.cmd_ready_slices(repo_root=self.t.root, phase_id="P1")
+        self.assertIn("P1.S1", out)
+        self.assertIn("surface_overlap: P1.S2 (cms-block-registry)", out)

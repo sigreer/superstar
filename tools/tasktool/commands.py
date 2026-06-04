@@ -2095,25 +2095,33 @@ def _format_surface_relations(row: dict) -> list[str]:
 def cmd_ready_slices(*, repo_root: Path, phase_id: str, format: str = "text") -> str:
     p = _load(repo_root)
     phase = _phase_by_id(p, phase_id)
-    rows = [
-        {
-            "id": f"{phase.id}.{s.id}",
+    overlap_map = _surface_overlap_map(phase)
+    rows = []
+    for s in phase.slices:
+        if not _is_slice_ready_for_work(phase, s):
+            continue
+        qid = f"{phase.id}.{s.id}"
+        rel = overlap_map.get(qid, {"surface_overlap": [], "coordinated": []})
+        rows.append({
+            "id": qid,
             "status": s.status.value,
             "planning_status": s.planning_status.value,
             "parallel_group": s.parallel_group,
             "title": s.title,
-        }
-        for s in phase.slices
-        if _is_slice_ready_for_work(phase, s)
-    ]
+            "surface_overlap": rel["surface_overlap"],
+            "coordinated": rel["coordinated"],
+        })
     if format == "json":
         import json as _j
         return _j.dumps(rows, indent=2) + "\n"
-    return "".join(
-        f"{r['id']}  [{r['status']}/{r['planning_status']}]  "
-        f"{r['parallel_group'] or '-'}  {r['title']}\n"
-        for r in rows
-    )
+    out_lines: list[str] = []
+    for r in rows:
+        out_lines.append(
+            f"{r['id']}  [{r['status']}/{r['planning_status']}]  "
+            f"{r['parallel_group'] or '-'}  {r['title']}"
+        )
+        out_lines.extend(_format_surface_relations(r))
+    return ("\n".join(out_lines) + "\n") if out_lines else ""
 
 def cmd_schedule(*, repo_root: Path, phase_id: str, format: str = "text") -> str:
     p = _load(repo_root)
