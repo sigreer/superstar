@@ -313,6 +313,7 @@
             "P7.S2"
           ],
           "id": "S3",
+          "landed_base_sha": "7ea69b453fc70d3faf3abf93979217b56e2a2d92",
           "notes": "Spec §4.C. Surfaces: commands. ready-slices/schedule surface_overlap warnings; surface check <phase>; ratify --parallel-group warning; coordination_group suppression. Warning-only (no block).",
           "parallel_group": null,
           "plan_path": "docs/plans/2026-06-04-P7-S3-scheduling-overlap-detection.md",
@@ -331,8 +332,7 @@
           "title": "Scheduling overlap detection: ready-slices/schedule warnings, surface check, ratify warning, coordination suppression",
           "workflow_step": "implement",
           "worktree_base_sha": "a8e3661b602076becadaa8c6f216a3ef030330b2",
-          "worktree_branch": "worktree-p7-s3-scheduling-overlap-detection-ready",
-          "worktree_path": ".worktrees/worktree-p7-s3-scheduling-overlap-detection-ready"
+          "worktree_pruned_at": "2026-06-04"
         },
         {
           "blocked_on": null,
