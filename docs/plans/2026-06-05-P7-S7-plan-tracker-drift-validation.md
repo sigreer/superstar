@@ -511,7 +511,7 @@ Expected: PASS (no regressions; existing `validate` tests unaffected because cle
 - [ ] **Step 7: Manual smoke check against the live tracker**
 
 Run: `tasktool validate --format json`
-Expected: `ok: true`, `rc 0`, **empty `warnings`**. The full S7 planning package (spec, plan, handoff) and S7's own `validate` surface declaration (Task 5) all exist, so there are no S7 path warnings. The live tracker's only `parallel_group` slices (P7.S2, P7.S4, `group=core-after-model`) are terminal (`done`), so Check 1 skips them, and S7's plan mentions every surface/reservation it declares, so Check 2 is silent. The acceptance bar is: **no `surfaces`/`reservations`/`parallel_group` drift warnings, and `rc 0`** (drift is never an error). If a surface-drift warning does appear, it is genuine drift — reconcile the tracker or plan before closing the slice. (Note: if Task 5's surface declaration has not yet run when you spot-check mid-implementation, S7 will not warn — it has no `parallel_group` and an empty surface list — so this remains clean throughout.)
+Expected: `ok: true`, `rc 0`, and **no `surfaces`/`reservations`/`parallel_group` drift warnings**. The live tracker currently emits one unrelated, pre-existing path warning — `P7.S5.refs: path does not exist: docs/reviewer/p7-s5-conservative-worktree-sync-P7-S5-post-slice` — which originates from an uncommitted P7.S5 reviewer-chain directory; this is outside S7 scope and is NOT a surface-drift warning. The full S7 planning package (spec, plan, handoff) and S7's own `validate` surface declaration (Task 5) all exist, so there are no S7 path warnings. The live tracker's only `parallel_group` slices (P7.S2, P7.S4, `group=core-after-model`) are terminal (`done`), so Check 1 skips them, and S7's plan mentions every surface/reservation it declares, so Check 2 is silent. The acceptance bar is: **no `surfaces`/`reservations`/`parallel_group` drift warnings, and `rc 0`** (drift is never an error). If a surface-drift warning does appear, it is genuine drift — reconcile the tracker or plan before closing the slice. (Note: if Task 5's surface declaration has not yet run when you spot-check mid-implementation, S7 will not warn — it has no `parallel_group` and an empty surface list — so this remains clean throughout.)
 
 - [ ] **Step 8: Commit**
 
@@ -579,7 +579,7 @@ git commit -m "P7.S7: declare validate surface + ratify drift-validation slice"
 - `find_surface_drift_warnings` exists in `validate.py` with the binding signature and both checks (spec §4.A–§4.C).
 - `tasktool validate` emits Check 1 always and Check 2 only when plan files are in scope (`not no_path_warnings`); neither changes the exit code (spec §4.D).
 - All new tests in `SurfaceDriftWarningTests` pass; the full `tools/tasktool` suite is green.
-- `tasktool validate` and `tasktool validate --no-path-warnings` both return `ok: true` against the live tracker.
+- `tasktool validate` and `tasktool validate --no-path-warnings` both return `ok: true` against the live tracker, with **no S7 surface-drift warnings**. The `--no-path-warnings` invocation is fully clean (empty warnings); the plain invocation has only the unrelated pre-existing P7.S5 path warning (`P7.S5.refs: path does not exist: docs/reviewer/p7-s5-conservative-worktree-sync-P7-S5-post-slice`), which is outside S7 scope.
 - No `model.py`/`serialize.py`/`migrate.py`/schema/CLI changes (spec §4.E, §6).
 - The slice is ratified.
 
