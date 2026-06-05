@@ -267,6 +267,7 @@
           "integration_surfaces": [
             "lifecycle"
           ],
+          "landed_base_sha": "6c587f0ced8f6b10f4385b3b1c0f9d379325bf2a",
           "notes": "",
           "parallel_group": null,
           "plan_path": "docs/plans/2026-06-05-P8.S1-close-gate-lifecycle-auto-commit.md",
@@ -286,8 +287,7 @@
           "title": "tasktool close gate: refuse done when worktree branch is unlanded (--allow-unlanded escape hatch) + auto-commit tracker lifecycle mutations at close",
           "workflow_step": "done",
           "worktree_base_sha": "dbbd602797b99a1ad63fbd70899885d79fa152a3",
-          "worktree_branch": "worktree-p8-s1-tasktool-close-gate-refuse-done-when",
-          "worktree_path": ".worktrees/worktree-p8-s1-tasktool-close-gate-refuse-done-when"
+          "worktree_pruned_at": "2026-06-05"
         },
         {
           "blocked_on": null,
