@@ -205,3 +205,59 @@ def test_set_non_done_status_is_not_gated(tmp_path):
     root, _wt = start_with_unlanded_commit(tmp_path)
     r = run(root, "set", "P1.S1", "--status", "ready")
     assert r.returncode == 0, r.stdout + r.stderr
+
+
+# ───── Task 3: _git_commit_scoped ─────
+
+def _plain_repo(tmp_path):
+    repo = tmp_path / "plain"
+    repo.mkdir()
+    _git(repo, "init", "-b", "main")
+    _git(repo, "config", "user.email", "t@example.invalid")
+    _git(repo, "config", "user.name", "T")
+    (repo / "seed.txt").write_text("seed\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-m", "seed")
+    return repo
+
+
+def test_commit_scoped_commits_only_named_paths(tmp_path):
+    from tasktool import commands
+    repo = _plain_repo(tmp_path)
+    (repo / "a.txt").write_text("a\n")
+    (repo / "b.txt").write_text("b\n")
+    _git(repo, "add", "-A")
+    ok = commands._git_commit_scoped(repo, ["a.txt"], "scoped: a only")
+    assert ok is True
+    committed = _git(repo, "show", "--name-only", "--format=", "HEAD").stdout.split()
+    assert committed == ["a.txt"]
+    still_staged = _git(repo, "diff", "--cached", "--name-only").stdout.split()
+    assert still_staged == ["b.txt"]
+    assert _git(repo, "log", "-1", "--format=%s").stdout.strip() == "scoped: a only"
+
+
+def test_commit_scoped_failure_warns_and_returns_false(tmp_path, capsys):
+    from tasktool import commands
+    repo = _plain_repo(tmp_path)
+    hook = repo / ".git" / "hooks" / "pre-commit"
+    hook.write_text("#!/bin/sh\necho hook says no >&2\nexit 1\n")
+    hook.chmod(0o755)
+    (repo / "a.txt").write_text("a\n")
+    _git(repo, "add", "-A")
+    ok = commands._git_commit_scoped(repo, ["a.txt"], "will fail")
+    assert ok is False
+    err = capsys.readouterr().err
+    assert "auto-commit failed" in err
+    assert "git commit" in err
+    assert _git(repo, "log", "-1", "--format=%s").stdout.strip() == "seed"
+
+
+def test_commit_scoped_skipped_when_staging_disabled(tmp_path, monkeypatch):
+    from tasktool import commands
+    repo = _plain_repo(tmp_path)
+    (repo / "a.txt").write_text("a\n")
+    _git(repo, "add", "-A")
+    monkeypatch.setattr(commands, "STAGE_AFTER_WRITE", False)
+    ok = commands._git_commit_scoped(repo, ["a.txt"], "should not happen")
+    assert ok is True
+    assert _git(repo, "log", "-1", "--format=%s").stdout.strip() == "seed"

@@ -173,6 +173,37 @@ def _git_stage_rel(repo_root: Path, rel: str) -> None:
     except OSError:
         pass
 
+def _git_commit_scoped(write_root: Path, rels: list[str], message: str) -> bool:
+    """Commit exactly `rels` using a pathspec commit."""
+    if not STAGE_AFTER_WRITE:
+        return True
+    detail = ""
+    res = None
+    try:
+        res = _subprocess.run(
+            ["git", "commit", "-m", message, "--", *rels],
+            cwd=write_root,
+            check=False,
+            text=True,
+            stdout=_subprocess.PIPE,
+            stderr=_subprocess.STDOUT,
+        )
+    except OSError as exc:
+        detail = str(exc)
+    if res is not None and res.returncode == 0:
+        return True
+    if res is not None:
+        detail = (res.stdout or "").strip()[-2000:]
+    manual = f"cd {write_root} && git commit -m {message!r} -- " + " ".join(rels)
+    print(
+        "tasktool: warning: lifecycle auto-commit failed; tracker state is "
+        "saved and staged but NOT committed.\n"
+        f"  Commit manually: {manual}\n"
+        f"  git said: {detail}",
+        file=sys.stderr,
+    )
+    return False
+
 def _today() -> str:
     return _dt.date.today().isoformat()
 
