@@ -364,7 +364,7 @@
         },
         {
           "blocked_on": null,
-          "closed": null,
+          "closed": "2026-06-05",
           "created": "2026-06-02",
           "depends_on": [
             "P7.S4"
@@ -382,13 +382,14 @@
             "docs/reviewer/p7-s5-conservative-worktree-sync-design-spec",
             "docs/plans/2026-06-04-P7-S5-conservative-worktree-sync.md",
             "docs/handoffs/2026-06-04-P7-S5-conservative-worktree-sync-prompt.md",
-            "docs/reviewer/p7-s5-conservative-worktree-sync-plan"
+            "docs/reviewer/p7-s5-conservative-worktree-sync-plan",
+            "docs/reviewer/p7-s5-conservative-worktree-sync-P7-S5-post-slice"
           ],
           "review_active": true,
-          "review_stage": "awaiting_response",
-          "reviewer_chain": "docs/reviewer/p7-s5-conservative-worktree-sync-plan",
+          "review_stage": "passed",
+          "reviewer_chain": "docs/reviewer/p7-s5-conservative-worktree-sync-P7-S5-post-slice",
           "started": "2026-06-05",
-          "status": "in_progress",
+          "status": "done",
           "tasks": [],
           "title": "Conservative worktree sync (strict preconditions; advances base-sha)",
           "workflow_step": "implement",
@@ -398,7 +399,7 @@
         },
         {
           "blocked_on": null,
-          "closed": null,
+          "closed": "2026-06-05",
           "created": "2026-06-02",
           "depends_on": [
             "P7.S2",
@@ -416,10 +417,10 @@
             "docs/reviewer/p7-s6-skill-integration-surface-docs-plan"
           ],
           "review_active": true,
-          "review_stage": "applying_fixes",
-          "reviewer_chain": "docs/reviewer/p7-s6-skill-integration-surface-docs-plan",
+          "review_stage": "passed",
+          "reviewer_chain": "docs/reviewer/p7-s6-skill-integration-surface-docs-P7-S6-post-slice",
           "started": "2026-06-05",
-          "status": "in_progress",
+          "status": "done",
           "tasks": [],
           "title": "Skill changes: subagent-driven-development checkpoint + registry-merge-playbook; tasklist-discipline; phase-planning/writing-plans tables",
           "workflow_step": "implement",
