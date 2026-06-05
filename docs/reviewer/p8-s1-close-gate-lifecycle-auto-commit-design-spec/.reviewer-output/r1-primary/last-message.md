@@ -1,0 +1,24 @@
+1. Findings
+
+F1 Severity: blocking - The spec leaves the existing `tasktool set <id> --status done` path as an unlanded-branch bypass. The spec scopes the new gate and CLI flags only to `cmd_close` / `tasktool close` (`docs/specs/2026-06-05-P8.S1-close-gate-lifecycle-auto-commit-design.md:22`, `:88-92`), but the current code already lets `cmd_set` mark slices/phases done after applying the review gate and started check (`tools/tasktool/commands.py:1108-1122`). That means a slice with `worktree_branch` can still reach `status: done` without the landed check, undermining the phase goal that this state be unrepresentable. Specify whether `cmd_set(status=done)` must call the same landed gate / override audit path, or whether direct `set --status done` should be refused/deprecated for branch-backed rows.
+
+F2 Severity: minor - The hook acceptance reference points at a non-existent path. The spec says `templates/pre-commit-tasktool` (`docs/specs/2026-06-05-P8.S1-close-gate-lifecycle-auto-commit-design.md:115`), but the actual template is `tools/tasktool/templates/pre-commit-tasktool`. This is small, but it will send implementers/test writers to the wrong file.
+
+2. Open questions / assumptions
+
+- Assumption: the intent is to preserve the existing contract that `set --status done` cannot bypass close gates. If instead `set --status done` is now considered an administrative escape hatch, the spec should say that explicitly and explain why it is acceptable despite the “cannot reach status done” objective.
+- Assumption: auto-commit failure intentionally leaves the command-authored paths staged, matching today’s fallback behavior.
+
+3. Suggested document edits
+
+- Add a short subsection under “Behaviour 1” covering `cmd_set(... status=done ...)`: either “uses the same landed-branch gate and `--allow-unlanded --reason` audit path as close” or “refuses direct done for branch-backed slices/cross items; use `tasktool close`.”
+- Add tests for the chosen `set --status done` behavior, including an unlanded branch refusal and escape-hatch/audit behavior if supported.
+- Change `templates/pre-commit-tasktool` to `tools/tasktool/templates/pre-commit-tasktool`.
+
+4. Verification gaps / commands that should be run
+
+- `python -m pytest tools/tasktool/tests`
+- A targeted CLI test for `tasktool set P1.S1 --status done` with an unlanded recorded branch.
+- A targeted pathspec auto-commit test with an unrelated staged file plus `docs/tasklist.json`, confirming only the named path is committed and the sibling staged entry remains staged.
+
+Overall verdict: revise
