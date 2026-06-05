@@ -1264,6 +1264,7 @@ def cmd_close(
     allow_ready_close: bool = False, reason: str | None = None,
     no_archive: bool = False,
     allow_unlanded: bool = False,
+    no_commit: bool = False,
 ) -> None:
     with _write_context(repo_root) as write_root:
         p = _load(write_root)
@@ -1305,6 +1306,16 @@ def cmd_close(
         _save(write_root, p)
         if archive_path is not None:
             _git_stage(write_root, archive_path)
+        if not no_commit:
+            rels = [str(_tasklist_path(write_root).relative_to(write_root))]
+            if archive_path is not None:
+                rels.append(str(archive_path.relative_to(write_root)))
+            kind_word = "cross-cutting" if kind == "cross" else kind
+            _git_commit_scoped(
+                write_root,
+                rels,
+                f"{qid}: close {kind_word} (status=done)",
+            )
         _notify_status(qid=qid, kind=kind, status=item.status, title=item.title)
 
 def _stamp_cancellation(item, reason: str, *, suffix: str | None) -> None:

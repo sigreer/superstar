@@ -308,3 +308,84 @@ def test_commit_scoped_skipped_when_staging_disabled(tmp_path, monkeypatch):
     ok = commands._git_commit_scoped(repo, ["a.txt"], "should not happen")
     assert ok is True
     assert _git(repo, "log", "-1", "--format=%s").stdout.strip() == "seed"
+
+
+# ───── Task 4: auto-commit on close ─────
+
+def _landed(tmp_path):
+    root, wt = start_with_unlanded_commit(tmp_path)
+    _git(root, "merge", "--no-ff", "-m", "land P1.S1", BRANCH)
+    return root, wt
+
+
+def test_close_autocommits_tracker(tmp_path):
+    root, _wt = _landed(tmp_path)
+    r = run(root, "close", "P1.S1", "--skip-review-gate")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert (
+        _git(root, "status", "--porcelain", "--", "docs/tasklist.json").stdout.strip()
+        == ""
+    )
+    assert (
+        _git(root, "log", "-1", "--format=%s").stdout.strip()
+        == "P1.S1: close slice (status=done)"
+    )
+
+
+def test_close_autocommit_leaves_sibling_staged_entries(tmp_path):
+    root, _wt = _landed(tmp_path)
+    (root / "sibling.txt").write_text("co-staged by a sibling session\n")
+    _git(root, "add", "sibling.txt")
+    r = run(root, "close", "P1.S1", "--skip-review-gate")
+    assert r.returncode == 0, r.stdout + r.stderr
+    committed = _git(root, "show", "--name-only", "--format=", "HEAD").stdout.split()
+    assert committed == ["docs/tasklist.json"]
+    assert "sibling.txt" in _git(root, "diff", "--cached", "--name-only").stdout
+
+
+def test_close_cross_autocommits_tracker_and_archive(tmp_path):
+    root = seed_repo(tmp_path)
+    assert run(root, "create", "cross", "--title", "Cross work").returncode == 0
+    r = run(root, "close", "X1")
+    assert r.returncode == 0, r.stdout + r.stderr
+    committed = sorted(
+        _git(root, "show", "--name-only", "--format=", "HEAD").stdout.split()
+    )
+    assert "docs/tasklist.json" in committed
+    assert any(p.startswith("docs/archived-tasks/X1-") for p in committed)
+    assert len(committed) == 2
+    assert (
+        _git(root, "log", "-1", "--format=%s").stdout.strip()
+        == "X1: close cross-cutting (status=done)"
+    )
+
+
+def test_close_no_commit_preserves_staged_state(tmp_path):
+    root, _wt = _landed(tmp_path)
+    r = run(root, "close", "P1.S1", "--skip-review-gate", "--no-commit")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert the_slice(root)["status"] == "done"
+    assert "docs/tasklist.json" in _git(root, "diff", "--cached", "--name-only").stdout
+    assert _git(root, "log", "-1", "--format=%s").stdout.strip() == "land P1.S1"
+
+
+def test_close_commit_failure_warns_but_exits_zero(tmp_path):
+    root, _wt = _landed(tmp_path)
+    hook = root / ".git" / "hooks" / "pre-commit"
+    hook.write_text("#!/bin/sh\nexit 1\n")
+    hook.chmod(0o755)
+    r = run(root, "close", "P1.S1", "--skip-review-gate")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "auto-commit failed" in r.stderr
+    assert the_slice(root)["status"] == "done"
+    assert "docs/tasklist.json" in _git(root, "diff", "--cached", "--name-only").stdout
+
+
+def test_close_no_stage_means_no_stage_and_no_commit(tmp_path):
+    """Global --no-stage disables staging and auto-commit git side effects."""
+    root, _wt = _landed(tmp_path)
+    r = run(root, "--no-stage", "close", "P1.S1", "--skip-review-gate")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert the_slice(root)["status"] == "done"
+    assert "docs/tasklist.json" not in _git(root, "diff", "--cached", "--name-only").stdout
+    assert _git(root, "log", "-1", "--format=%s").stdout.strip() == "land P1.S1"

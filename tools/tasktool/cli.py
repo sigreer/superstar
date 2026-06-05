@@ -172,6 +172,11 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Close even though the recorded worktree branch has not landed "
              "on the base branch; requires --reason (recorded as an audit note)",
     )
+    p_close.add_argument(
+        "--no-commit", action="store_true",
+        help="Skip the scoped auto-commit of lifecycle-authored files "
+             "(tracker stays staged, as before P8.S1)",
+    )
 
     p_cancel = sub.add_parser("cancel")
     p_cancel.add_argument("id")
@@ -496,6 +501,7 @@ def main(argv: list[str]) -> int:
                 allow_ready_close=args.allow_ready_close, reason=args.reason,
                 no_archive=args.no_archive,
                 allow_unlanded=args.allow_unlanded,
+                no_commit=args.no_commit,
             )
         elif args.cmd == "cancel":
             commands.cmd_cancel(
