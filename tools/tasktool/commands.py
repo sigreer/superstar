@@ -3,6 +3,7 @@ from __future__ import annotations
 import datetime as _dt
 import json as _json
 import os as _os
+import shlex as _shlex
 import sys
 import subprocess as _subprocess
 from contextlib import contextmanager
@@ -172,6 +173,48 @@ def _git_stage_rel(repo_root: Path, rel: str) -> None:
         )
     except OSError:
         pass
+
+def _git_commit_scoped(write_root: Path, rels: list[str], message: str) -> bool:
+    """Commit exactly `rels` using a pathspec commit."""
+    if not STAGE_AFTER_WRITE:
+        return True
+    if not rels:
+        print(
+            "tasktool: warning: lifecycle auto-commit skipped; no scoped paths "
+            "were provided, so no commit was created.",
+            file=sys.stderr,
+        )
+        return False
+    detail = ""
+    res = None
+    try:
+        res = _subprocess.run(
+            ["git", "commit", "-m", message, "--", *rels],
+            cwd=write_root,
+            check=False,
+            text=True,
+            stdout=_subprocess.PIPE,
+            stderr=_subprocess.STDOUT,
+        )
+    except OSError as exc:
+        detail = str(exc)
+    if res is not None and res.returncode == 0:
+        return True
+    if res is not None:
+        detail = (res.stdout or "").strip()[-2000:]
+    quoted_rels = " ".join(_shlex.quote(rel) for rel in rels)
+    manual = (
+        f"git -C {_shlex.quote(str(write_root))} commit "
+        f"-m {_shlex.quote(message)} -- {quoted_rels}"
+    )
+    print(
+        "tasktool: warning: lifecycle auto-commit failed; tracker state is "
+        "saved and staged but NOT committed.\n"
+        f"  Commit manually: {manual}\n"
+        f"  git said: {detail}",
+        file=sys.stderr,
+    )
+    return False
 
 def _today() -> str:
     return _dt.date.today().isoformat()
@@ -705,6 +748,52 @@ def _apply_ready_close_override(qid: str, item, *, reason: str | None) -> None:
     audit = f"[{ts}] ready-close override for {qid}: {reason.strip()}"
     item.notes = (item.notes + "\n" + audit).strip() if item.notes else audit
 
+def _apply_landed_gate(
+    write_root: Path,
+    qid: str,
+    item,
+    *,
+    allow_unlanded: bool,
+    reason: str | None,
+    command: str,
+) -> None:
+    kind = parse_id(qid)[0]
+    if kind not in ("slice", "cross"):
+        return
+    if getattr(item, "worktree_in_place", False):
+        return
+    branch = getattr(item, "worktree_branch", None)
+    if not branch:
+        return
+    if allow_unlanded:
+        if not reason or not reason.strip():
+            raise CommandError(f"{qid}: --allow-unlanded requires --reason")
+        ts = _dt.datetime.now().isoformat(timespec="seconds")
+        audit = f"[{ts}] allow-unlanded override for {qid}: {reason.strip()}"
+        item.notes = (item.notes + "\n" + audit).strip() if item.notes else audit
+        return
+
+    from tasktool import worktree as wt
+
+    parent = _authoritative_parent_branch(write_root, qid)
+    if not wt.branch_exists(write_root, branch):
+        raise CommandError(
+            f"{qid}: recorded worktree branch {branch!r} no longer exists; "
+            f"cannot verify it landed on {parent!r}. Any review/started gates "
+            f"already passed, but the {command} was NOT performed. If you know "
+            f"the work landed, re-run with --allow-unlanded --reason \"...\""
+        )
+    if not wt.branch_is_merged(write_root, branch=branch, into=parent):
+        raise CommandError(
+            f"{qid}: worktree branch {branch!r} has not landed on {parent!r}. "
+            f"Any review/started gates already passed, but the {command} was "
+            f"NOT performed. Merge back first:\n"
+            f"  cd {write_root}\n"
+            f"  git merge --no-ff {branch}\n"
+            f"  tasktool {command} {qid} ...\n"
+            f"Escape hatch (records an audit note): --allow-unlanded --reason \"...\""
+        )
+
 def _archive_cross_at_root(
     write_root: Path,
     p: Project,
@@ -1075,6 +1164,7 @@ def cmd_set(
     reviewer_chain: Path | None = None,
     skip_review_gate: bool = False,
     allow_ready_close: bool = False,
+    allow_unlanded: bool = False,
     reason: str | None = None,
 ) -> None:
     # Tolerate the historical positional/keyword `repo_root=` calling style: it
@@ -1114,6 +1204,15 @@ def cmd_set(
                         f"or use `tasktool set {qid} --status done --allow-ready-close --reason ...` if applicable"
                     )
                 _apply_ready_close_override(qid, item, reason=reason)
+            if new_status == Status.DONE and kind in ("slice", "cross"):
+                _apply_landed_gate(
+                    write_root,
+                    qid,
+                    item,
+                    allow_unlanded=allow_unlanded,
+                    reason=reason,
+                    command="set",
+                )
             if new_status == Status.IN_PROGRESS:
                 _start_item(qid, item)
             else:
@@ -1164,6 +1263,8 @@ def cmd_close(
     reviewer_chain: Path | None = None, skip_review_gate: bool = False,
     allow_ready_close: bool = False, reason: str | None = None,
     no_archive: bool = False,
+    allow_unlanded: bool = False,
+    no_commit: bool = False,
 ) -> None:
     with _write_context(repo_root) as write_root:
         p = _load(write_root)
@@ -1182,6 +1283,15 @@ def cmd_close(
             if not allow_ready_close:
                 raise CommandError(f"{qid} must be started before close; run `tasktool start {qid}` first")
             _apply_ready_close_override(qid, item, reason=reason)
+        if kind in ("slice", "cross"):
+            _apply_landed_gate(
+                write_root,
+                qid,
+                item,
+                allow_unlanded=allow_unlanded,
+                reason=reason,
+                command="close",
+            )
         item.status = Status.DONE
         item.closed = closed_date or _today()
         if refs:
@@ -1196,6 +1306,16 @@ def cmd_close(
         _save(write_root, p)
         if archive_path is not None:
             _git_stage(write_root, archive_path)
+        if not no_commit:
+            rels = [str(_tasklist_path(write_root).relative_to(write_root))]
+            if archive_path is not None:
+                rels.append(str(archive_path.relative_to(write_root)))
+            kind_word = "cross-cutting" if kind == "cross" else kind
+            _git_commit_scoped(
+                write_root,
+                rels,
+                f"{qid}: close {kind_word} (status=done)",
+            )
         _notify_status(qid=qid, kind=kind, status=item.status, title=item.title)
 
 def _stamp_cancellation(item, reason: str, *, suffix: str | None) -> None:
@@ -3057,21 +3177,29 @@ def cmd_worktree_check_legacy(*, repo_root: Path, project_name: str) -> tuple[st
 def cmd_worktree_prune(
     *, repo_root: Path, id: str,
     keep_branch: bool = False, force: bool = False, finalize: bool = False,
+    no_commit: bool = False,
 ) -> None:
     from tasktool import worktree as wt
     with _write_context(repo_root) as write_root:
         p = _load(write_root)
         qid, _container, item = _find_item(p, id)
+        tasklist_rel = str(_tasklist_path(write_root).relative_to(write_root))
+
+        def _autocommit(message: str) -> None:
+            if not no_commit:
+                _git_commit_scoped(write_root, [tasklist_rel], message)
 
         if finalize:
             _worktree_finalize(write_root, item, qid)
             _save(write_root, p)
+            _autocommit(f"{qid}: finalize worktree prune")
             return
 
         # In-place slices: no worktree to prune; record timestamp and exit.
         if getattr(item, "worktree_in_place", False):
             item.worktree_pruned_at = _today()
             _save(write_root, p)
+            _autocommit(f"{qid}: prune worktree")
             print(f"{qid}: --in-place slice; no worktree to remove.")
             return
 
@@ -3134,6 +3262,7 @@ def cmd_worktree_prune(
             item.worktree_prune_pending = True
             item.worktree_prune_pending_at = _today()
             _save(write_root, p)
+            _autocommit(f"{qid}: defer worktree prune")
             authoritative = write_root
             print(
                 f"{qid}: prune deferred (running inside the worktree being removed).\n"
@@ -3166,6 +3295,7 @@ def cmd_worktree_prune(
         item.worktree_prune_pending = False
         item.worktree_prune_pending_at = None
         _save(write_root, p)
+        _autocommit(f"{qid}: prune worktree")
         print(f"{qid}: worktree pruned (path={wt_path}, branch={branch})")
 
 
