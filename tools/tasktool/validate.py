@@ -255,6 +255,31 @@ def find_path_warnings(p: Project, repo_root: Path) -> list[str]:
             _check(r, f"{c.id}.refs")
     return warnings
 
+def find_surface_drift_warnings(
+    p: Project, repo_root: Path, *, include_plan_checks: bool
+) -> list[str]:
+    """Non-fatal warnings that a slice's tracker-declared integration surfaces /
+    reservations are not reflected in its plan (Check 2, gated by
+    `include_plan_checks`), or that a slice in a parallel_group declares no surfaces
+    at all (Check 1, always run). Pure and non-raising: returns [] when clean and
+    swallows plan read errors to a skip. Mirrors find_path_warnings. See spec §4."""
+    warnings: list[str] = []
+    for ph in p.phases:
+        for s in ph.slices:
+            if is_terminal(s.status):
+                continue
+            scope = f"{ph.id}.{s.id}"
+            # Check 1 — parallel_group slice with no declared surfaces.
+            if s.parallel_group is not None and not s.integration_surfaces:
+                warnings.append(
+                    f"{scope}: in parallel_group {s.parallel_group!r} but declares "
+                    f"no integration_surfaces — declare them with "
+                    f"`tasktool surface add {scope} <surface>` or remove it from the "
+                    f"parallel group"
+                )
+    return warnings
+
+
 def strict_format_check(path: Path) -> None:
     """Re-serialise and compare bytes. Raises ValidationError on mismatch."""
     text = path.read_text(encoding="utf-8")

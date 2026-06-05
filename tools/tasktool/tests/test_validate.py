@@ -11,6 +11,7 @@ from tasktool.model import (
     Task,
     CrossCutting,
     BlockedOn,
+    Reservation,
     Status,
 )
 from tasktool.serialize import save_project, dumps_canonical
@@ -586,3 +587,63 @@ def test_validate_rejects_bad_pruned_at_date():
     import pytest
     with pytest.raises(ValidationError):
         validate_project(p)
+
+
+class SurfaceDriftWarningTests(unittest.TestCase):
+    def test_parallel_group_no_surfaces_warns(self):
+        from tasktool.validate import find_surface_drift_warnings
+        p = _project_with_slice(parallel_group="core")
+        with tempfile.TemporaryDirectory() as td:
+            warnings = find_surface_drift_warnings(
+                p, Path(td), include_plan_checks=True
+            )
+        self.assertTrue(
+            any("parallel_group" in w and "P1.S1" in w for w in warnings),
+            warnings,
+        )
+
+    def test_parallel_group_with_surfaces_no_warn(self):
+        from tasktool.validate import find_surface_drift_warnings
+        p = _project_with_slice(
+            parallel_group="core", integration_surfaces=["commands"]
+        )
+        with tempfile.TemporaryDirectory() as td:
+            warnings = find_surface_drift_warnings(
+                p, Path(td), include_plan_checks=True
+            )
+        self.assertEqual(
+            [w for w in warnings if "parallel_group" in w], []
+        )
+
+    def test_no_parallel_group_no_surfaces_no_warn(self):
+        from tasktool.validate import find_surface_drift_warnings
+        p = _project_with_slice()  # no parallel_group, no surfaces
+        with tempfile.TemporaryDirectory() as td:
+            warnings = find_surface_drift_warnings(
+                p, Path(td), include_plan_checks=True
+            )
+        self.assertEqual(warnings, [])
+
+    def test_terminal_slice_in_parallel_group_no_warn(self):
+        from tasktool.validate import find_surface_drift_warnings
+        p = _project_with_slice(
+            parallel_group="core",
+            status=Status.DONE,
+            closed="2026-05-18",
+        )
+        with tempfile.TemporaryDirectory() as td:
+            warnings = find_surface_drift_warnings(
+                p, Path(td), include_plan_checks=True
+            )
+        self.assertEqual(warnings, [])
+
+    def test_check1_runs_even_when_plan_checks_disabled(self):
+        from tasktool.validate import find_surface_drift_warnings
+        p = _project_with_slice(parallel_group="core")
+        with tempfile.TemporaryDirectory() as td:
+            warnings = find_surface_drift_warnings(
+                p, Path(td), include_plan_checks=False
+            )
+        self.assertTrue(
+            any("parallel_group" in w for w in warnings), warnings
+        )
