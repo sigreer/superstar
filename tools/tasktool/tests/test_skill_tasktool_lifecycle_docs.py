@@ -162,3 +162,70 @@ def test_subagent_early_exit_load_matches_fixture() -> None:
     assert "tasktool start" in span and (
         "do not call" in span.lower() or "do not" in span.lower()
     ), "early-exit block must forbid `tasktool start` from a subagent"
+
+
+def test_registry_merge_playbook_exists() -> None:
+    playbook = (
+        ROOT
+        / "skills"
+        / "subagent-driven-development"
+        / "references"
+        / "registry-merge-playbook.md"
+    )
+    assert playbook.is_file(), f"registry merge playbook must exist at {playbook}"
+    body = playbook.read_text(encoding="utf-8")
+    # The playbook's load-bearing instructions.
+    assert "preserve both" in body.lower()
+    assert "regenerate" in body.lower()
+    assert "rerun" in body.lower()
+
+
+def test_subagent_driven_development_runs_surface_check_before_parallel_dispatch() -> None:
+    text = skill_text("subagent-driven-development")
+    assert "tasktool surface check <phase-id>" in text
+    assert "Do not parallel-dispatch slices that share an integration surface" in text
+    # surface check is described alongside ready-slices, before dispatch
+    rs = text.index("tasktool ready-slices <phase-id>")
+    sc = text.index("tasktool surface check <phase-id>")
+    assert rs < sc, "surface check must be documented after ready-slices"
+
+
+def test_subagent_driven_development_has_integrate_main_checkpoint() -> None:
+    text = skill_text("subagent-driven-development")
+    assert "tasktool worktree status <slice-id> --integration" in text
+    assert "Integrate-current-main checkpoint" in text
+    assert "references/registry-merge-playbook.md" in text
+    # the checkpoint precedes the close gate in the slice-end sequence
+    integ = text.index("tasktool worktree status <slice-id> --integration")
+    close = text.index("tasktool close <slice-id>")
+    assert integ < close, "integrate-main checkpoint must precede the close gate"
+
+
+def test_tasklist_discipline_documents_surface_reserve_coordinate() -> None:
+    text = skill_text("tasklist-discipline")
+    # daily-commands surface
+    assert "tasktool surface add <slice-id>" in text
+    assert "tasktool surface check <phase-id>" in text
+    assert "tasktool reserve add <slice-id>" in text
+    assert "tasktool coordinate <slice-id> --group" in text
+    # conceptual model + vocabulary
+    assert "integration_surfaces" in text
+    assert "reservations" in text
+    assert "cms-block-registry" in text
+    # coordination_group vs parallel_group distinction is spelled out
+    assert "coordination_group" in text
+    assert "parallel_group" in text
+    # the three new red-flag claims
+    assert "feature independence" in text
+    assert "duplicate" in text.lower()
+
+
+def test_phase_planning_and_writing_plans_document_surface_tables() -> None:
+    for skill in ["phase-planning", "writing-plans"]:
+        text = skill_text(skill)
+        assert "surface/reservation table" in text, (
+            f"{skill} must require a surface/reservation table"
+        )
+        assert "tasktool surface check <phase-id>" in text, (
+            f"{skill} must tell the author to run surface check before ratifying"
+        )

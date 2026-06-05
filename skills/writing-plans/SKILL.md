@@ -25,6 +25,8 @@ Assume they are a skilled developer, but know almost nothing about our toolset o
 
 **Scheduling ratification:** For slice plans, inspect `tasktool show <slice-id>` and `tasktool schedule <phase-id>` before drafting. The plan must explicitly confirm or update `depends_on`, `parallel_group`, and whether the slice remains independently plannable/executable. If the spec/plan work discovers a dependency change, update it with `tasktool deps`; when the plan settles, run `tasktool ratify <slice-id>` so coordinators can rely on `tasktool ready-slices <phase-id>`.
 
+**Integration surfaces & reservations:** A slice plan that may run in parallel with siblings must include a **surface/reservation table** — for this slice (and any sibling it could overlap), list `integration_surfaces`, `reservations` (`resource:value` + scope), and `coordination_group`. Declare them on the tracker with `tasktool surface add` / `tasktool reserve add` / `tasktool coordinate`, then run `tasktool surface check <phase-id>` before ratifying. Do not place slices that share a surface in the same `parallel_group` without a `depends_on` (serialize) or a `coordination_group` (coordinate). A duplicate scarce-resource allocation is refused at declaration time — pick a free value rather than `--force`, unless you genuinely intend a coordinated shared allocation and record the reason.
+
 ## Scope Check
 
 If the spec covers multiple independent subsystems, it should have been broken into sub-project specs during brainstorming. If it wasn't, suggest breaking this into separate plans — one per subsystem. Each plan should produce working, testable software on its own.

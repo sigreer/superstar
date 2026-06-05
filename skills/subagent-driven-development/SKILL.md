@@ -40,6 +40,8 @@ Before dispatching any implementation subagent, run `[[using-git-worktrees]]` as
 
 Before dispatching implementation work for a phase, run `tasktool schedule <phase-id>` and `tasktool ready-slices <phase-id>`. Only dispatch slices returned by `ready-slices`; they have no unfinished `depends_on` entries and are not runtime-blocked. Slices sharing a `parallel_group` are candidates for parallel execution when their file scopes do not overlap. If implementation discovers a real sequencing dependency, stop dispatch for the affected slice and update the row with `tasktool deps`; do not encode planned sequencing as `blocked_on`.
 
+After `tasktool ready-slices <phase-id>`, run `tasktool surface check <phase-id>` before dispatching any slices in parallel. **Do not parallel-dispatch slices that share an integration surface without a declared `depends_on` or a shared `coordination_group`.** A shared write surface — a central registry, a schema/seed file, a renderer dispatch table, a parser union, a theme CSS tail, an ordering array — is what actually governs merge safety; feature independence does not. When `surface check` reports an unguarded `surface_overlap`, either **serialize** the slices (`tasktool deps <later-slice-id> --add <earlier-slice-id>`) or **coordinate** them (`tasktool coordinate <slice-id> --group <name>`, designate one slice as the integration owner, and plan to run the centralized-registry merge playbook at merge). Slices reported as `coordinated` may proceed in parallel; unguarded overlaps must be resolved first.
+
 Parallel slices must run in separate worktrees. Same repo, different branch, or different TodoWrite entry is not isolation if the filesystem checkout is shared. When two slices are both active, each slice's implementers, reviewer-chain writes, verification artifacts, and tasktool status mutations stay inside that slice's worktree until merge-back.
 
 **Two reviews, two scopes — do not conflate them:**
@@ -53,10 +55,11 @@ The per-task internal reviews approving every task in a slice **does not** satis
 
 - **At the end of each slice** (all the slice's tasks closed, in-loop internal reviews passed):
   1. Run `git status --short`. If setup/migration artifacts, unrelated reviewer chains, legacy path moves, unrelated tasklist mutations, files from another slice, or other dirty files outside the slice scope are present, stop and resolve that boundary before review.
-  2. Invoke `[[external-review]]` with `--kind post-slice`, passing the plan as `--file` and the spec + `docs/tasklist.json` as `--context`.
-  3. Read the verdict. On `ready` / `ready with small edits`, proceed.
-  4. On `merged_verdict: revise` (or `verdict_valid: false`), **dispatch a fix subagent** with the previous response file as input. The fix subagent MUST write `docs/reviewer/<chain>/r{N}-resolution.md` per the contract in `[[external-review]]` before signaling completion. Wait for completion. Re-submit. Iterate.
-  5. Once the verdict gates pass, run `tasktool close <slice-id>` (the CLI re-checks the reviewer chain and refuses on `revise`). See `[[tasklist-discipline]]`.
+  2. **Integrate-current-main checkpoint.** Run `tasktool worktree status <slice-id> --integration`. If a sibling slice has landed on the base branch since this slice's `worktree_base_sha` — especially one that shares an integration surface with this slice — integrate the current base branch into the worktree **before** the post-slice review: run `tasktool worktree sync <slice-id> --merge` (or `--rebase`) when that command is available, otherwise merge the base branch with raw git (`git merge <base-branch>`). Resolve any registry / schema / seed / ordering conflicts with the centralized-registry merge playbook (`references/registry-merge-playbook.md`), regenerate derived artifacts (checksums, snapshots), and rerun verification. Only then proceed. Skipping this replays already-integrated churn and produces stale-base merges. If `worktree status --integration` reports `landed: unknown` for a sibling, treat it as possibly-landed and inspect before proceeding.
+  3. Invoke `[[external-review]]` with `--kind post-slice`, passing the plan as `--file` and the spec + `docs/tasklist.json` as `--context`.
+  4. Read the verdict. On `ready` / `ready with small edits`, proceed.
+  5. On `merged_verdict: revise` (or `verdict_valid: false`), **dispatch a fix subagent** with the previous response file as input. The fix subagent MUST write `docs/reviewer/<chain>/r{N}-resolution.md` per the contract in `[[external-review]]` before signaling completion. Wait for completion. Re-submit. Iterate.
+  6. Once the verdict gates pass, run `tasktool close <slice-id>` (the CLI re-checks the reviewer chain and refuses on `revise`). See `[[tasklist-discipline]]`.
 
 - **At the end of the phase** (the last slice in the phase closes):
   1. Run the same `git status --short` scope preflight.
@@ -142,7 +145,9 @@ digraph process {
     "Code quality reviewer subagent approves?" -> "Mark task complete in TodoWrite" [label="yes"];
     "Mark task complete in TodoWrite" -> "Last task in slice?";
     "Last task in slice?" -> "More tasks remain?" [label="no"];
-    "Last task in slice?" -> "Invoke external-review --kind post-slice" [label="yes"];
+    "Integrate current main (worktree status --integration)" [shape=box];
+    "Last task in slice?" -> "Integrate current main (worktree status --integration)" [label="yes"];
+    "Integrate current main (worktree status --integration)" -> "Invoke external-review --kind post-slice";
     "Invoke external-review --kind post-slice" -> "post-slice verdict ready?";
     "post-slice verdict ready?" -> "Dispatch fix subagent with reviewer response" [label="revise"];
     "Dispatch fix subagent with reviewer response" -> "Invoke external-review --kind post-slice" [label="re-submit"];
@@ -199,6 +204,10 @@ Implementer subagents report one of four statuses. Handle each appropriately:
 - `./implementer-prompt.md` - Dispatch implementer subagent
 - `./spec-reviewer-prompt.md` - Dispatch spec compliance reviewer subagent
 - `./code-quality-reviewer-prompt.md` - Dispatch code quality reviewer subagent
+
+## References
+
+- `./references/registry-merge-playbook.md` — how to merge centralized-registry / schema / seed / ordering conflicts when a coordinated sibling slice has landed before this slice's post-slice review: preserve **both** semantic additions, regenerate derived artifacts, rerun focused parser/schema/seed tests, then rerun integrated verification.
 
 ## Example Workflow
 
