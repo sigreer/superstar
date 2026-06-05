@@ -1,0 +1,288 @@
+{
+  "schema_version": 1,
+  "chain": "p8-s2-skill-closeout-sequence-design-spec",
+  "kind": "spec",
+  "target": "docs/specs/2026-06-05-P8.S2-skill-closeout-sequence-design.md",
+  "work_id": "P8.S2",
+  "legacy_migrated": false,
+  "rounds": [
+    {
+      "round": 1,
+      "reviewers": [
+        {
+          "role": "primary",
+          "sweep_group": null,
+          "parent_round": 1,
+          "request": "r1-2026-06-05T2328-request.md",
+          "response": "r1-2026-06-05T2328-response.md",
+          "verdict": "revise",
+          "verdict_valid": true,
+          "returncode": 0,
+          "status": "ok",
+          "provider": "claude",
+          "caller_provider": "codex",
+          "model": null,
+          "sandbox": {
+            "repo_root": "/home/simon/Dev/sigreer/skills/superstar",
+            "scratch_dir": "/tmp/superstar-reviewer-p8-s2-skill-closeout-sequence-design-spec-r1-primary-q7wbi5qk",
+            "response_dir": "docs/reviewer/p8-s2-skill-closeout-sequence-design-spec/.reviewer-output/r1-primary",
+            "mode": "plan-read-only"
+          },
+          "started_at": "2026-06-05T22:28:05.514Z",
+          "finished_at": "2026-06-05T22:32:53.240Z",
+          "duration_ms": 287726,
+          "estimated_usage": {
+            "formula": "ceil(chars / 4)",
+            "prompt_chars": 41324,
+            "response_chars": 9941,
+            "estimated_input_tokens": 10331,
+            "estimated_output_tokens": 2486,
+            "estimated_total_tokens": 12817
+          },
+          "exact_usage": {
+            "input_tokens": 9649,
+            "cache_creation_input_tokens": 100107,
+            "cache_read_input_tokens": 940793,
+            "output_tokens": 20649,
+            "server_tool_use": {
+              "web_search_requests": 0,
+              "web_fetch_requests": 0
+            },
+            "service_tier": "standard",
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 100107,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "inference_geo": "not_available",
+            "iterations": [
+              {
+                "input_tokens": 2,
+                "output_tokens": 6926,
+                "cache_read_input_tokens": 98857,
+                "cache_creation_input_tokens": 1250,
+                "cache_creation": {
+                  "ephemeral_5m_input_tokens": 0,
+                  "ephemeral_1h_input_tokens": 1250
+                },
+                "type": "message"
+              }
+            ],
+            "speed": "standard",
+            "total_tokens": 1071198,
+            "provider": "claude"
+          },
+          "usage_capture_status": "exact",
+          "usage_capture_error": null
+        }
+      ],
+      "status": "ok",
+      "returncode": 0,
+      "started_at": "2026-06-05T22:28:05.514Z",
+      "finished_at": "2026-06-05T22:32:53.240Z",
+      "duration_ms": 287726,
+      "provider": "claude",
+      "caller_provider": "codex",
+      "model": null,
+      "estimated_usage": {
+        "formula": "ceil(chars / 4)",
+        "prompt_chars": 41324,
+        "response_chars": 9941,
+        "estimated_input_tokens": 10331,
+        "estimated_output_tokens": 2486,
+        "estimated_total_tokens": 12817
+      },
+      "exact_usage": {
+        "input_tokens": 9649,
+        "cache_creation_input_tokens": 100107,
+        "cache_read_input_tokens": 940793,
+        "output_tokens": 20649,
+        "server_tool_use": {
+          "web_search_requests": 0,
+          "web_fetch_requests": 0
+        },
+        "service_tier": "standard",
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 100107,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "inference_geo": "not_available",
+        "iterations": [
+          {
+            "input_tokens": 2,
+            "output_tokens": 6926,
+            "cache_read_input_tokens": 98857,
+            "cache_creation_input_tokens": 1250,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 1250
+            },
+            "type": "message"
+          }
+        ],
+        "speed": "standard",
+        "total_tokens": 1071198,
+        "provider": "claude"
+      },
+      "usage_capture_status": "exact",
+      "usage_capture_error": null,
+      "merged_verdict": "revise",
+      "merged_findings": null,
+      "request": "r1-2026-06-05T2328-request.md",
+      "response": "r1-2026-06-05T2328-response.md",
+      "resolution": null,
+      "resolution_parse_status": null,
+      "resolution_waiver": false,
+      "head_sha_at_request": "8dc279401675966743865dd3661ca6d56f7bd783",
+      "head_sha_after_round": "8dc279401675966743865dd3661ca6d56f7bd783",
+      "worktree_dirty_at_request": true,
+      "verdict": "revise",
+      "verdict_valid": true,
+      "findings_count": 7,
+      "blocking_findings_count": 1,
+      "base_ref": null,
+      "base_ref_source": null,
+      "diff_included": false
+    },
+    {
+      "round": 2,
+      "reviewers": [
+        {
+          "role": "primary",
+          "sweep_group": null,
+          "parent_round": 2,
+          "request": "r2-2026-06-05T2333-request.md",
+          "response": "r2-2026-06-05T2333-response.md",
+          "verdict": "ready with small edits",
+          "verdict_valid": true,
+          "returncode": 0,
+          "status": "ok",
+          "provider": "claude",
+          "caller_provider": "codex",
+          "model": null,
+          "sandbox": {
+            "repo_root": "/home/simon/Dev/sigreer/skills/superstar",
+            "scratch_dir": "/tmp/superstar-reviewer-p8-s2-skill-closeout-sequence-design-spec-r2-primary-zlkubt54",
+            "response_dir": "docs/reviewer/p8-s2-skill-closeout-sequence-design-spec/.reviewer-output/r2-primary",
+            "mode": "plan-read-only"
+          },
+          "started_at": "2026-06-05T22:33:42.830Z",
+          "finished_at": "2026-06-05T22:35:58.239Z",
+          "duration_ms": 135409,
+          "estimated_usage": {
+            "formula": "ceil(chars / 4)",
+            "prompt_chars": 36473,
+            "response_chars": 9095,
+            "estimated_input_tokens": 9119,
+            "estimated_output_tokens": 2274,
+            "estimated_total_tokens": 11393
+          },
+          "exact_usage": {
+            "input_tokens": 9372,
+            "cache_creation_input_tokens": 54893,
+            "cache_read_input_tokens": 107592,
+            "output_tokens": 10156,
+            "server_tool_use": {
+              "web_search_requests": 0,
+              "web_fetch_requests": 0
+            },
+            "service_tier": "standard",
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 54893,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "inference_geo": "not_available",
+            "iterations": [
+              {
+                "input_tokens": 1022,
+                "output_tokens": 7968,
+                "cache_read_input_tokens": 55108,
+                "cache_creation_input_tokens": 15754,
+                "cache_creation": {
+                  "ephemeral_5m_input_tokens": 0,
+                  "ephemeral_1h_input_tokens": 15754
+                },
+                "type": "message"
+              }
+            ],
+            "speed": "standard",
+            "total_tokens": 182013,
+            "provider": "claude"
+          },
+          "usage_capture_status": "exact",
+          "usage_capture_error": null
+        }
+      ],
+      "status": "ok",
+      "returncode": 0,
+      "started_at": "2026-06-05T22:33:42.830Z",
+      "finished_at": "2026-06-05T22:35:58.239Z",
+      "duration_ms": 135409,
+      "provider": "claude",
+      "caller_provider": "codex",
+      "model": null,
+      "estimated_usage": {
+        "formula": "ceil(chars / 4)",
+        "prompt_chars": 36473,
+        "response_chars": 9095,
+        "estimated_input_tokens": 9119,
+        "estimated_output_tokens": 2274,
+        "estimated_total_tokens": 11393
+      },
+      "exact_usage": {
+        "input_tokens": 9372,
+        "cache_creation_input_tokens": 54893,
+        "cache_read_input_tokens": 107592,
+        "output_tokens": 10156,
+        "server_tool_use": {
+          "web_search_requests": 0,
+          "web_fetch_requests": 0
+        },
+        "service_tier": "standard",
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 54893,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "inference_geo": "not_available",
+        "iterations": [
+          {
+            "input_tokens": 1022,
+            "output_tokens": 7968,
+            "cache_read_input_tokens": 55108,
+            "cache_creation_input_tokens": 15754,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 15754
+            },
+            "type": "message"
+          }
+        ],
+        "speed": "standard",
+        "total_tokens": 182013,
+        "provider": "claude"
+      },
+      "usage_capture_status": "exact",
+      "usage_capture_error": null,
+      "merged_verdict": "ready with small edits",
+      "merged_findings": null,
+      "request": "r2-2026-06-05T2333-request.md",
+      "response": "r2-2026-06-05T2333-response.md",
+      "resolution": null,
+      "resolution_parse_status": null,
+      "resolution_waiver": false,
+      "head_sha_at_request": "8dc279401675966743865dd3661ca6d56f7bd783",
+      "head_sha_after_round": "8dc279401675966743865dd3661ca6d56f7bd783",
+      "worktree_dirty_at_request": true,
+      "verdict": "ready with small edits",
+      "verdict_valid": true,
+      "findings_count": 8,
+      "blocking_findings_count": 2,
+      "base_ref": "8dc279401675966743865dd3661ca6d56f7bd783",
+      "base_ref_source": "auto",
+      "diff_included": true
+    }
+  ],
+  "sweep_checkpoints": {
+    "first-round": "pending",
+    "final-ready": "pending"
+  }
+}
