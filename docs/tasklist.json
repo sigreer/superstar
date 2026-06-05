@@ -449,11 +449,14 @@
             "docs/reviewer/p7-s7-plan-tracker-drift-validation-plan"
           ],
           "reviewer_chain": "docs/reviewer/p7-s7-plan-tracker-drift-validation-plan",
-          "started": null,
-          "status": "ready",
+          "started": "2026-06-05",
+          "status": "in_progress",
           "tasks": [],
           "title": "Plan-tracker drift validation (declared surfaces/reservations reflected in plan)",
-          "workflow_step": "implement"
+          "workflow_step": "implement",
+          "worktree_base_sha": "65acbcbbb849509088a9625088322dfe12ef7a4b",
+          "worktree_branch": "worktree-p7-s7-plan-tracker-drift-validation-declared",
+          "worktree_path": ".worktrees/worktree-p7-s7-plan-tracker-drift-validation-declared"
         },
         {
           "blocked_on": null,
