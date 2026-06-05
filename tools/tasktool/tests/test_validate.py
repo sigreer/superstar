@@ -758,3 +758,53 @@ class SurfaceDriftWarningTests(unittest.TestCase):
                 p, root, include_plan_checks=False
             )
         self.assertEqual([w for w in warnings if "does not appear" in w], [])
+
+    def _write_project(self, root, project):
+        from tasktool.serialize import save_project
+        path = root / "docs" / "tasklist.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        save_project(project, path)
+
+    def _drift_project(self, plan_rel):
+        """A slice that triggers BOTH checks at once: parallel_group with NO
+        surfaces (Check 1) plus a reservation absent from the plan text (Check 2).
+        Using an empty integration_surfaces list is required — Check 1 only fires
+        when surfaces are empty, so a fixture that declares surfaces would not
+        exercise the nudge."""
+        return _project_with_slice(
+            plan_path=plan_rel,
+            parallel_group="core",
+            reservations=[Reservation(resource="homepage-sort", value="15")],
+        )
+
+    def test_cmd_validate_reports_drift_warning_rc0(self):
+        import json
+        from tasktool import commands
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            root_, plan_rel = self._plan_repo(td, "mentions nothing relevant")
+            p = self._drift_project(plan_rel)
+            self._write_project(root, p)
+            rc, out = commands.cmd_validate(repo_root=root, format="json")
+        payload = json.loads(out)
+        self.assertEqual(rc, 0)  # drift never fails validation
+        self.assertTrue(payload["ok"])
+        joined = " ".join(payload["warnings"])
+        self.assertIn("parallel_group", joined)   # Check 1 (no surfaces)
+        self.assertIn("does not appear in plan", joined)  # Check 2 (reservation)
+
+    def test_cmd_validate_no_path_warnings_suppresses_check2_only(self):
+        import json
+        from tasktool import commands
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            root_, plan_rel = self._plan_repo(td, "mentions nothing relevant")
+            p = self._drift_project(plan_rel)
+            self._write_project(root, p)
+            rc, out = commands.cmd_validate(
+                repo_root=root, format="json", no_path_warnings=True
+            )
+        payload = json.loads(out)
+        joined = " ".join(payload["warnings"])
+        self.assertIn("parallel_group", joined)        # Check 1 still runs
+        self.assertNotIn("does not appear in plan", joined)  # Check 2 suppressed

@@ -2463,7 +2463,7 @@ def _cmd_validate_at_root(
 ) -> tuple[int, str]:
     from tasktool.validate import (
         validate_project, ValidationError, strict_format_check, normalise_file,
-        find_path_warnings, validate_orphan_filenames,
+        find_path_warnings, validate_orphan_filenames, find_surface_drift_warnings,
     )
     path = _tasklist_path(repo_root)
     if not path.exists():
@@ -2477,6 +2477,11 @@ def _cmd_validate_at_root(
     except (ValidationError, ValueError) as e:
         errors.append(str(e))
     if project is not None and not errors:
+        warnings.extend(
+            find_surface_drift_warnings(
+                project, repo_root, include_plan_checks=not no_path_warnings
+            )
+        )
         if not no_path_warnings:
             warnings.extend(find_path_warnings(project, repo_root))
         if check_orphans:
