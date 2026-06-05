@@ -4,6 +4,7 @@ Spec: docs/specs/2026-06-05-P8.S1-close-gate-lifecycle-auto-commit-design.md
 """
 import json
 import os
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -248,7 +249,53 @@ def test_commit_scoped_failure_warns_and_returns_false(tmp_path, capsys):
     assert ok is False
     err = capsys.readouterr().err
     assert "auto-commit failed" in err
-    assert "git commit" in err
+    assert f"git -C {shlex.quote(str(repo))} commit" in err
+    assert _git(repo, "log", "-1", "--format=%s").stdout.strip() == "seed"
+
+
+def test_commit_scoped_empty_rels_refuses_without_committing_staged_file(tmp_path, capsys):
+    from tasktool import commands
+    repo = _plain_repo(tmp_path)
+    (repo / "unrelated.txt").write_text("unrelated\n")
+    _git(repo, "add", "-A")
+    ok = commands._git_commit_scoped(repo, [], "should not commit")
+    assert ok is False
+    err = capsys.readouterr().err
+    assert "no scoped paths" in err
+    assert _git(repo, "log", "-1", "--format=%s").stdout.strip() == "seed"
+    still_staged = _git(repo, "diff", "--cached", "--name-only").stdout.split()
+    assert still_staged == ["unrelated.txt"]
+
+
+def test_commit_scoped_failure_warns_with_quoted_manual_command_and_keeps_path_staged(
+    tmp_path, capsys
+):
+    from tasktool import commands
+    repo = tmp_path / "plain repo; $(touch pwned)"
+    repo.mkdir()
+    _git(repo, "init", "-b", "main")
+    _git(repo, "config", "user.email", "t@example.invalid")
+    _git(repo, "config", "user.name", "T")
+    (repo / "seed.txt").write_text("seed\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-m", "seed")
+    hook = repo / ".git" / "hooks" / "pre-commit"
+    hook.write_text("#!/bin/sh\necho hook says no >&2\nexit 1\n")
+    hook.chmod(0o755)
+    rel = "dir with spaces/file; $(touch nope).txt"
+    (repo / "dir with spaces").mkdir()
+    (repo / rel).write_text("a\n")
+    _git(repo, "add", "-A")
+    message = "will fail; $(touch message-pwned)"
+    ok = commands._git_commit_scoped(repo, [rel], message)
+    assert ok is False
+    err = capsys.readouterr().err
+    assert "auto-commit failed" in err
+    assert f"git -C {shlex.quote(str(repo))} commit" in err
+    assert f"-m {shlex.quote(message)}" in err
+    assert f"-- {shlex.quote(rel)}" in err
+    still_staged = _git(repo, "diff", "--cached", "--name-only").stdout.splitlines()
+    assert still_staged == [rel]
     assert _git(repo, "log", "-1", "--format=%s").stdout.strip() == "seed"
 
 

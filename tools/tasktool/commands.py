@@ -3,6 +3,7 @@ from __future__ import annotations
 import datetime as _dt
 import json as _json
 import os as _os
+import shlex as _shlex
 import sys
 import subprocess as _subprocess
 from contextlib import contextmanager
@@ -177,6 +178,13 @@ def _git_commit_scoped(write_root: Path, rels: list[str], message: str) -> bool:
     """Commit exactly `rels` using a pathspec commit."""
     if not STAGE_AFTER_WRITE:
         return True
+    if not rels:
+        print(
+            "tasktool: warning: lifecycle auto-commit skipped; no scoped paths "
+            "were provided, so no commit was created.",
+            file=sys.stderr,
+        )
+        return False
     detail = ""
     res = None
     try:
@@ -194,7 +202,11 @@ def _git_commit_scoped(write_root: Path, rels: list[str], message: str) -> bool:
         return True
     if res is not None:
         detail = (res.stdout or "").strip()[-2000:]
-    manual = f"cd {write_root} && git commit -m {message!r} -- " + " ".join(rels)
+    quoted_rels = " ".join(_shlex.quote(rel) for rel in rels)
+    manual = (
+        f"git -C {_shlex.quote(str(write_root))} commit "
+        f"-m {_shlex.quote(message)} -- {quoted_rels}"
+    )
     print(
         "tasktool: warning: lifecycle auto-commit failed; tracker state is "
         "saved and staged but NOT committed.\n"
