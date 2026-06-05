@@ -1,0 +1,216 @@
+{
+  "schema_version": 1,
+  "chain": "p7-s5-conservative-worktree-sync-P7-S5-post-slice",
+  "kind": "post-slice",
+  "target": "docs/plans/2026-06-04-P7-S5-conservative-worktree-sync.md",
+  "work_id": "P7.S5",
+  "legacy_migrated": false,
+  "rounds": [
+    {
+      "round": 1,
+      "reviewers": [
+        {
+          "role": "primary",
+          "sweep_group": null,
+          "parent_round": 1,
+          "request": "r1-2026-06-05T0115-primary-request.md",
+          "response": "r1-2026-06-05T0115-primary-response.md",
+          "verdict": "ready with small edits",
+          "verdict_valid": true,
+          "returncode": 0,
+          "status": "ok",
+          "provider": "claude",
+          "caller_provider": "codex",
+          "model": null,
+          "sandbox": {
+            "repo_root": "/home/simon/Dev/sigreer/skills/superstar/.worktrees/worktree-p7-s5-conservative-worktree-sync-strict",
+            "scratch_dir": "/tmp/superstar-reviewer-p7-s5-conservative-worktree-sync-P7-S5-post-slice-r1-primary-m55n5pln",
+            "response_dir": "docs/reviewer/p7-s5-conservative-worktree-sync-P7-S5-post-slice/.reviewer-output/r1-primary",
+            "mode": "plan-read-only"
+          },
+          "started_at": "2026-06-05T00:15:14.670Z",
+          "finished_at": "2026-06-05T00:19:40.460Z",
+          "duration_ms": 265789,
+          "estimated_usage": {
+            "formula": "ceil(chars / 4)",
+            "prompt_chars": 50080,
+            "response_chars": 7494,
+            "estimated_input_tokens": 12520,
+            "estimated_output_tokens": 1874,
+            "estimated_total_tokens": 14394
+          },
+          "exact_usage": {
+            "input_tokens": 9480,
+            "cache_creation_input_tokens": 109903,
+            "cache_read_input_tokens": 1172796,
+            "output_tokens": 17564,
+            "server_tool_use": {
+              "web_search_requests": 0,
+              "web_fetch_requests": 0
+            },
+            "service_tier": "standard",
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 109903,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "inference_geo": "not_available",
+            "iterations": [
+              {
+                "input_tokens": 2,
+                "output_tokens": 6606,
+                "cache_read_input_tokens": 105438,
+                "cache_creation_input_tokens": 4465,
+                "cache_creation": {
+                  "ephemeral_5m_input_tokens": 0,
+                  "ephemeral_1h_input_tokens": 4465
+                },
+                "type": "message"
+              }
+            ],
+            "speed": "standard",
+            "total_tokens": 1309743,
+            "provider": "claude"
+          },
+          "usage_capture_status": "exact",
+          "usage_capture_error": null
+        },
+        {
+          "role": "sweep",
+          "sweep_group": 1,
+          "parent_round": 1,
+          "request": "r1-2026-06-05T0115-sweep1-request.md",
+          "response": "r1-2026-06-05T0115-sweep1-response.md",
+          "verdict": "ready with small edits",
+          "verdict_valid": true,
+          "returncode": 0,
+          "status": "ok",
+          "provider": "claude",
+          "caller_provider": "codex",
+          "model": null,
+          "sandbox": {
+            "repo_root": "/home/simon/Dev/sigreer/skills/superstar/.worktrees/worktree-p7-s5-conservative-worktree-sync-strict",
+            "scratch_dir": "/tmp/superstar-reviewer-p7-s5-conservative-worktree-sync-P7-S5-post-slice-r1-sweep1-05re32ev",
+            "response_dir": "docs/reviewer/p7-s5-conservative-worktree-sync-P7-S5-post-slice/.reviewer-output/r1-sweep1",
+            "mode": "plan-read-only"
+          },
+          "started_at": "2026-06-05T00:19:40.462Z",
+          "finished_at": "2026-06-05T00:23:18.400Z",
+          "duration_ms": 217937,
+          "estimated_usage": {
+            "formula": "ceil(chars / 4)",
+            "prompt_chars": 50080,
+            "response_chars": 8020,
+            "estimated_input_tokens": 12520,
+            "estimated_output_tokens": 2005,
+            "estimated_total_tokens": 14525
+          },
+          "exact_usage": {
+            "input_tokens": 9655,
+            "cache_creation_input_tokens": 35363,
+            "cache_read_input_tokens": 1068074,
+            "output_tokens": 15075,
+            "server_tool_use": {
+              "web_search_requests": 0,
+              "web_fetch_requests": 0
+            },
+            "service_tier": "standard",
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 35363,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "inference_geo": "not_available",
+            "iterations": [
+              {
+                "input_tokens": 2,
+                "output_tokens": 4614,
+                "cache_read_input_tokens": 76444,
+                "cache_creation_input_tokens": 2588,
+                "cache_creation": {
+                  "ephemeral_5m_input_tokens": 0,
+                  "ephemeral_1h_input_tokens": 2588
+                },
+                "type": "message"
+              }
+            ],
+            "speed": "standard",
+            "total_tokens": 1128167,
+            "provider": "claude"
+          },
+          "usage_capture_status": "exact",
+          "usage_capture_error": null
+        }
+      ],
+      "status": "ok",
+      "returncode": 0,
+      "started_at": "2026-06-05T00:15:14.670Z",
+      "finished_at": "2026-06-05T00:19:40.460Z",
+      "duration_ms": 265789,
+      "provider": "claude",
+      "caller_provider": "codex",
+      "model": null,
+      "estimated_usage": {
+        "formula": "ceil(chars / 4)",
+        "prompt_chars": 50080,
+        "response_chars": 7494,
+        "estimated_input_tokens": 12520,
+        "estimated_output_tokens": 1874,
+        "estimated_total_tokens": 14394
+      },
+      "exact_usage": {
+        "input_tokens": 9480,
+        "cache_creation_input_tokens": 109903,
+        "cache_read_input_tokens": 1172796,
+        "output_tokens": 17564,
+        "server_tool_use": {
+          "web_search_requests": 0,
+          "web_fetch_requests": 0
+        },
+        "service_tier": "standard",
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 109903,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "inference_geo": "not_available",
+        "iterations": [
+          {
+            "input_tokens": 2,
+            "output_tokens": 6606,
+            "cache_read_input_tokens": 105438,
+            "cache_creation_input_tokens": 4465,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 4465
+            },
+            "type": "message"
+          }
+        ],
+        "speed": "standard",
+        "total_tokens": 1309743,
+        "provider": "claude"
+      },
+      "usage_capture_status": "exact",
+      "usage_capture_error": null,
+      "merged_verdict": "ready with small edits",
+      "merged_findings": "r1-merged-findings.md",
+      "request": "r1-2026-06-05T0115-primary-request.md",
+      "response": "r1-2026-06-05T0115-primary-response.md",
+      "resolution": null,
+      "resolution_parse_status": null,
+      "resolution_waiver": false,
+      "head_sha_at_request": "da899317ff9beb446084d61d41f35bfba568dd16",
+      "head_sha_after_round": "da899317ff9beb446084d61d41f35bfba568dd16",
+      "worktree_dirty_at_request": true,
+      "verdict": "ready with small edits",
+      "verdict_valid": true,
+      "findings_count": 5,
+      "blocking_findings_count": 1,
+      "base_ref": null,
+      "base_ref_source": null,
+      "diff_included": false
+    }
+  ],
+  "sweep_checkpoints": {
+    "first-round": "completed",
+    "final-ready": "pending"
+  }
+}

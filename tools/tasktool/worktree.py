@@ -212,6 +212,44 @@ def working_tree_dirty(root: Path) -> tuple[bool, list[str]]:
     return (bool(items), items)
 
 
+def working_tree_dirty_for_sync(
+    root: Path, *, allow_staged_tasklist: bool = False
+) -> tuple[bool, list[str]]:
+    """Dirty check for worktree sync.
+
+    When syncing an in-place slice in the authoritative checkout, staged-only
+    docs/tasklist.json is safe tasktool state. Unstaged tasklist bytes and all
+    other dirt still refuse.
+    """
+    items: list[str] = []
+    status = _git(root, "status", "--porcelain", check=False).stdout.splitlines()
+    for line in status:
+        if not line.strip():
+            continue
+        code = line[:2]
+        path = line[3:]
+        staged_only_tasklist = (
+            allow_staged_tasklist
+            and path == "docs/tasklist.json"
+            and code in {"A ", "M "}
+        )
+        if staged_only_tasklist:
+            continue
+        items.append(path)
+
+    branch = git_current_branch(root)
+    if branch:
+        stash = _git(root, "stash", "list", check=False).stdout.splitlines()
+        marker_wip = f"WIP on {branch}:"
+        marker_on = f"On {branch}:"
+        for line in stash:
+            if marker_wip in line or marker_on in line:
+                items.append(f"stash: {line}")
+    # The staged-tasklist allowance intentionally recognizes only plain
+    # add/modify status lines. Renames, deletes, and quoted paths stay dirty.
+    return (bool(items), items)
+
+
 def branch_is_merged(root: Path, *, branch: str, into: str) -> bool:
     """True iff `branch` is reachable from `into` (a strict ancestor or equal)."""
     res = _git(root, "merge-base", "--is-ancestor", branch, into, check=False)
