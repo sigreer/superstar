@@ -1,5 +1,5 @@
 # tools/tasktool/tests/test_pre_commit_hook.py
-import json, os, subprocess, sys, shutil, textwrap
+import json, os, subprocess, shlex, sys, shutil, textwrap
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[3]
@@ -215,6 +215,13 @@ def test_staged_good_dirty_worktree_passes(tmp_path):
 def test_lifecycle_autocommit_passes_real_hook(tmp_path):
     """P8.S1: close auto-commit runs through the installed hook and passes."""
     repo, env = _seed_repo(tmp_path)
+    hook_log = repo / "tasktool-hook.log"
+    (tmp_path / "bin" / "tasktool").write_text(
+        "#!/usr/bin/env sh\n"
+        f"printf '%s\\n' \"$*\" >> {shlex.quote(str(hook_log))}\n"
+        f"exec {shlex.quote(sys.executable)} {shlex.quote(str(TOOL))} \"$@\"\n",
+        encoding="utf-8",
+    )
     _git(repo, "add", "-A", env=env)
     _git(repo, "commit", "-m", "seed", env=env)
     r = _tasktool(repo, "create", "phase", "--title", "P", env=env)
@@ -240,9 +247,20 @@ def test_lifecycle_autocommit_passes_real_hook(tmp_path):
     _git(wt, "commit", "-m", "work", env=env)
     _git(repo, "merge", "--no-ff", "-m", "land", branch, env=env)
 
+    hook_invocations_before_close = hook_log.read_text(encoding="utf-8").splitlines()
     r = _tasktool(repo, "close", "P1.S1", "--skip-review-gate", env=env)
     assert r.returncode == 0, r.stdout + r.stderr
     assert "auto-commit failed" not in r.stderr
+    hook_invocations_after_close = hook_log.read_text(encoding="utf-8").splitlines()
+    close_hook_invocations = hook_invocations_after_close[len(hook_invocations_before_close):]
+    assert any(
+        " validate --strict-format --no-path-warnings --format text" in invocation
+        for invocation in close_hook_invocations
+    ), close_hook_invocations
+    assert any(
+        " validate --no-path-warnings --format text" in invocation
+        for invocation in close_hook_invocations
+    ), close_hook_invocations
     log = _git(repo, "log", "-1", "--format=%s", env=env).stdout.strip()
     assert log == "P1.S1: close slice (status=done)"
 
