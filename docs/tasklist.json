@@ -384,12 +384,17 @@
             "docs/handoffs/2026-06-04-P7-S5-conservative-worktree-sync-prompt.md",
             "docs/reviewer/p7-s5-conservative-worktree-sync-plan"
           ],
+          "review_active": true,
+          "review_stage": "awaiting_response",
           "reviewer_chain": "docs/reviewer/p7-s5-conservative-worktree-sync-plan",
-          "started": null,
-          "status": "ready",
+          "started": "2026-06-05",
+          "status": "in_progress",
           "tasks": [],
           "title": "Conservative worktree sync (strict preconditions; advances base-sha)",
-          "workflow_step": "implement"
+          "workflow_step": "implement",
+          "worktree_base_sha": "0290ebd94333f9c197c8f718ca85c9df539c51fc",
+          "worktree_branch": "worktree-p7-s5-conservative-worktree-sync-strict",
+          "worktree_path": ".worktrees/worktree-p7-s5-conservative-worktree-sync-strict"
         },
         {
           "blocked_on": null,
@@ -410,12 +415,17 @@
             "docs/handoffs/2026-06-04-P7-S6-skill-integration-surface-docs-prompt.md",
             "docs/reviewer/p7-s6-skill-integration-surface-docs-plan"
           ],
+          "review_active": true,
+          "review_stage": "applying_fixes",
           "reviewer_chain": "docs/reviewer/p7-s6-skill-integration-surface-docs-plan",
-          "started": null,
-          "status": "ready",
+          "started": "2026-06-05",
+          "status": "in_progress",
           "tasks": [],
           "title": "Skill changes: subagent-driven-development checkpoint + registry-merge-playbook; tasklist-discipline; phase-planning/writing-plans tables",
-          "workflow_step": "implement"
+          "workflow_step": "implement",
+          "worktree_base_sha": "0290ebd94333f9c197c8f718ca85c9df539c51fc",
+          "worktree_branch": "worktree-p7-s6-skill-changes-subagent-driven",
+          "worktree_path": ".worktrees/worktree-p7-s6-skill-changes-subagent-driven"
         },
         {
           "blocked_on": null,
