@@ -31,6 +31,39 @@ def git_current_branch(root: Path) -> str:
     return _git(root, "branch", "--show-current").stdout.strip()
 
 
+def current_branch_head_sha(root: Path, branch: str) -> str:
+    """Return the full 40-char commit SHA at the tip of `branch`."""
+    return _git(root, "rev-parse", "--verify", f"refs/heads/{branch}").stdout.strip()
+
+
+def merge_base_sha(root: Path, a: str, b: str) -> str | None:
+    """Return the merge-base SHA of `a` and `b`, or None if they share no history."""
+    res = _git(root, "merge-base", a, b, check=False)
+    out = res.stdout.strip()
+    return out or None
+
+
+def rev_list_shas(root: Path, base: str, head: str) -> list[str]:
+    """Commits reachable from `head` but not `base` (the half-open `base..head`)."""
+    res = _git(root, "rev-list", f"{base}..{head}", check=False)
+    return [line.strip() for line in res.stdout.splitlines() if line.strip()]
+
+
+def rev_list_count(root: Path, base: str, head: str) -> int:
+    return len(rev_list_shas(root, base, head))
+
+
+def commit_is_in_range(root: Path, sha: str, *, base: str, head: str) -> bool:
+    """True iff `sha` is reachable from `head` but not from `base`."""
+    reachable_from_head = _git(
+        root, "merge-base", "--is-ancestor", sha, head, check=False
+    ).returncode == 0
+    reachable_from_base = _git(
+        root, "merge-base", "--is-ancestor", sha, base, check=False
+    ).returncode == 0
+    return reachable_from_head and not reachable_from_base
+
+
 def same_repository(left: Path, right: Path) -> bool:
     try:
         return git_common_dir(left) == git_common_dir(right)
@@ -176,6 +209,44 @@ def working_tree_dirty(root: Path) -> tuple[bool, list[str]]:
         for line in stash:
             if marker_wip in line or marker_on in line:
                 items.append(f"stash: {line}")
+    return (bool(items), items)
+
+
+def working_tree_dirty_for_sync(
+    root: Path, *, allow_staged_tasklist: bool = False
+) -> tuple[bool, list[str]]:
+    """Dirty check for worktree sync.
+
+    When syncing an in-place slice in the authoritative checkout, staged-only
+    docs/tasklist.json is safe tasktool state. Unstaged tasklist bytes and all
+    other dirt still refuse.
+    """
+    items: list[str] = []
+    status = _git(root, "status", "--porcelain", check=False).stdout.splitlines()
+    for line in status:
+        if not line.strip():
+            continue
+        code = line[:2]
+        path = line[3:]
+        staged_only_tasklist = (
+            allow_staged_tasklist
+            and path == "docs/tasklist.json"
+            and code in {"A ", "M "}
+        )
+        if staged_only_tasklist:
+            continue
+        items.append(path)
+
+    branch = git_current_branch(root)
+    if branch:
+        stash = _git(root, "stash", "list", check=False).stdout.splitlines()
+        marker_wip = f"WIP on {branch}:"
+        marker_on = f"On {branch}:"
+        for line in stash:
+            if marker_wip in line or marker_on in line:
+                items.append(f"stash: {line}")
+    # The staged-tasklist allowance intentionally recognizes only plain
+    # add/modify status lines. Renames, deletes, and quoted paths stay dirty.
     return (bool(items), items)
 
 

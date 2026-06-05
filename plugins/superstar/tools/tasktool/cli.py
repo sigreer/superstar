@@ -125,9 +125,15 @@ def _build_parser() -> argparse.ArgumentParser:
     p_wt_list.add_argument("--all", action="store_true", dest="show_all")
     p_wt_status = wt_sub.add_parser("status")
     p_wt_status.add_argument("id")
+    p_wt_status.add_argument("--integration", action="store_true")
     p_wt_adopt = wt_sub.add_parser("adopt")
     p_wt_adopt.add_argument("id")
     p_wt_adopt.add_argument("path")
+    p_wt_sync = wt_sub.add_parser("sync")
+    p_wt_sync.add_argument("id")
+    sync_mode = p_wt_sync.add_mutually_exclusive_group(required=True)
+    sync_mode.add_argument("--merge", action="store_true")
+    sync_mode.add_argument("--rebase", action="store_true")
     wt_sub.add_parser("ensure-gitignore")
     p_wt_legacy = wt_sub.add_parser("check-legacy")
     p_wt_legacy.add_argument("--project", required=True)
@@ -181,6 +187,44 @@ def _build_parser() -> argparse.ArgumentParser:
     p_ratify.add_argument("--status", choices=["proposed", "ratified", "superseded"],
                           default="ratified")
     p_ratify.add_argument("--parallel-group")
+
+    # ── surface (P7.S2) ──
+    p_surface = sub.add_parser("surface")
+    surface_sub = p_surface.add_subparsers(dest="surface_cmd", required=True)
+    p_surface_add = surface_sub.add_parser("add")
+    p_surface_add.add_argument("slice_id")
+    p_surface_add.add_argument("surfaces", nargs="+")
+    p_surface_remove = surface_sub.add_parser("remove")
+    p_surface_remove.add_argument("slice_id")
+    p_surface_remove.add_argument("surface")
+    p_surface_list = surface_sub.add_parser("list")
+    p_surface_list.add_argument("phase_id", nargs="?")
+    p_surface_check = surface_sub.add_parser("check")
+    p_surface_check.add_argument("phase_id")
+    p_surface_check.add_argument("--format", choices=["text", "json"], default="text")
+
+    # ── reserve (P7.S2) ──
+    p_reserve = sub.add_parser("reserve")
+    reserve_sub = p_reserve.add_subparsers(dest="reserve_cmd", required=True)
+    p_reserve_add = reserve_sub.add_parser("add")
+    p_reserve_add.add_argument("slice_id")
+    p_reserve_add.add_argument("resource_value", metavar="resource:value")
+    p_reserve_add.add_argument("--scope", choices=["phase", "project"], default="phase")
+    p_reserve_add.add_argument("--note")
+    p_reserve_add.add_argument("--force", action="store_true")
+    p_reserve_add.add_argument("--reason")
+    p_reserve_remove = reserve_sub.add_parser("remove")
+    p_reserve_remove.add_argument("slice_id")
+    p_reserve_remove.add_argument("resource_value", metavar="resource:value")
+    p_reserve_list = reserve_sub.add_parser("list")
+    p_reserve_list.add_argument("phase_id", nargs="?")
+
+    # ── coordinate (P7.S2) ──
+    p_coordinate = sub.add_parser("coordinate")
+    p_coordinate.add_argument("slice_id")
+    coord_excl = p_coordinate.add_mutually_exclusive_group(required=True)
+    coord_excl.add_argument("--group")
+    coord_excl.add_argument("--clear", action="store_true")
 
     p_planning_path = sub.add_parser("planning-path")
     p_planning_path.add_argument("phase_id")
@@ -394,9 +438,25 @@ def main(argv: list[str]) -> int:
             if args.wt_cmd == "list":
                 sys.stdout.write(commands.cmd_worktree_list(repo_root=root, show_all=args.show_all))
             elif args.wt_cmd == "status":
-                sys.stdout.write(commands.cmd_worktree_status(repo_root=root, id=args.id))
+                if args.integration:
+                    sys.stdout.write(
+                        commands.cmd_worktree_status_integration(repo_root=root, id=args.id)
+                    )
+                else:
+                    sys.stdout.write(
+                        commands.cmd_worktree_status(repo_root=root, id=args.id)
+                    )
             elif args.wt_cmd == "adopt":
                 commands.cmd_worktree_adopt(repo_root=root, id=args.id, path=Path(args.path))
+            elif args.wt_cmd == "sync":
+                sys.stdout.write(
+                    commands.cmd_worktree_sync(
+                        repo_root=root,
+                        id=args.id,
+                        merge=args.merge,
+                        rebase=args.rebase,
+                    )
+                )
             elif args.wt_cmd == "ensure-gitignore":
                 sys.stdout.write(commands.cmd_worktree_ensure_gitignore(repo_root=root))
             elif args.wt_cmd == "check-legacy":
@@ -435,9 +495,49 @@ def main(argv: list[str]) -> int:
         elif args.cmd == "deps":
             commands.cmd_deps(repo_root=root, slice_id=args.slice_id, add=args.add, remove=args.remove)
         elif args.cmd == "ratify":
-            commands.cmd_ratify(
+            warning = commands.cmd_ratify(
                 repo_root=root, slice_id=args.slice_id,
                 status=args.status, parallel_group=args.parallel_group,
+            )
+            if warning:
+                sys.stderr.write(warning)
+        elif args.cmd == "surface":
+            if args.surface_cmd == "add":
+                commands.cmd_surface_add(
+                    repo_root=root, slice_id=args.slice_id, surfaces=args.surfaces,
+                )
+            elif args.surface_cmd == "remove":
+                commands.cmd_surface_remove(
+                    repo_root=root, slice_id=args.slice_id, surface=args.surface,
+                )
+            elif args.surface_cmd == "list":
+                sys.stdout.write(commands.cmd_surface_list(
+                    repo_root=root, phase_id=args.phase_id,
+                ))
+            elif args.surface_cmd == "check":
+                sys.stdout.write(commands.cmd_surface_check(
+                    repo_root=root, phase_id=args.phase_id, format=args.format,
+                ))
+        elif args.cmd == "reserve":
+            if args.reserve_cmd == "add":
+                commands.cmd_reserve_add(
+                    repo_root=root, slice_id=args.slice_id,
+                    resource_value=args.resource_value, scope=args.scope,
+                    note=args.note, force=args.force, reason=args.reason,
+                )
+            elif args.reserve_cmd == "remove":
+                commands.cmd_reserve_remove(
+                    repo_root=root, slice_id=args.slice_id,
+                    resource_value=args.resource_value,
+                )
+            elif args.reserve_cmd == "list":
+                sys.stdout.write(commands.cmd_reserve_list(
+                    repo_root=root, phase_id=args.phase_id,
+                ))
+        elif args.cmd == "coordinate":
+            commands.cmd_coordinate(
+                repo_root=root, slice_id=args.slice_id,
+                group=args.group, clear=args.clear,
             )
         elif args.cmd == "planning-path":
             commands.cmd_phase_planning_path(repo_root=root, phase_id=args.phase_id, path=args.path)

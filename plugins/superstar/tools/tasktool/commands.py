@@ -19,6 +19,7 @@ from tasktool.model import (
     ArchivedCrossCutting,
     Project, Phase, Slice, Task, CrossCutting, BlockedOn, Status, PlanningStatus,
     SliceWorkflowStep, PhaseWorkflowStep, ReviewStage,
+    Reservation, LedgerReservation,
     is_terminal,
 )
 from tasktool.serialize import load_project, save_project
@@ -883,7 +884,7 @@ def cmd_start(
         # we touch the filesystem.
         _preflight_start(qid, item, resume=resume)
         if in_place:
-            _apply_start_in_place(qid, item)
+            _apply_start_in_place(write_root, qid, item)
         else:
             adopt_path: Path | None = Path(adopt).expanduser().resolve() if adopt else None
             if adopt_path is None and auto_adopt_path is not None:
@@ -990,6 +991,16 @@ def _apply_start_default(write_root: Path, qid: str, item, *, resume: bool) -> N
             f"{qid}: branch {canonical_branch!r} already exists out-of-band; "
             f"adopt the existing worktree or delete the branch."
         )
+    # Ad-hoc (CrossCutting) rows reuse this helper but do not carry the
+    # worktree_base_sha field (S1 added it to Slice only); guard accordingly.
+    if hasattr(item, "worktree_base_sha"):
+        from tasktool.config import load_config
+        from tasktool.worktree import current_branch_head_sha
+        base_branch = load_config(write_root).tasklist.authoritative_branch
+        try:
+            item.worktree_base_sha = current_branch_head_sha(write_root, base_branch)
+        except _subprocess.CalledProcessError:
+            item.worktree_base_sha = None
     canonical_path.parent.mkdir(parents=True, exist_ok=True)
     _subprocess.run(
         ["git", "worktree", "add", "-b", canonical_branch, str(canonical_path)],
@@ -1001,7 +1012,7 @@ def _apply_start_default(write_root: Path, qid: str, item, *, resume: bool) -> N
     print(f"cd {canonical_path}")
 
 
-def _apply_start_in_place(qid: str, item) -> None:
+def _apply_start_in_place(write_root: Path, qid: str, item) -> None:
     if item.worktree_path is not None:
         raise CommandError(
             f"{qid}: --in-place refused; slice already has a recorded worktree at {item.worktree_path!r}."
@@ -1009,6 +1020,14 @@ def _apply_start_in_place(qid: str, item) -> None:
     item.worktree_in_place = True
     item.worktree_path = None
     item.worktree_branch = None
+    if hasattr(item, "worktree_base_sha") and (write_root / ".git").exists():
+        from tasktool.config import load_config
+        from tasktool.worktree import current_branch_head_sha
+        base_branch = load_config(write_root).tasklist.authoritative_branch
+        try:
+            item.worktree_base_sha = current_branch_head_sha(write_root, base_branch)
+        except _subprocess.CalledProcessError:
+            item.worktree_base_sha = None
 
 
 def _apply_start_adopt(write_root: Path, qid: str, item, adopt_path: Path) -> None:
@@ -1034,6 +1053,14 @@ def _apply_start_adopt(write_root: Path, qid: str, item, adopt_path: Path) -> No
     item.worktree_path = rel_str
     item.worktree_branch = branch
     item.worktree_in_place = False
+    if hasattr(item, "worktree_base_sha"):
+        from tasktool.config import load_config
+        from tasktool.worktree import merge_base_sha
+        base_branch = load_config(write_root).tasklist.authoritative_branch
+        try:
+            item.worktree_base_sha = merge_base_sha(write_root, branch, base_branch)
+        except _subprocess.CalledProcessError:
+            item.worktree_base_sha = None
     print(f"cd {adopt_path}")
 
 def cmd_set(
@@ -1304,10 +1331,47 @@ def cmd_deps(
             item.depends_on.remove(dep)
         _save(write_root, p)
 
+def _ratify_parallel_group_warning(p: Project, qid: str, item: Slice) -> str | None:
+    """If `item` now sits in a parallel_group alongside a sibling it shares an
+    integration surface with — and they are not reconciled by a depends_on link or
+    a shared coordination_group — return a steer warning (spec 4.C). parallel_group
+    asserts independence; a shared write surface contradicts that. Warning only;
+    ratify still succeeds. Returns None when there is nothing to warn about."""
+    group = item.parallel_group
+    if not group:
+        return None
+    phase_id = qid.split(".")[0]
+    phase = _phase_by_id(p, phase_id)
+    conflicts: list = []
+    for s in phase.slices:
+        s_qid = f"{phase_id}.{s.id}"
+        if s_qid == qid or is_terminal(s.status):
+            continue
+        if s.parallel_group != group:
+            continue
+        kind, shared = _pair_surface_relation(qid, item, s_qid, s)
+        if kind == "overlap":
+            conflicts.append((s_qid, shared))
+    if not conflicts:
+        return None
+    lines = [
+        f"tasktool: ratify warning: {qid} shares an integration surface with "
+        f"sibling(s) already in parallel_group {group!r}, with no depends_on or "
+        f"coordination_group link:"
+    ]
+    for s_qid, shared in conflicts:
+        lines.append(f"  - {s_qid}: {', '.join(shared)}")
+    lines.append(
+        "Either add a depends_on (serialize) or a coordination_group (coordinate); "
+        "parallel_group asserts independence."
+    )
+    return "\n".join(lines) + "\n"
+
+
 def cmd_ratify(
     *, repo_root: Path, slice_id: str,
     status: str = "ratified", parallel_group: str | None = None,
-) -> None:
+) -> str | None:
     with _write_context(repo_root) as write_root:
         p = _load(write_root)
         qid, _container, item = _find_item(p, slice_id)
@@ -1317,7 +1381,334 @@ def cmd_ratify(
         item.planning_status = PlanningStatus(status)
         if parallel_group is not None:
             item.parallel_group = parallel_group or None
+        warning = _ratify_parallel_group_warning(p, qid, item)
         _save(write_root, p)
+        return warning
+
+
+# ───── surface / reserve / coordinate (P7.S2) ─────
+
+def _require_slice(p: Project, slice_id: str, verb: str):
+    """Resolve `slice_id` to a slice row, refusing non-slice ids and cancelled rows.
+    Returns (qid, item)."""
+    qid, _container, item = _find_item(p, slice_id)
+    if parse_id(qid)[0] != "slice":
+        raise CommandError(f"{verb} only works on slices; {qid} is a {parse_id(qid)[0]}")
+    _refuse_if_cancelled(qid, item, verb)
+    return qid, item
+
+
+def cmd_surface_add(*, repo_root: Path, slice_id: str, surfaces: list[str]) -> None:
+    cleaned = [s.strip() for s in surfaces if s and s.strip()]
+    if not cleaned:
+        raise CommandError("surface add requires at least one non-empty surface")
+    with _write_context(repo_root) as write_root:
+        p = _load(write_root)
+        _qid, item = _require_slice(p, slice_id, "surface add")
+        for s in cleaned:
+            if s not in item.integration_surfaces:
+                item.integration_surfaces.append(s)
+        _save(write_root, p)
+
+
+def cmd_surface_remove(*, repo_root: Path, slice_id: str, surface: str) -> None:
+    surface = (surface or "").strip()
+    if not surface:
+        raise CommandError("surface remove requires a non-empty surface")
+    with _write_context(repo_root) as write_root:
+        p = _load(write_root)
+        _qid, item = _require_slice(p, slice_id, "surface remove")
+        if surface in item.integration_surfaces:
+            item.integration_surfaces.remove(surface)
+        _save(write_root, p)
+
+
+def _iter_phase_slices(p: Project, phase_id: str | None):
+    """Yield (phase, slice) for the given phase, or all active phases if None."""
+    for ph in p.phases:
+        if phase_id is not None and ph.id != phase_id:
+            continue
+        for slc in ph.slices:
+            yield ph, slc
+
+
+def cmd_surface_list(*, repo_root: Path, phase_id: str | None) -> str:
+    with _read_context(repo_root) as write_root:
+        p = _load(write_root)
+        if phase_id is not None and not any(ph.id == phase_id for ph in p.phases):
+            raise CommandError(f"phase {phase_id} not found")
+        lines: list[str] = []
+        for ph, slc in _iter_phase_slices(p, phase_id):
+            surfaces = ", ".join(slc.integration_surfaces) if slc.integration_surfaces else "(none)"
+            lines.append(f"{ph.id}.{slc.id}  [{slc.status.value}]  {surfaces}")
+        if not lines:
+            return "(no slices)\n"
+        return "\n".join(lines) + "\n"
+
+
+def _reservation_contention(phase: Phase) -> list:
+    """Resource:value pairs claimed by more than one non-cancelled slice in `phase`.
+
+    Empty under normal operation — `reserve add` refuses duplicates (S2). It is
+    non-empty only when a `--force` override created a deliberate collision, which
+    this audit surfaces. A single slice holding the same resource:value at both
+    phase and project scope is NOT contention, so qids are de-duplicated per pair.
+    """
+    holders: dict = {}
+    for s in phase.slices:
+        if s.status == Status.CANCELLED:
+            continue
+        qid = f"{phase.id}.{s.id}"
+        for r in s.reservations:
+            qids = holders.setdefault((r.resource, r.value), [])
+            if qid not in qids:
+                qids.append(qid)
+    return [
+        {"resource": res, "value": val, "slices": qids}
+        for (res, val), qids in holders.items()
+        if len(qids) > 1
+    ]
+
+
+def cmd_surface_check(*, repo_root: Path, phase_id: str, format: str = "text") -> str:
+    """Read-only audit (spec 4.C): unguarded surface overlaps, coordinated
+    surfaces, and reservation contention within a phase. Warning surface only —
+    never mutates, never refuses."""
+    p = _load(repo_root)
+    phase = _phase_by_id(p, phase_id)
+    actives = [
+        (f"{phase.id}.{s.id}", s) for s in phase.slices if not is_terminal(s.status)
+    ]
+    unguarded: list = []
+    coordinated: list = []
+    for i in range(len(actives)):
+        a_qid, a = actives[i]
+        for j in range(i + 1, len(actives)):
+            b_qid, b = actives[j]
+            kind, shared = _pair_surface_relation(a_qid, a, b_qid, b)
+            if kind == "overlap":
+                unguarded.append({"slices": [a_qid, b_qid], "surfaces": shared})
+            elif kind == "coordinated":
+                coordinated.append(
+                    {"slices": [a_qid, b_qid], "surfaces": shared,
+                     "group": a.coordination_group}
+                )
+    contention = _reservation_contention(phase)
+    if format == "json":
+        import json as _j
+        return _j.dumps({
+            "phase": phase.id,
+            "unguarded_overlaps": unguarded,
+            "coordinated_surfaces": coordinated,
+            "reservation_contention": contention,
+        }, indent=2) + "\n"
+    lines = [f"# {phase.id} surface check", ""]
+    lines.append("Unguarded surface overlaps (add a depends_on or coordination_group):")
+    if unguarded:
+        for e in unguarded:
+            lines.append(f"  - {', '.join(e['slices'])}: {', '.join(e['surfaces'])}")
+    else:
+        lines.append("  (none)")
+    lines.append("Coordinated surfaces (shared within a coordination_group):")
+    if coordinated:
+        for e in coordinated:
+            lines.append(
+                f"  - {', '.join(e['slices'])}: {', '.join(e['surfaces'])} "
+                f"[group={e['group']}]"
+            )
+    else:
+        lines.append("  (none)")
+    lines.append("Reservation contention (expected empty unless --force was used):")
+    if contention:
+        for e in contention:
+            lines.append(
+                f"  - {e['resource']}:{e['value']} held by {', '.join(e['slices'])}"
+            )
+    else:
+        lines.append("  (none)")
+    return "\n".join(lines) + "\n"
+
+
+def cmd_coordinate(
+    *, repo_root: Path, slice_id: str,
+    group: str | None = None, clear: bool = False,
+) -> None:
+    if clear and group is not None:
+        raise CommandError("coordinate: --group and --clear are mutually exclusive")
+    if not clear and (group is None or not group.strip()):
+        raise CommandError("coordinate requires --group <name> or --clear")
+    with _write_context(repo_root) as write_root:
+        p = _load(write_root)
+        _qid, item = _require_slice(p, slice_id, "coordinate")
+        item.coordination_group = None if clear else group.strip()
+        _save(write_root, p)
+
+
+def _parse_resource_value(raw: str) -> tuple[str, str]:
+    """Split `<resource>:<value>` on the FIRST colon. Both halves must be non-empty."""
+    if ":" not in raw:
+        raise CommandError(
+            f"reservation must be <resource>:<value>, got {raw!r}"
+        )
+    resource, value = raw.split(":", 1)
+    resource, value = resource.strip(), value.strip()
+    if not resource or not value:
+        raise CommandError(
+            f"reservation must be <resource>:<value> with non-empty halves, got {raw!r}"
+        )
+    return resource, value
+
+
+def _phase_of_slice(p: Project, qid: str):
+    """Return the Phase containing the qualified slice id `qid`."""
+    phase_part, _slice_part, _ = split_qualified(qid)
+    return next((ph for ph in p.phases if ph.id == phase_part), None)
+
+
+def _phase_scope_holder(p: Project, phase, reserving_qid: str, resource: str, value: str):
+    """Return the qualified id of a non-cancelled slice in `phase` (other than the
+    reserving slice) that already holds `resource:value`, or None. Done slices count."""
+    for slc in phase.slices:
+        slc_qid = f"{phase.id}.{slc.id}"
+        if slc_qid == reserving_qid:
+            continue
+        if slc.status == Status.CANCELLED:
+            continue
+        for r in slc.reservations:
+            if r.resource == resource and r.value == value:
+                return slc_qid
+    return None
+
+
+def _project_scope_holder(p: Project, reserving_qid: str, resource: str, value: str):
+    """Return the holder id (qualified slice id, or a ledger owner descriptor) of a
+    project-scoped `resource:value` collision, or None.
+
+    Checks (a) every non-cancelled slice across ALL active phases except the
+    reserving slice, then (b) `Project.reservations_ledger` (archived holders).
+    A ledger match is reported via `_format_ledger_holder`."""
+    for ph in p.phases:
+        for slc in ph.slices:
+            slc_qid = f"{ph.id}.{slc.id}"
+            if slc_qid == reserving_qid:
+                continue
+            if slc.status == Status.CANCELLED:
+                continue
+            for r in slc.reservations:
+                if r.resource == resource and r.value == value:
+                    return slc_qid
+    for lr in p.reservations_ledger:
+        if lr.resource == resource and lr.value == value:
+            return _format_ledger_holder(lr)
+    return None
+
+
+def _format_ledger_holder(lr) -> str:
+    """Holder descriptor for a ledger entry, naming owner + archive date."""
+    return f"{lr.owner_id} (archived {lr.archived_date} from phase {lr.owner_phase_id})"
+
+
+def _ladder_project_reservations(p: Project, phase, *, archived_date: str) -> None:
+    """Append project-scoped reservations from the phase's NON-CANCELLED (done) slices
+    to `Project.reservations_ledger` as LedgerReservations.
+
+    Deduped on (resource, value, scope, owner_id): re-running is idempotent (same owner
+    ⇒ same key), and two distinct done slices that --force-shared a value both survive.
+    Cancelled slices contribute nothing."""
+    existing = {
+        (lr.resource, lr.value, lr.scope, lr.owner_id)
+        for lr in p.reservations_ledger
+    }
+    for slc in phase.slices:
+        if slc.status == Status.CANCELLED:
+            continue
+        owner_id = f"{phase.id}.{slc.id}"
+        for r in slc.reservations:
+            if r.scope != "project":
+                continue
+            key = (r.resource, r.value, r.scope, owner_id)
+            if key in existing:
+                continue
+            existing.add(key)
+            p.reservations_ledger.append(LedgerReservation(
+                resource=r.resource, value=r.value, scope=r.scope, note=r.note,
+                owner_id=owner_id, owner_phase_id=phase.id, archived_date=archived_date,
+            ))
+
+
+def cmd_reserve_add(
+    *, repo_root: Path, slice_id: str, resource_value: str,
+    scope: str = "phase", note: str | None = None,
+    force: bool = False, reason: str | None = None,
+) -> None:
+    if scope not in ("phase", "project"):
+        raise CommandError(f"reserve add: --scope must be phase or project, got {scope!r}")
+    resource, value = _parse_resource_value(resource_value)
+    with _write_context(repo_root) as write_root:
+        p = _load(write_root)
+        qid, item = _require_slice(p, slice_id, "reserve add")
+        # Self-dedupe keyed on (resource, value, scope): re-declaring the same
+        # tuple on the same slice is a no-op, but the SAME resource:value at a
+        # DIFFERENT scope (phase vs project) is a distinct, allowed reservation.
+        if any(
+            r.resource == resource and r.value == value and r.scope == scope
+            for r in item.reservations
+        ):
+            return
+        phase = _phase_of_slice(p, qid)
+        if scope == "project":
+            holder = _project_scope_holder(p, qid, resource, value)
+            holder_context = "project scope"
+        else:
+            holder = _phase_scope_holder(p, phase, qid, resource, value)
+            holder_context = f"phase {phase.id}"
+        if force:
+            if reason is None or not reason.strip():
+                raise CommandError("reserve add --force requires --reason \"...\"")
+        elif holder is not None:
+            raise CommandError(
+                f"reserve add: {resource}:{value} is already reserved by {holder} "
+                f"in {holder_context}; use --force --reason \"...\" to override"
+            )
+        item.reservations.append(
+            Reservation(resource=resource, value=value, scope=scope, note=note)
+        )
+        if force and holder is not None:
+            ts = _dt.datetime.now().isoformat(timespec="seconds")
+            line = (
+                f"Reservation-override {ts}: {resource}:{value} over {holder} "
+                f"— {reason.strip()}"
+            )
+            item.notes = (item.notes + "\n" + line).strip() if item.notes else line
+        _save(write_root, p)
+
+
+def cmd_reserve_remove(*, repo_root: Path, slice_id: str, resource_value: str) -> None:
+    resource, value = _parse_resource_value(resource_value)
+    with _write_context(repo_root) as write_root:
+        p = _load(write_root)
+        _qid, item = _require_slice(p, slice_id, "reserve remove")
+        item.reservations = [
+            r for r in item.reservations
+            if not (r.resource == resource and r.value == value)
+        ]
+        _save(write_root, p)
+
+
+def cmd_reserve_list(*, repo_root: Path, phase_id: str | None) -> str:
+    with _read_context(repo_root) as write_root:
+        p = _load(write_root)
+        if phase_id is not None and not any(ph.id == phase_id for ph in p.phases):
+            raise CommandError(f"phase {phase_id} not found")
+        lines: list[str] = []
+        for ph, slc in _iter_phase_slices(p, phase_id):
+            for r in slc.reservations:
+                note = f"  — {r.note}" if r.note else ""
+                lines.append(f"{ph.id}.{slc.id}  {r.resource}:{r.value}  [{r.scope}]{note}")
+        if not lines:
+            return "(no reservations)\n"
+        return "\n".join(lines) + "\n"
+
 
 def cmd_phase_planning_path(*, repo_root: Path, phase_id: str, path: str | None) -> None:
     with _write_context(repo_root) as write_root:
@@ -1674,6 +2065,10 @@ def cmd_show(*, repo_root: Path, id: str) -> str:
         lines.append("worktree_in_place: true")
     if getattr(item, "worktree_pruned_at", None):
         lines.append(f"worktree_pruned_at: {item.worktree_pruned_at}")
+    if getattr(item, "worktree_base_sha", None):
+        lines.append(f"worktree_base_sha: {item.worktree_base_sha}")
+    if getattr(item, "landed_base_sha", None):
+        lines.append(f"landed_base_sha: {item.landed_base_sha}")
     if getattr(item, "worktree_prune_pending", False):
         lines.append("worktree_prune_pending: true")
         if getattr(item, "worktree_prune_pending_at", None):
@@ -1722,34 +2117,140 @@ def _is_slice_ready_for_work(phase: Phase, s: Slice) -> bool:
         return False
     return all(dep in _done_slice_ids(phase) for dep in s.depends_on)
 
+def _dep_link(a_qid: str, a: Slice, b_qid: str, b: Slice) -> bool:
+    """True if either slice declares the other as a dependency (link in either
+    direction). A dep link serializes the pair, so a shared surface is reconciled."""
+    return b_qid in (a.depends_on or []) or a_qid in (b.depends_on or [])
+
+
+def _shared_surfaces(a: Slice, b: Slice) -> list[str]:
+    """Sorted intersection of two slices' declared integration surfaces."""
+    return sorted(set(a.integration_surfaces or []) & set(b.integration_surfaces or []))
+
+
+def _same_coord_group(a: Slice, b: Slice) -> bool:
+    """True if both slices name the same, non-None coordination_group."""
+    return a.coordination_group is not None and a.coordination_group == b.coordination_group
+
+
+def _pair_surface_relation(
+    a_qid: str, a: Slice, b_qid: str, b: Slice,
+) -> tuple[str | None, list[str]]:
+    """Classify the surface relationship between two slices (spec 4.C).
+
+    Returns (kind, shared_surfaces):
+      - (None, [])           no shared surface
+      - (None, [...])        shared surface but a depends_on link serializes them
+      - ("coordinated", ...) shared surface, no dep link, same coordination_group
+      - ("overlap", ...)     shared surface, no dep link, different/absent group
+
+    Precedence is dep-link first (serialization fully reconciles), then
+    coordination group, then unguarded overlap.
+    """
+    shared = _shared_surfaces(a, b)
+    if not shared:
+        return None, []
+    if _dep_link(a_qid, a, b_qid, b):
+        return None, shared
+    if _same_coord_group(a, b):
+        return "coordinated", shared
+    return "overlap", shared
+
+
+def _surface_overlap_map(phase: Phase) -> dict:
+    """Classify surface relationships for the phase's scheduling reporters (spec
+    4.C: "for each ready/in-progress slice ... other non-terminal slices").
+
+    SUBJECTS are narrowed to the slices eligible for parallel dispatch right now —
+    ready-for-work or in-progress. A blocked, dependency-waiting, superseded, or
+    terminal slice is never a subject (it will not be dispatched now, so a warning
+    on its row is noise). CANDIDATES are every non-terminal sibling, so a ready
+    subject is still warned about a not-yet-ready sibling that writes the same
+    surface.
+
+    Returns subject_qid -> {"surface_overlap": [...], "coordinated": [...]} where
+    each overlap entry is {"sibling": qid, "surfaces": [...]} and each coordinated
+    entry additionally carries "group".
+    """
+    candidates = [
+        (f"{phase.id}.{s.id}", s) for s in phase.slices if not is_terminal(s.status)
+    ]
+    out: dict = {}
+    for s in phase.slices:
+        # Subject predicate: ready-for-work (deps met, not terminal/blocked/
+        # superseded — see _is_slice_ready_for_work) OR actively in progress.
+        if not (s.status == Status.IN_PROGRESS or _is_slice_ready_for_work(phase, s)):
+            continue
+        a_qid = f"{phase.id}.{s.id}"
+        overlap: list = []
+        coordinated: list = []
+        for b_qid, b in candidates:
+            if b_qid == a_qid:
+                continue
+            kind, shared = _pair_surface_relation(a_qid, s, b_qid, b)
+            if kind == "overlap":
+                overlap.append({"sibling": b_qid, "surfaces": shared})
+            elif kind == "coordinated":
+                coordinated.append(
+                    {"sibling": b_qid, "surfaces": shared, "group": s.coordination_group}
+                )
+        out[a_qid] = {"surface_overlap": overlap, "coordinated": coordinated}
+    return out
+
+
+def _format_surface_relations(row: dict) -> list[str]:
+    """Indented text lines describing a scheduling row's surface relationships.
+    Empty when the row has neither overlaps nor coordinated siblings."""
+    lines: list[str] = []
+    for e in row.get("surface_overlap", []):
+        lines.append(
+            f"    surface_overlap: {e['sibling']} ({', '.join(e['surfaces'])})"
+        )
+    for e in row.get("coordinated", []):
+        lines.append(
+            f"    coordinated: {e['sibling']} ({', '.join(e['surfaces'])}) "
+            f"[group={e['group']}]"
+        )
+    return lines
+
+
 def cmd_ready_slices(*, repo_root: Path, phase_id: str, format: str = "text") -> str:
     p = _load(repo_root)
     phase = _phase_by_id(p, phase_id)
-    rows = [
-        {
-            "id": f"{phase.id}.{s.id}",
+    overlap_map = _surface_overlap_map(phase)
+    rows = []
+    for s in phase.slices:
+        if not _is_slice_ready_for_work(phase, s):
+            continue
+        qid = f"{phase.id}.{s.id}"
+        rel = overlap_map.get(qid, {"surface_overlap": [], "coordinated": []})
+        rows.append({
+            "id": qid,
             "status": s.status.value,
             "planning_status": s.planning_status.value,
             "parallel_group": s.parallel_group,
             "title": s.title,
-        }
-        for s in phase.slices
-        if _is_slice_ready_for_work(phase, s)
-    ]
+            "surface_overlap": rel["surface_overlap"],
+            "coordinated": rel["coordinated"],
+        })
     if format == "json":
         import json as _j
         return _j.dumps(rows, indent=2) + "\n"
-    return "".join(
-        f"{r['id']}  [{r['status']}/{r['planning_status']}]  "
-        f"{r['parallel_group'] or '-'}  {r['title']}\n"
-        for r in rows
-    )
+    out_lines: list[str] = []
+    for r in rows:
+        out_lines.append(
+            f"{r['id']}  [{r['status']}/{r['planning_status']}]  "
+            f"{r['parallel_group'] or '-'}  {r['title']}"
+        )
+        out_lines.extend(_format_surface_relations(r))
+    return ("\n".join(out_lines) + "\n") if out_lines else ""
 
 def cmd_schedule(*, repo_root: Path, phase_id: str, format: str = "text") -> str:
     p = _load(repo_root)
     phase = _phase_by_id(p, phase_id)
     done = _done_slice_ids(phase)
     cancelled = _cancelled_slice_ids(phase)
+    overlap_map = _surface_overlap_map(phase)
     rows = []
     for s in phase.slices:
         waiting_on = [
@@ -1757,8 +2258,10 @@ def cmd_schedule(*, repo_root: Path, phase_id: str, format: str = "text") -> str
         ]
         cancelled_deps = [dep for dep in s.depends_on if dep in cancelled]
         ready = _is_slice_ready_for_work(phase, s) and not cancelled_deps
+        qid = f"{phase.id}.{s.id}"
+        rel = overlap_map.get(qid, {"surface_overlap": [], "coordinated": []})
         rows.append({
-            "id": f"{phase.id}.{s.id}",
+            "id": qid,
             "status": s.status.value,
             "planning_status": s.planning_status.value,
             "parallel_group": s.parallel_group,
@@ -1767,6 +2270,8 @@ def cmd_schedule(*, repo_root: Path, phase_id: str, format: str = "text") -> str
             "cancelled_deps": cancelled_deps,
             "ready": ready,
             "title": s.title,
+            "surface_overlap": rel["surface_overlap"],
+            "coordinated": rel["coordinated"],
         })
     if format == "json":
         import json as _j
@@ -1787,6 +2292,7 @@ def cmd_schedule(*, repo_root: Path, phase_id: str, format: str = "text") -> str
             f"group={group}  {ready}  deps={deps}  waiting_on={waits}  "
             f"cancelled_deps={cancelled_str}  {row['title']}"
         )
+        lines.extend(_format_surface_relations(row))
     return "\n".join(lines).rstrip() + "\n"
 
 def cmd_phase_status(*, repo_root: Path, recent: int = 3, format: str = "text") -> str:
@@ -1957,7 +2463,7 @@ def _cmd_validate_at_root(
 ) -> tuple[int, str]:
     from tasktool.validate import (
         validate_project, ValidationError, strict_format_check, normalise_file,
-        find_path_warnings, validate_orphan_filenames,
+        find_path_warnings, validate_orphan_filenames, find_surface_drift_warnings,
     )
     path = _tasklist_path(repo_root)
     if not path.exists():
@@ -1971,6 +2477,11 @@ def _cmd_validate_at_root(
     except (ValidationError, ValueError) as e:
         errors.append(str(e))
     if project is not None and not errors:
+        warnings.extend(
+            find_surface_drift_warnings(
+                project, repo_root, include_plan_checks=not no_path_warnings
+            )
+        )
         if not no_path_warnings:
             warnings.extend(find_path_warnings(project, repo_root))
         if check_orphans:
@@ -2095,6 +2606,8 @@ def _cmd_archive_phase_at_root(
         phase.closed = phase.closed or _today()
     else:
         phase.closed = phase.closed or _today()
+
+    _ladder_project_reservations(p, phase, archived_date=_today())
 
     slug = _slugify(phase.title)
     archive_rel = f"docs/archived-tasks/{phase_id}-{slug}.md"
@@ -2262,6 +2775,223 @@ def cmd_worktree_status(*, repo_root: Path, id: str) -> str:
         return "\n".join(lines) + "\n"
 
 
+def _phase_siblings(p, phase_id: str, exclude_slice_qid: str):
+    """Yield (sibling_qid, sibling_item) for every slice in `phase_id` except the
+    named one. Qualified ids are `<phase>.<slice>`."""
+    for ph in p.phases:
+        if ph.id != phase_id:
+            continue
+        for s in ph.slices:
+            sib_qid = f"{ph.id}.{s.id}"
+            if sib_qid != exclude_slice_qid:
+                yield sib_qid, s
+
+
+def _sibling_landed_signal(write_root: Path, sib_item, *, base_sha: str, base_head: str):
+    """Return (landed: bool, signal: str) for a sibling slice.
+
+    Both the authoritative and the ancestry signal are gated by the SAME
+    half-open "since worktree_base_sha" window (spec §4.D): the relevant
+    commit must be reachable from `base_head` AND NOT reachable from
+    `base_sha`. A sibling that was already integrated before THIS worktree
+    branched is NOT "landed since" — reporting it would re-surface work that
+    was already present at branch time.
+
+    Priority (§4.D F2):
+      1. non-null landed_base_sha in the half-open `base_sha..base_head`
+         window                                                  -> authoritative
+      2. done + existing branch whose TIP is in the same half-open
+         window (reachable from base_head, not from base_sha)    -> ancestry (weaker)
+      3. otherwise                                               -> unknown
+    """
+    from tasktool import worktree as wt
+    from tasktool.model import Status
+    landed_sha = getattr(sib_item, "landed_base_sha", None)
+    if landed_sha:
+        if wt.commit_is_in_range(write_root, landed_sha, base=base_sha, head=base_head):
+            return True, "authoritative"
+        # Landed, but before this worktree branched — not "since".
+        return False, "landed-before-window"
+    status = getattr(sib_item, "status", None)
+    branch = getattr(sib_item, "worktree_branch", None)
+    if status == Status.DONE and branch and wt.branch_exists(write_root, branch):
+        # Resolve the sibling branch's tip SHA, then apply the half-open window.
+        # `branch_is_merged(..., into=base_head)` alone is INSUFFICIENT: it is
+        # true even when the branch merged BEFORE base_sha, which violates the
+        # "since" window. Require the tip to be in `base_sha..base_head`.
+        try:
+            tip = wt.current_branch_head_sha(write_root, branch)
+        except _subprocess.CalledProcessError:
+            return False, "unknown"
+        if wt.commit_is_in_range(write_root, tip, base=base_sha, head=base_head):
+            return True, "ancestry"
+        # Tip reachable from base_head but also from base_sha => merged before
+        # this worktree branched; not landed-since. Tip not reachable from
+        # base_head at all => not merged into base yet.
+        if wt.branch_is_merged(write_root, branch=branch, into=base_head):
+            return False, "merged-before-window"
+        return False, "unmerged-branch"
+    if status == Status.DONE:
+        return False, "unknown"
+    return False, "not-done"
+
+
+def cmd_worktree_status_integration(*, repo_root: Path, id: str) -> str:
+    from tasktool.config import load_config
+    from tasktool import worktree as wt
+    with _read_context(repo_root) as write_root:
+        p = _load(write_root)
+        qid, _container, item = _find_item(p, id)
+        phase_id = qid.split(".")[0]
+        base_branch = load_config(write_root).tasklist.authoritative_branch
+        base_sha = getattr(item, "worktree_base_sha", None)
+        lines = [f"{qid}: integration vs {base_branch}"]
+        if base_sha is None:
+            lines.append("worktree_base_sha: <not recorded> — cannot compute staleness")
+            return "\n".join(lines) + "\n"
+        lines.append(f"worktree_base_sha: {base_sha}")
+        try:
+            base_head = wt.current_branch_head_sha(write_root, base_branch)
+        except _subprocess.CalledProcessError:
+            lines.append(f"base HEAD: <unresolved branch {base_branch!r}>")
+            return "\n".join(lines) + "\n"
+        ahead = wt.rev_list_count(write_root, base_sha, base_head)
+        lines.append(
+            f"base ahead of worktree_base_sha: {ahead} commit"
+            + ("" if ahead == 1 else "s")
+        )
+        landed = []
+        undetermined = []
+        for sib_qid, sib_item in _phase_siblings(p, phase_id, qid):
+            did_land, signal = _sibling_landed_signal(
+                write_root, sib_item, base_sha=base_sha, base_head=base_head
+            )
+            if did_land:
+                landed.append((sib_qid, signal, sib_item))
+            elif signal in {"unknown", "unmerged-branch"}:
+                undetermined.append((sib_qid, signal, sib_item))
+        my_surfaces = set(getattr(item, "integration_surfaces", []) or [])
+        if landed:
+            lines.append("landed since worktree_base_sha:")
+            for sib_qid, signal, sib in landed:
+                sib_surfaces = set(getattr(sib, "integration_surfaces", []) or [])
+                shared = sorted(my_surfaces & sib_surfaces)
+                suffix = (
+                    f" — shared integration surface: {', '.join(shared)}"
+                    if shared else ""
+                )
+                lines.append(f"  - {sib_qid} ({signal}){suffix}")
+        else:
+            lines.append("landed since worktree_base_sha: (none)")
+        if undetermined:
+            lines.append("undetermined siblings (could not prove landed):")
+            for sib_qid, signal, _sib in undetermined:
+                lines.append(f"  - {sib_qid} ({signal})")
+        return "\n".join(lines) + "\n"
+
+
+def _sync_target_path(write_root: Path, qid: str, item) -> Path:
+    if getattr(item, "worktree_in_place", False):
+        return write_root
+    path_str = getattr(item, "worktree_path", None)
+    if not path_str:
+        raise CommandError(f"{qid}: no recorded worktree to sync")
+    if _health_for(write_root, item) != "live":
+        raise CommandError(
+            f"{qid}: recorded worktree is not live; run `tasktool worktree status {qid}`"
+        )
+    return (write_root / path_str).resolve()
+
+
+def _preflight_worktree_sync(
+    *, write_root: Path, qid: str, item, target: Path, base_branch: str
+) -> str:
+    from tasktool import worktree as wt
+    base_sha = getattr(item, "worktree_base_sha", None)
+    if not base_sha:
+        raise CommandError(f"{qid}: worktree_base_sha is not recorded; cannot sync safely")
+    try:
+        base_head = wt.current_branch_head_sha(write_root, base_branch)
+    except _subprocess.CalledProcessError as exc:
+        raise CommandError(f"{qid}: cannot resolve base branch {base_branch!r}") from exc
+    if wt.has_unmerged_paths(target):
+        raise CommandError(f"{qid}: target worktree has unresolved merge entries")
+    allow_staged_tasklist = target.resolve() == write_root.resolve()
+    dirty, items = wt.working_tree_dirty_for_sync(
+        target, allow_staged_tasklist=allow_staged_tasklist
+    )
+    if dirty:
+        pretty = ", ".join(items[:5]) + (" ..." if len(items) > 5 else "")
+        raise CommandError(f"{qid}: target worktree is not clean: {pretty}")
+    if wt.tasklist_has_unsafe_dirty_state(write_root):
+        raise CommandError("authoritative docs/tasklist.json has unstaged changes")
+    return base_head
+
+
+def _run_sync_git(*, target: Path, strategy: str, base_head: str) -> None:
+    env = _os.environ.copy()
+    env["GIT_EDITOR"] = "true"
+    env["GIT_SEQUENCE_EDITOR"] = "true"
+    if strategy == "merge":
+        args = ["git", "merge", "--no-edit", base_head]
+    else:
+        args = ["git", "rebase", base_head]
+    try:
+        _subprocess.run(
+            args,
+            cwd=target,
+            text=True,
+            capture_output=True,
+            check=True,
+            env=env,
+        )
+    except _subprocess.CalledProcessError as exc:
+        detail = (exc.stderr or exc.stdout or "").strip()
+        raise CommandError(
+            f"git {strategy} failed; resolve or abort git state, then rerun sync: {detail}"
+        ) from exc
+
+
+def cmd_worktree_sync(
+    *, repo_root: Path, id: str, merge: bool = False, rebase: bool = False
+) -> str:
+    if merge == rebase:
+        raise CommandError("choose exactly one of --merge or --rebase")
+    with _read_context(repo_root) as write_root:
+        p = _load(write_root)
+        qid, _container, item = _find_item(p, id)
+        if parse_id(qid)[0] != "slice":
+            raise CommandError(f"{qid}: worktree sync only supports slices")
+        base_branch = _authoritative_parent_branch(write_root, qid)
+        target = _sync_target_path(write_root, qid, item)
+        previous_base = getattr(item, "worktree_base_sha", None)
+        base_head = _preflight_worktree_sync(
+            write_root=write_root,
+            qid=qid,
+            item=item,
+            target=target,
+            base_branch=base_branch,
+        )
+    strategy = "merge" if merge else "rebase"
+    _run_sync_git(target=target, strategy=strategy, base_head=base_head)
+
+    with _write_context(repo_root) as write_root:
+        p = _load(write_root)
+        qid, _container, item = _find_item(p, id)
+        item.worktree_base_sha = base_head
+        _save(write_root, p)
+
+    return (
+        f"{qid}: synchronized by {strategy}; integrated {base_branch} at {base_head}\n"
+        f"previous worktree_base_sha: {previous_base}\n"
+        f"new worktree_base_sha: {base_head}\n"
+        "follow-up:\n"
+        f"  tasktool worktree status {qid} --integration\n"
+        "  rerun focused verification for files changed by the base integration\n"
+        "  regenerate derived artifacts if this project has snapshots, checksums, schemas, or lock files\n"
+    )
+
+
 def cmd_worktree_adopt(*, repo_root: Path, id: str, path: Path) -> None:
     from tasktool.worktree_lifecycle import (
         RecordedState, classify_recorded_state, is_authoritative_checkout,
@@ -2355,6 +3085,9 @@ def cmd_worktree_prune(
             )
         wt_path = (write_root / path_str).resolve()
 
+        # Track whether the branch-merged guard actually ran and passed; only a
+        # proven merge (never a --force bypass) may stamp landed_base_sha.
+        merged_proven = False
         # Guard 1: slice status is terminal (done OR cancelled), unless --force.
         if not force:
             if not is_terminal(getattr(item, "status", None)):
@@ -2371,6 +3104,7 @@ def cmd_worktree_prune(
                     f"{qid}: branch {branch!r} is not merged into {parent!r}; "
                     f"merge first or pass --force"
                 )
+            merged_proven = True
 
             # Guard 3: clean worktree.
             if wt_path.exists():
@@ -2418,6 +3152,16 @@ def cmd_worktree_prune(
         item.worktree_path = None
         item.worktree_branch = None
         item.worktree_pruned_at = _today()
+        # Stamp landed_base_sha only when the merge is proven: (a) done status
+        # (never cancelled), (b) the branch-merged guard passed, (c) not --force.
+        # Otherwise leave landed_base_sha as-is (None).
+        if merged_proven and getattr(item, "status", None) == Status.DONE:
+            from tasktool.worktree import current_branch_head_sha
+            parent = _authoritative_parent_branch(write_root, qid)
+            try:
+                item.landed_base_sha = current_branch_head_sha(write_root, parent)
+            except _subprocess.CalledProcessError:
+                item.landed_base_sha = None
         # Clear any stale pending marker.
         item.worktree_prune_pending = False
         item.worktree_prune_pending_at = None

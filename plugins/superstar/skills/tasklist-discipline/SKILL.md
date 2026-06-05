@@ -50,6 +50,8 @@ Status enum: `ready | in_progress | blocked | done | cancelled`. Only slices may
 
 Phase planning uses separate scheduling metadata. `planning_path` points at the phase-scoped planning/design document. `depends_on` records planned slice sequencing; it is not the same as runtime `blocked_on`. `planning_status` is `proposed | ratified | superseded`, and `parallel_group` names slices intended to be planned or executed together.
 
+Integration-surface metadata models **parallel-execution safety by write surface**, not by feature intent. `integration_surfaces` is a list of conventional tags naming the shared write areas a slice mutates (recommended vocabulary: `cms-block-registry`, `directus-schema`, `page-renderer-dispatch`, `theme-tail-css`, `content-contract-types`, `reviewer-artifacts` — extend per project). `reservations` are scarce-allocation claims on a single value (`homepage-sort:15`, `route-slug:/offers`, `block-kind:slider`), each scoped `phase` (default) or `project`; `tasktool reserve add` **refuses a duplicate allocation** within scope. `coordination_group` names a set of slices that *intentionally* share a surface and agree to coordinate — serialize reviews, designate an integration owner, run the centralized-registry merge playbook. It is the opposite of `parallel_group`, which asserts the slices are independent: a shared surface needs a `coordination_group` or a `depends_on`, never a `parallel_group`.
+
 ## Daily commands
 
 ```sh
@@ -68,6 +70,15 @@ tasktool ref <id> --add path/to/artifact
 tasktool block <slice-id> --on P2.S5
 tasktool deps <slice-id> --add P2.S1
 tasktool ratify <slice-id> --parallel-group bootstrap
+tasktool surface add <slice-id> <surface> [<surface>...]   # declare shared write surfaces
+tasktool surface remove <slice-id> <surface>
+tasktool surface list [<phase-id>]
+tasktool surface check <phase-id>            # unguarded overlaps + coordinated surfaces + reservation contention
+tasktool reserve add <slice-id> <resource>:<value> [--scope phase|project] [--note "..."] [--force --reason "..."]
+tasktool reserve remove <slice-id> <resource>:<value>
+tasktool reserve list [<phase-id>]
+tasktool coordinate <slice-id> --group <name>   # mark intentional shared-surface coordination
+tasktool coordinate <slice-id> --clear
 tasktool schedule <phase-id>
 tasktool ready-slices <phase-id>
 tasktool phase-status
@@ -183,6 +194,9 @@ The external-reviewer script writes a small transient block (`review_active`, `r
 | "I created a follow-up slice/X-item, so I can knock it out in this worktree." | No. Allocation is not implementation permission. Follow-up work gets deferred or gets its own isolated worktree. |
 | "I only need to add refs or flip the row before creating the worktree." | No. For an active implementation slice, tasktool refs/status/notes are part of the slice artifact set. Isolate first. |
 | "The slice is currently blocked, so I'll add `blocked_on` to model the phase plan." | No. Use `depends_on` for planned sequencing. Use `blocked_on` only for active runtime blockers. |
+| "These slices are feature-independent, so they're parallel-safe." | Parallel safety is about **write surface**, not feature independence. Declare `integration_surfaces` and run `tasktool surface check <phase-id>` before dispatching them together. |
+| "I'll pick a sort slot / collection name / route slug freely." | **Reserve** it (`tasktool reserve add`) so siblings cannot collide; for project-global resources use `--scope project`. The tool refuses a duplicate allocation. |
+| "We both need the CMS registry, so I'll just `parallel_group` them." | A shared surface needs a `coordination_group` (coordinate) or a `depends_on` (serialize), not a `parallel_group` — which asserts independence the slices do not have. |
 
 ## Integration
 

@@ -255,6 +255,58 @@ def find_path_warnings(p: Project, repo_root: Path) -> list[str]:
             _check(r, f"{c.id}.refs")
     return warnings
 
+def find_surface_drift_warnings(
+    p: Project, repo_root: Path, *, include_plan_checks: bool
+) -> list[str]:
+    """Non-fatal warnings that a slice's tracker-declared integration surfaces /
+    reservations are not reflected in its plan (Check 2, gated by
+    `include_plan_checks`), or that a slice in a parallel_group declares no surfaces
+    at all (Check 1, always run). Pure and non-raising: returns [] when clean and
+    swallows plan read errors to a skip. Mirrors find_path_warnings. See spec §4."""
+    warnings: list[str] = []
+    for ph in p.phases:
+        for s in ph.slices:
+            if is_terminal(s.status):
+                continue
+            scope = f"{ph.id}.{s.id}"
+            # Check 1 — parallel_group slice with no declared surfaces.
+            if s.parallel_group is not None and not s.integration_surfaces:
+                warnings.append(
+                    f"{scope}: in parallel_group {s.parallel_group!r} but declares "
+                    f"no integration_surfaces — declare them with "
+                    f"`tasktool surface add {scope} <surface>` or remove it from the "
+                    f"parallel group"
+                )
+            # Check 2 — tracker-declared surfaces/reservations absent from the plan.
+            if not include_plan_checks:
+                continue
+            if s.plan_path is None:
+                continue
+            if not (s.integration_surfaces or s.reservations):
+                continue
+            plan_file = repo_root / s.plan_path
+            if not plan_file.exists():
+                continue  # missing file already reported by find_path_warnings
+            try:
+                plan_text = plan_file.read_text(encoding="utf-8").lower()
+            except (OSError, UnicodeDecodeError):
+                continue  # best-effort nudge; unreadable plan is a skip, not a crash
+            for surface in s.integration_surfaces:
+                if surface.lower() not in plan_text:
+                    warnings.append(
+                        f"{scope}.surfaces: tracker declares surface {surface!r} "
+                        f"but it does not appear in plan {s.plan_path} (plan may be stale)"
+                    )
+            for r in s.reservations:
+                token = f"{r.resource}:{r.value}"
+                if token.lower() not in plan_text:
+                    warnings.append(
+                        f"{scope}.reservations: tracker declares reservation {token!r} "
+                        f"but it does not appear in plan {s.plan_path} (plan may be stale)"
+                    )
+    return warnings
+
+
 def strict_format_check(path: Path) -> None:
     """Re-serialise and compare bytes. Raises ValidationError on mismatch."""
     text = path.read_text(encoding="utf-8")

@@ -26,6 +26,34 @@ def build_schema() -> dict:
             },
         ],
     }
+    reservation = {
+        "type": "object",
+        "required": ["resource", "value"],
+        "properties": {
+            "resource": {"type": "string"},
+            "value": {"type": "string"},
+            "scope": {"enum": ["phase", "project"]},
+            "note": {"oneOf": [{"type": "string"}, {"type": "null"}]},
+        },
+        "additionalProperties": False,
+    }
+    ledger_reservation = {
+        "type": "object",
+        "required": [
+            "resource", "value", "scope", "owner_id",
+            "owner_phase_id", "archived_date",
+        ],
+        "properties": {
+            "resource": {"type": "string"},
+            "value": {"type": "string"},
+            "scope": {"enum": ["phase", "project"]},
+            "note": {"oneOf": [{"type": "string"}, {"type": "null"}]},
+            "owner_id": {"type": "string"},
+            "owner_phase_id": {"type": "string"},
+            "archived_date": date_str,
+        },
+        "additionalProperties": False,
+    }
     task = {
         "type": "object",
         "required": ["id", "title", "created", "status"],
@@ -75,6 +103,11 @@ def build_schema() -> dict:
                 {"enum": ["awaiting_response", "applying_fixes", "passed"]},
                 {"type": "null"},
             ]},
+            "integration_surfaces": {"type": "array", "items": {"type": "string"}},
+            "reservations": {"type": "array", "items": reservation},
+            "coordination_group": {"oneOf": [{"type": "string"}, {"type": "null"}]},
+            "worktree_base_sha": {"oneOf": [{"type": "string"}, {"type": "null"}]},
+            "landed_base_sha": {"oneOf": [{"type": "string"}, {"type": "null"}]},
         },
         "additionalProperties": False,
     }
@@ -158,6 +191,7 @@ def build_schema() -> dict:
             "cross_cutting": {"type": "array", "items": cross},
             "archived_phases": {"type": "array", "items": archived},
             "archived_cross_cutting": {"type": "array", "items": archived_cross},
+            "reservations_ledger": {"type": "array", "items": ledger_reservation},
         },
         "additionalProperties": False,
     }

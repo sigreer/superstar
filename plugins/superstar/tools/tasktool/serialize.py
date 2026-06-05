@@ -4,7 +4,7 @@ from dataclasses import asdict
 from pathlib import Path
 from tasktool.model import (
     Project, Phase, Slice, Task, CrossCutting, ArchivedPhase,
-    ArchivedCrossCutting, BlockedOn,
+    ArchivedCrossCutting, BlockedOn, Reservation, LedgerReservation,
     Status, PlanningStatus, SCHEMA_VERSION,
     SliceWorkflowStep, PhaseWorkflowStep, ReviewStage,
 )
@@ -50,6 +50,29 @@ def _strip_workflow_defaults(d: dict) -> dict:
     return d
 
 
+_P7_DEFAULT_OMIT = {
+    "coordination_group": None,
+    "worktree_base_sha": None,
+    "landed_base_sha": None,
+}
+
+
+def _strip_p7_defaults(d: dict) -> dict:
+    """Drop P7 slice keys whose values equal their dataclass default.
+
+    Empty integration_surfaces / reservations lists and None scalar fields
+    are omitted so historical rows gain no churn on round-trip (spec §4.A F5).
+    """
+    for field, default in _P7_DEFAULT_OMIT.items():
+        if field in d and d[field] == default:
+            del d[field]
+    if d.get("integration_surfaces") == []:
+        d.pop("integration_surfaces", None)
+    if d.get("reservations") == []:
+        d.pop("reservations", None)
+    return d
+
+
 def to_dict(p: Project) -> dict:
     def _coerce(obj):
         if isinstance(obj, (Status, PlanningStatus,
@@ -73,8 +96,12 @@ def to_dict(p: Project) -> dict:
         for slc in phase.get("slices", []):
             _strip_worktree_defaults(slc)
             _strip_workflow_defaults(slc)
+            _strip_p7_defaults(slc)
     for cross in out.get("cross_cutting", []):
         _strip_worktree_defaults(cross)
+    # Omit reservations_ledger when empty so historical projects gain no churn.
+    if out.get("reservations_ledger") == []:
+        del out["reservations_ledger"]
     # Always emit current SCHEMA_VERSION on save (auto-promotion of legacy rows).
     out["schema_version"] = SCHEMA_VERSION
     return out
@@ -119,6 +146,17 @@ def from_dict(d: dict) -> Project:
         )
     def _blocked(b):
         return None if b is None else BlockedOn(kind=b["kind"], value=b["value"])
+    def _reservation(rd):
+        return Reservation(
+            resource=rd["resource"], value=rd["value"],
+            scope=rd.get("scope", "phase"), note=rd.get("note"),
+        )
+    def _ledger_reservation(rd):
+        return LedgerReservation(
+            resource=rd["resource"], value=rd["value"], scope=rd["scope"],
+            note=rd.get("note"), owner_id=rd["owner_id"],
+            owner_phase_id=rd["owner_phase_id"], archived_date=rd["archived_date"],
+        )
     def _slice(sd):
         scope = f"phases[].slices[id={sd.get('id')}]"
         return Slice(
@@ -144,6 +182,11 @@ def from_dict(d: dict) -> Project:
             worktree_pruned_at=_strict_opt_str(sd.get("worktree_pruned_at"), scope=scope, field="worktree_pruned_at"),
             worktree_prune_pending=_strict_bool(sd.get("worktree_prune_pending"), scope=scope, field="worktree_prune_pending"),
             worktree_prune_pending_at=_strict_opt_str(sd.get("worktree_prune_pending_at"), scope=scope, field="worktree_prune_pending_at"),
+            integration_surfaces=list(sd.get("integration_surfaces", [])),
+            reservations=[_reservation(r) for r in sd.get("reservations", [])],
+            coordination_group=sd.get("coordination_group"),
+            worktree_base_sha=_strict_opt_str(sd.get("worktree_base_sha"), scope=scope, field="worktree_base_sha"),
+            landed_base_sha=_strict_opt_str(sd.get("landed_base_sha"), scope=scope, field="landed_base_sha"),
         )
     def _phase(pd):
         return Phase(
@@ -195,6 +238,9 @@ def from_dict(d: dict) -> Project:
         archived_phases=[_arch(a) for a in d.get("archived_phases", [])],
         archived_cross_cutting=[
             _arch_cross(a) for a in d.get("archived_cross_cutting", [])
+        ],
+        reservations_ledger=[
+            _ledger_reservation(r) for r in d.get("reservations_ledger", [])
         ],
     )
 
