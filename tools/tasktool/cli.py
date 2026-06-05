@@ -150,6 +150,10 @@ def _build_parser() -> argparse.ArgumentParser:
     prune_excl.add_argument("--keep-branch", action="store_true")
     prune_excl.add_argument("--force", action="store_true")
     prune_excl.add_argument("--finalize", action="store_true")
+    p_wt_prune.add_argument(
+        "--no-commit", action="store_true",
+        help="Skip the scoped auto-commit of the tracker after prune",
+    )
 
     p_wt_repair = wt_sub.add_parser("repair")
     p_wt_repair.add_argument("id")
@@ -489,6 +493,7 @@ def main(argv: list[str]) -> int:
                     keep_branch=args.keep_branch,
                     force=args.force,
                     finalize=args.finalize,
+                    no_commit=args.no_commit,
                 )
             elif args.wt_cmd == "repair":
                 commands.cmd_worktree_repair(repo_root=root, id=args.id)

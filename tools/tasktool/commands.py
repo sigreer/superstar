@@ -3177,21 +3177,29 @@ def cmd_worktree_check_legacy(*, repo_root: Path, project_name: str) -> tuple[st
 def cmd_worktree_prune(
     *, repo_root: Path, id: str,
     keep_branch: bool = False, force: bool = False, finalize: bool = False,
+    no_commit: bool = False,
 ) -> None:
     from tasktool import worktree as wt
     with _write_context(repo_root) as write_root:
         p = _load(write_root)
         qid, _container, item = _find_item(p, id)
+        tasklist_rel = str(_tasklist_path(write_root).relative_to(write_root))
+
+        def _autocommit(message: str) -> None:
+            if not no_commit:
+                _git_commit_scoped(write_root, [tasklist_rel], message)
 
         if finalize:
             _worktree_finalize(write_root, item, qid)
             _save(write_root, p)
+            _autocommit(f"{qid}: finalize worktree prune")
             return
 
         # In-place slices: no worktree to prune; record timestamp and exit.
         if getattr(item, "worktree_in_place", False):
             item.worktree_pruned_at = _today()
             _save(write_root, p)
+            _autocommit(f"{qid}: prune worktree")
             print(f"{qid}: --in-place slice; no worktree to remove.")
             return
 
@@ -3254,6 +3262,7 @@ def cmd_worktree_prune(
             item.worktree_prune_pending = True
             item.worktree_prune_pending_at = _today()
             _save(write_root, p)
+            _autocommit(f"{qid}: defer worktree prune")
             authoritative = write_root
             print(
                 f"{qid}: prune deferred (running inside the worktree being removed).\n"
@@ -3286,6 +3295,7 @@ def cmd_worktree_prune(
         item.worktree_prune_pending = False
         item.worktree_prune_pending_at = None
         _save(write_root, p)
+        _autocommit(f"{qid}: prune worktree")
         print(f"{qid}: worktree pruned (path={wt_path}, branch={branch})")
 
 

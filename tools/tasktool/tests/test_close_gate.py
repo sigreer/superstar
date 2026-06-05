@@ -389,3 +389,73 @@ def test_close_no_stage_means_no_stage_and_no_commit(tmp_path):
     assert the_slice(root)["status"] == "done"
     assert "docs/tasklist.json" not in _git(root, "diff", "--cached", "--name-only").stdout
     assert _git(root, "log", "-1", "--format=%s").stdout.strip() == "land P1.S1"
+
+
+# ----- Task 5: auto-commit on prune -----
+
+def _closed_landed(tmp_path):
+    root, wt = _landed(tmp_path)
+    assert run(root, "close", "P1.S1", "--skip-review-gate").returncode == 0
+    return root, wt
+
+
+def test_prune_autocommits_tracker(tmp_path):
+    root, _wt = _closed_landed(tmp_path)
+    r = run(root, "worktree", "prune", "P1.S1")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert (
+        _git(root, "status", "--porcelain", "--", "docs/tasklist.json").stdout.strip()
+        == ""
+    )
+    assert (
+        _git(root, "log", "-1", "--format=%s").stdout.strip()
+        == "P1.S1: prune worktree"
+    )
+    sl = the_slice(root)
+    assert sl.get("worktree_branch") is None
+    assert sl["landed_base_sha"]
+
+
+def test_prune_in_place_autocommits(tmp_path):
+    root = seed_repo(tmp_path)
+    assert run(root, "start", "P1.S1", "--in-place").returncode == 0
+    assert run(root, "close", "P1.S1", "--skip-review-gate").returncode == 0
+    r = run(root, "worktree", "prune", "P1.S1")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert (
+        _git(root, "log", "-1", "--format=%s").stdout.strip()
+        == "P1.S1: prune worktree"
+    )
+
+
+def test_prune_deferral_and_finalize_autocommit(tmp_path):
+    root, wt = _closed_landed(tmp_path)
+    r = run(root, "worktree", "prune", "P1.S1", cwd=wt)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "deferred" in r.stdout
+    assert (
+        _git(root, "log", "-1", "--format=%s").stdout.strip()
+        == "P1.S1: defer worktree prune"
+    )
+    _git(root, "worktree", "remove", str(wt))
+    r = run(root, "worktree", "prune", "P1.S1", "--finalize")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert (
+        _git(root, "log", "-1", "--format=%s").stdout.strip()
+        == "P1.S1: finalize worktree prune"
+    )
+    assert (
+        _git(root, "status", "--porcelain", "--", "docs/tasklist.json").stdout.strip()
+        == ""
+    )
+
+
+def test_prune_no_commit_preserves_staged_state(tmp_path):
+    root, _wt = _closed_landed(tmp_path)
+    r = run(root, "worktree", "prune", "P1.S1", "--no-commit")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "docs/tasklist.json" in _git(root, "diff", "--cached", "--name-only").stdout
+    assert (
+        _git(root, "log", "-1", "--format=%s").stdout.strip()
+        == "P1.S1: close slice (status=done)"
+    )
