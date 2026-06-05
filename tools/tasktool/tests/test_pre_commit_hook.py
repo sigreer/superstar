@@ -1,5 +1,5 @@
 # tools/tasktool/tests/test_pre_commit_hook.py
-import os, subprocess, sys, shutil, textwrap
+import json, os, subprocess, sys, shutil, textwrap
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[3]
@@ -210,6 +210,41 @@ def test_staged_good_dirty_worktree_passes(tmp_path):
         "hook must accept canonical index regardless of worktree dirt: "
         + r.stdout + r.stderr
     )
+
+
+def test_lifecycle_autocommit_passes_real_hook(tmp_path):
+    """P8.S1: close auto-commit runs through the installed hook and passes."""
+    repo, env = _seed_repo(tmp_path)
+    _git(repo, "add", "-A", env=env)
+    _git(repo, "commit", "-m", "seed", env=env)
+    r = _tasktool(repo, "create", "phase", "--title", "P", env=env)
+    assert r.returncode == 0, r.stdout + r.stderr
+    r = _tasktool(repo, "create", "slice", "P1", "--title", "S", env=env)
+    assert r.returncode == 0, r.stdout + r.stderr
+    _git(repo, "add", "docs/tasklist.json", env=env)
+    _git(repo, "commit", "-m", "rows", env=env)
+
+    r = _tasktool(repo, "start", "P1.S1", env=env)
+    assert r.returncode == 0, r.stdout + r.stderr
+    data = json.loads((repo / "docs" / "tasklist.json").read_text())
+    sl = data["phases"][0]["slices"][0]
+    branch = sl["worktree_branch"]
+    wt = repo / sl["worktree_path"]
+    assert branch
+    assert wt.is_dir()
+    _git(repo, "add", "docs/tasklist.json", env=env)
+    _git(repo, "commit", "-m", "start", env=env)
+
+    (wt / "work.txt").write_text("payload\n")
+    _git(wt, "add", "-A", env=env)
+    _git(wt, "commit", "-m", "work", env=env)
+    _git(repo, "merge", "--no-ff", "-m", "land", branch, env=env)
+
+    r = _tasktool(repo, "close", "P1.S1", "--skip-review-gate", env=env)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "auto-commit failed" not in r.stderr
+    log = _git(repo, "log", "-1", "--format=%s", env=env).stdout.strip()
+    assert log == "P1.S1: close slice (status=done)"
 
 
 def test_hook_install_writes_stamped_header(tmp_path):
