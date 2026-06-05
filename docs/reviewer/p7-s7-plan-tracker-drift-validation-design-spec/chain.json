@@ -1,0 +1,89 @@
+{
+  "schema_version": 1,
+  "chain": "p7-s7-plan-tracker-drift-validation-design-spec",
+  "kind": "spec",
+  "target": "docs/specs/2026-06-05-P7-S7-plan-tracker-drift-validation-design.md",
+  "work_id": null,
+  "legacy_migrated": false,
+  "rounds": [
+    {
+      "round": 1,
+      "reviewers": [
+        {
+          "role": "primary",
+          "sweep_group": null,
+          "parent_round": 1,
+          "request": "r1-2026-06-05T1159-request.md",
+          "response": "r1-2026-06-05T1159-response.md",
+          "verdict": "ready",
+          "verdict_valid": true,
+          "returncode": 0,
+          "status": "ok",
+          "provider": "codex",
+          "caller_provider": "claude",
+          "model": null,
+          "sandbox": {
+            "repo_root": "/home/simon/Dev/sigreer/skills/superstar",
+            "scratch_dir": "/tmp/superstar-reviewer-p7-s7-plan-tracker-drift-validation-design-spec-r1-primary-c3vhtvy1",
+            "response_dir": "docs/reviewer/p7-s7-plan-tracker-drift-validation-design-spec/.reviewer-output/r1-primary",
+            "mode": "workspace-write-with-read-access"
+          },
+          "started_at": "2026-06-05T10:59:42.937Z",
+          "finished_at": "2026-06-05T11:01:07.424Z",
+          "duration_ms": 84487,
+          "estimated_usage": {
+            "formula": "ceil(chars / 4)",
+            "prompt_chars": 38619,
+            "response_chars": 1941,
+            "estimated_input_tokens": 9655,
+            "estimated_output_tokens": 486,
+            "estimated_total_tokens": 10141
+          },
+          "exact_usage": null,
+          "usage_capture_status": "estimated_only",
+          "usage_capture_error": null
+        }
+      ],
+      "status": "ok",
+      "returncode": 0,
+      "started_at": "2026-06-05T10:59:42.937Z",
+      "finished_at": "2026-06-05T11:01:07.424Z",
+      "duration_ms": 84487,
+      "provider": "codex",
+      "caller_provider": "claude",
+      "model": null,
+      "estimated_usage": {
+        "formula": "ceil(chars / 4)",
+        "prompt_chars": 38619,
+        "response_chars": 1941,
+        "estimated_input_tokens": 9655,
+        "estimated_output_tokens": 486,
+        "estimated_total_tokens": 10141
+      },
+      "exact_usage": null,
+      "usage_capture_status": "estimated_only",
+      "usage_capture_error": null,
+      "merged_verdict": "ready",
+      "merged_findings": null,
+      "request": "r1-2026-06-05T1159-request.md",
+      "response": "r1-2026-06-05T1159-response.md",
+      "resolution": null,
+      "resolution_parse_status": null,
+      "resolution_waiver": false,
+      "head_sha_at_request": "c4f0cc817714e24ce372a2c94e484569c638483b",
+      "head_sha_after_round": "c4f0cc817714e24ce372a2c94e484569c638483b",
+      "worktree_dirty_at_request": true,
+      "verdict": "ready",
+      "verdict_valid": true,
+      "findings_count": null,
+      "blocking_findings_count": null,
+      "base_ref": null,
+      "base_ref_source": null,
+      "diff_included": false
+    }
+  ],
+  "sweep_checkpoints": {
+    "first-round": "pending",
+    "final-ready": "pending"
+  }
+}

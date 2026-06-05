@@ -441,12 +441,16 @@
           "parallel_group": null,
           "plan_path": null,
           "planning_status": "proposed",
-          "refs": [],
-          "reviewer_chain": null,
+          "refs": [
+            "docs/specs/2026-06-05-P7-S7-plan-tracker-drift-validation-design.md",
+            "docs/reviewer/p7-s7-plan-tracker-drift-validation-design-spec"
+          ],
+          "reviewer_chain": "docs/reviewer/p7-s7-plan-tracker-drift-validation-design-spec",
           "started": null,
           "status": "ready",
           "tasks": [],
-          "title": "Plan-tracker drift validation (declared surfaces/reservations reflected in plan)"
+          "title": "Plan-tracker drift validation (declared surfaces/reservations reflected in plan)",
+          "workflow_step": "spec"
         },
         {
           "blocked_on": null,
