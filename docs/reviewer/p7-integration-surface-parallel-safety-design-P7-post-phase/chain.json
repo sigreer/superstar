@@ -1,0 +1,123 @@
+{
+  "schema_version": 1,
+  "chain": "p7-integration-surface-parallel-safety-design-P7-post-phase",
+  "kind": "post-phase",
+  "target": "docs/specs/2026-06-02-P7-integration-surface-parallel-safety-design.md",
+  "work_id": "P7",
+  "legacy_migrated": false,
+  "rounds": [
+    {
+      "round": 1,
+      "reviewers": [
+        {
+          "role": "primary",
+          "sweep_group": null,
+          "parent_round": 1,
+          "request": "r1-2026-06-05T1318-primary-request.md",
+          "response": "r1-2026-06-05T1318-primary-response.md",
+          "verdict": "revise",
+          "verdict_valid": true,
+          "returncode": 0,
+          "status": "ok",
+          "provider": "codex",
+          "caller_provider": "claude",
+          "model": null,
+          "sandbox": {
+            "repo_root": "/home/simon/Dev/sigreer/skills/superstar/.worktrees/worktree-p7-s7-plan-tracker-drift-validation-declared",
+            "scratch_dir": "/tmp/superstar-reviewer-p7-integration-surface-parallel-safety-design-P7-post-phase-r1-primary-hj3va3aj",
+            "response_dir": "docs/reviewer/p7-integration-surface-parallel-safety-design-P7-post-phase/.reviewer-output/r1-primary",
+            "mode": "workspace-write-with-read-access"
+          },
+          "started_at": "2026-06-05T12:18:54.819Z",
+          "finished_at": "2026-06-05T12:21:34.099Z",
+          "duration_ms": 159280,
+          "estimated_usage": {
+            "formula": "ceil(chars / 4)",
+            "prompt_chars": 60532,
+            "response_chars": 4106,
+            "estimated_input_tokens": 15133,
+            "estimated_output_tokens": 1027,
+            "estimated_total_tokens": 16160
+          },
+          "exact_usage": null,
+          "usage_capture_status": "estimated_only",
+          "usage_capture_error": null
+        },
+        {
+          "role": "sweep",
+          "sweep_group": 1,
+          "parent_round": 1,
+          "request": "r1-2026-06-05T1318-sweep1-request.md",
+          "response": "r1-2026-06-05T1318-sweep1-response.md",
+          "verdict": "revise",
+          "verdict_valid": true,
+          "returncode": 0,
+          "status": "ok",
+          "provider": "codex",
+          "caller_provider": "claude",
+          "model": null,
+          "sandbox": {
+            "repo_root": "/home/simon/Dev/sigreer/skills/superstar/.worktrees/worktree-p7-s7-plan-tracker-drift-validation-declared",
+            "scratch_dir": "/tmp/superstar-reviewer-p7-integration-surface-parallel-safety-design-P7-post-phase-r1-sweep1-qboeyijo",
+            "response_dir": "docs/reviewer/p7-integration-surface-parallel-safety-design-P7-post-phase/.reviewer-output/r1-sweep1",
+            "mode": "workspace-write-with-read-access"
+          },
+          "started_at": "2026-06-05T12:21:34.102Z",
+          "finished_at": "2026-06-05T12:25:50.188Z",
+          "duration_ms": 256086,
+          "estimated_usage": {
+            "formula": "ceil(chars / 4)",
+            "prompt_chars": 60532,
+            "response_chars": 3151,
+            "estimated_input_tokens": 15133,
+            "estimated_output_tokens": 788,
+            "estimated_total_tokens": 15921
+          },
+          "exact_usage": null,
+          "usage_capture_status": "estimated_only",
+          "usage_capture_error": null
+        }
+      ],
+      "status": "ok",
+      "returncode": 0,
+      "started_at": "2026-06-05T12:18:54.819Z",
+      "finished_at": "2026-06-05T12:21:34.099Z",
+      "duration_ms": 159280,
+      "provider": "codex",
+      "caller_provider": "claude",
+      "model": null,
+      "estimated_usage": {
+        "formula": "ceil(chars / 4)",
+        "prompt_chars": 60532,
+        "response_chars": 4106,
+        "estimated_input_tokens": 15133,
+        "estimated_output_tokens": 1027,
+        "estimated_total_tokens": 16160
+      },
+      "exact_usage": null,
+      "usage_capture_status": "estimated_only",
+      "usage_capture_error": null,
+      "merged_verdict": "revise",
+      "merged_findings": "r1-merged-findings.md",
+      "request": "r1-2026-06-05T1318-primary-request.md",
+      "response": "r1-2026-06-05T1318-primary-response.md",
+      "resolution": null,
+      "resolution_parse_status": null,
+      "resolution_waiver": false,
+      "head_sha_at_request": "fe11f6ad39e31787fa11b7892f291c7c44307719",
+      "head_sha_after_round": "fe11f6ad39e31787fa11b7892f291c7c44307719",
+      "worktree_dirty_at_request": true,
+      "verdict": "revise",
+      "verdict_valid": true,
+      "findings_count": 3,
+      "blocking_findings_count": 3,
+      "base_ref": null,
+      "base_ref_source": null,
+      "diff_included": false
+    }
+  ],
+  "sweep_checkpoints": {
+    "first-round": "completed",
+    "final-ready": "pending"
+  }
+}
