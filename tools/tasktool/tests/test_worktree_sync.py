@@ -206,3 +206,61 @@ def test_sync_merge_non_fast_forward_is_non_interactive(tmp_path):
     assert "follow-up:" in r.stdout
     log = git(wt, "log", "-1", "--format=%s").strip()
     assert log.startswith("Merge")
+
+
+def test_sync_conflict_leaves_worktree_base_sha_unchanged(tmp_path):
+    repo = init_repo(tmp_path / "repo")
+    wt = start_linked(repo)
+    old_base = slice_row(repo)["worktree_base_sha"]
+    (wt / "conflict.txt").write_text("slice\n")
+    git(wt, "add", "conflict.txt")
+    git(wt, "commit", "-q", "-m", "slice conflict")
+    (repo / "conflict.txt").write_text("base\n")
+    git(repo, "add", "conflict.txt")
+    git(repo, "commit", "-q", "-m", "base conflict")
+    r = run(repo, "worktree", "sync", "P1.S1", "--merge")
+    assert r.returncode != 0
+    assert "git merge failed" in (r.stdout + r.stderr)
+    assert slice_row(repo)["worktree_base_sha"] == old_base
+
+
+def test_sync_rebase_conflict_leaves_worktree_base_sha_unchanged(tmp_path):
+    repo = init_repo(tmp_path / "repo")
+    wt = start_linked(repo)
+    old_base = slice_row(repo)["worktree_base_sha"]
+    (wt / "conflict.txt").write_text("slice\n")
+    git(wt, "add", "conflict.txt")
+    git(wt, "commit", "-q", "-m", "slice conflict")
+    (repo / "conflict.txt").write_text("base\n")
+    git(repo, "add", "conflict.txt")
+    git(repo, "commit", "-q", "-m", "base conflict")
+    r = run(repo, "worktree", "sync", "P1.S1", "--rebase")
+    assert r.returncode != 0
+    assert "git rebase failed" in (r.stdout + r.stderr)
+    assert slice_row(repo)["worktree_base_sha"] == old_base
+
+
+def test_sync_in_place_allows_staged_tasklist_and_advances_base_sha(tmp_path):
+    repo = init_repo(tmp_path / "repo")
+    assert run(repo, "start", "P1.S1", "--in-place").returncode == 0
+    base_head = advance_main(repo, "base-change", "base")
+    data = json.loads((repo / "docs" / "tasklist.json").read_text())
+    data["north_star"] = "staged tracker update"
+    (repo / "docs" / "tasklist.json").write_text(json.dumps(data, indent=2) + "\n")
+    git(repo, "add", "docs/tasklist.json")
+    r = run(repo, "worktree", "sync", "P1.S1", "--merge")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert slice_row(repo)["worktree_base_sha"] == base_head
+    assert "synchronized by merge" in r.stdout
+
+
+def test_sync_clears_already_integrated_status_window(tmp_path):
+    repo = init_repo(tmp_path / "repo")
+    start_linked(repo)
+    advance_main(repo, "base-change", "base")
+    before = run(repo, "worktree", "status", "P1.S1", "--integration")
+    assert "base ahead of worktree_base_sha: 1 commit" in before.stdout
+    r = run(repo, "worktree", "sync", "P1.S1", "--merge")
+    assert r.returncode == 0, r.stdout + r.stderr
+    after = run(repo, "worktree", "status", "P1.S1", "--integration")
+    assert "base ahead of worktree_base_sha: 0 commits" in after.stdout
