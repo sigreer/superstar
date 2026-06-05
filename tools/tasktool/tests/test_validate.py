@@ -647,3 +647,114 @@ class SurfaceDriftWarningTests(unittest.TestCase):
         self.assertTrue(
             any("parallel_group" in w for w in warnings), warnings
         )
+
+    def _plan_repo(self, td, plan_text):
+        """Create a repo root with a plan file and return (repo_root, plan_rel)."""
+        plan_rel = "docs/plans/plan.md"
+        plan_abs = Path(td) / plan_rel
+        plan_abs.parent.mkdir(parents=True, exist_ok=True)
+        plan_abs.write_text(plan_text, encoding="utf-8")
+        return Path(td), plan_rel
+
+    def test_surface_present_in_plan_no_warn(self):
+        from tasktool.validate import find_surface_drift_warnings
+        with tempfile.TemporaryDirectory() as td:
+            root, plan_rel = self._plan_repo(td, "writes the commands surface")
+            p = _project_with_slice(
+                plan_path=plan_rel, integration_surfaces=["commands"]
+            )
+            warnings = find_surface_drift_warnings(
+                p, root, include_plan_checks=True
+            )
+        self.assertEqual([w for w in warnings if "surface" in w], [])
+
+    def test_surface_absent_from_plan_warns(self):
+        from tasktool.validate import find_surface_drift_warnings
+        with tempfile.TemporaryDirectory() as td:
+            root, plan_rel = self._plan_repo(td, "this plan mentions nothing useful")
+            p = _project_with_slice(
+                plan_path=plan_rel, integration_surfaces=["commands"]
+            )
+            warnings = find_surface_drift_warnings(
+                p, root, include_plan_checks=True
+            )
+        self.assertTrue(
+            any("commands" in w and "does not appear in plan" in w for w in warnings),
+            warnings,
+        )
+
+    def test_reservation_absent_from_plan_warns(self):
+        from tasktool.validate import find_surface_drift_warnings
+        with tempfile.TemporaryDirectory() as td:
+            root, plan_rel = self._plan_repo(td, "no reservations here")
+            p = _project_with_slice(
+                plan_path=plan_rel,
+                reservations=[Reservation(resource="homepage-sort", value="15")],
+            )
+            warnings = find_surface_drift_warnings(
+                p, root, include_plan_checks=True
+            )
+        self.assertTrue(
+            any("homepage-sort:15" in w for w in warnings), warnings
+        )
+
+    def test_surface_match_is_case_insensitive(self):
+        from tasktool.validate import find_surface_drift_warnings
+        with tempfile.TemporaryDirectory() as td:
+            root, plan_rel = self._plan_repo(td, "uses the cms-block-registry here")
+            p = _project_with_slice(
+                plan_path=plan_rel,
+                integration_surfaces=["CMS-Block-Registry"],
+            )
+            warnings = find_surface_drift_warnings(
+                p, root, include_plan_checks=True
+            )
+        self.assertEqual([w for w in warnings if "surface" in w], [])
+
+    def test_no_plan_path_no_check2_warning(self):
+        from tasktool.validate import find_surface_drift_warnings
+        p = _project_with_slice(integration_surfaces=["commands"])  # plan_path None
+        with tempfile.TemporaryDirectory() as td:
+            warnings = find_surface_drift_warnings(
+                p, Path(td), include_plan_checks=True
+            )
+        self.assertEqual([w for w in warnings if "does not appear" in w], [])
+
+    def test_missing_plan_file_no_check2_warning(self):
+        from tasktool.validate import find_surface_drift_warnings
+        p = _project_with_slice(
+            plan_path="docs/plans/gone.md", integration_surfaces=["commands"]
+        )
+        with tempfile.TemporaryDirectory() as td:
+            warnings = find_surface_drift_warnings(
+                p, Path(td), include_plan_checks=True
+            )
+        self.assertEqual([w for w in warnings if "does not appear" in w], [])
+
+    def test_non_utf8_plan_file_swallowed(self):
+        from tasktool.validate import find_surface_drift_warnings
+        with tempfile.TemporaryDirectory() as td:
+            plan_rel = "docs/plans/plan.md"
+            plan_abs = Path(td) / plan_rel
+            plan_abs.parent.mkdir(parents=True, exist_ok=True)
+            plan_abs.write_bytes(b"\xff\xfe invalid utf8 \x80")
+            p = _project_with_slice(
+                plan_path=plan_rel, integration_surfaces=["commands"]
+            )
+            # Must not raise; decode error becomes a skip (no Check 2 warning).
+            warnings = find_surface_drift_warnings(
+                p, Path(td), include_plan_checks=True
+            )
+        self.assertEqual([w for w in warnings if "does not appear" in w], [])
+
+    def test_check2_suppressed_when_plan_checks_disabled(self):
+        from tasktool.validate import find_surface_drift_warnings
+        with tempfile.TemporaryDirectory() as td:
+            root, plan_rel = self._plan_repo(td, "mentions nothing")
+            p = _project_with_slice(
+                plan_path=plan_rel, integration_surfaces=["commands"]
+            )
+            warnings = find_surface_drift_warnings(
+                p, root, include_plan_checks=False
+            )
+        self.assertEqual([w for w in warnings if "does not appear" in w], [])

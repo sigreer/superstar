@@ -277,6 +277,33 @@ def find_surface_drift_warnings(
                     f"`tasktool surface add {scope} <surface>` or remove it from the "
                     f"parallel group"
                 )
+            # Check 2 — tracker-declared surfaces/reservations absent from the plan.
+            if not include_plan_checks:
+                continue
+            if s.plan_path is None:
+                continue
+            if not (s.integration_surfaces or s.reservations):
+                continue
+            plan_file = repo_root / s.plan_path
+            if not plan_file.exists():
+                continue  # missing file already reported by find_path_warnings
+            try:
+                plan_text = plan_file.read_text(encoding="utf-8").lower()
+            except (OSError, UnicodeDecodeError):
+                continue  # best-effort nudge; unreadable plan is a skip, not a crash
+            for surface in s.integration_surfaces:
+                if surface.lower() not in plan_text:
+                    warnings.append(
+                        f"{scope}.surfaces: tracker declares surface {surface!r} "
+                        f"but it does not appear in plan {s.plan_path} (plan may be stale)"
+                    )
+            for r in s.reservations:
+                token = f"{r.resource}:{r.value}"
+                if token.lower() not in plan_text:
+                    warnings.append(
+                        f"{scope}.reservations: tracker declares reservation {token!r} "
+                        f"but it does not appear in plan {s.plan_path} (plan may be stale)"
+                    )
     return warnings
 
 
