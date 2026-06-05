@@ -260,7 +260,7 @@
       "slices": [
         {
           "blocked_on": null,
-          "closed": null,
+          "closed": "2026-06-05",
           "created": "2026-06-05",
           "depends_on": [],
           "id": "S1",
@@ -276,13 +276,14 @@
             "docs/reviewer/p8-s1-close-gate-lifecycle-auto-commit-design-spec",
             "docs/plans/2026-06-05-P8.S1-close-gate-lifecycle-auto-commit.md",
             "docs/handoffs/2026-06-05-P8.S1-close-gate-lifecycle-auto-commit-prompt.md",
-            "docs/reviewer/p8-s1-close-gate-lifecycle-auto-commit-plan"
+            "docs/reviewer/p8-s1-close-gate-lifecycle-auto-commit-plan",
+            "docs/reviewer/p8-s1-close-gate-lifecycle-auto-commit-P8-S1-post-slice"
           ],
           "review_active": true,
           "review_stage": "passed",
-          "reviewer_chain": "docs/reviewer/p8-s1-close-gate-lifecycle-auto-commit-plan",
+          "reviewer_chain": "docs/reviewer/p8-s1-close-gate-lifecycle-auto-commit-P8-S1-post-slice",
           "started": "2026-06-05",
-          "status": "in_progress",
+          "status": "done",
           "tasks": [],
           "title": "tasktool close gate: refuse done when worktree branch is unlanded (--allow-unlanded escape hatch) + auto-commit tracker lifecycle mutations at close",
           "workflow_step": "implement",
