@@ -267,14 +267,12 @@
             "docs/handoffs/2026-06-02-P7-S1-data-model-migration-prompt.md",
             "docs/reviewer/p7-s1-data-model-migration-plan"
           ],
-          "review_active": true,
-          "review_stage": "passed",
           "reviewer_chain": "docs/reviewer/p7-s1-data-model-migration-P7-S1-post-slice",
           "started": "2026-06-02",
           "status": "done",
           "tasks": [],
           "title": "Data model + migration (schema v3): surfaces, reservations, coordination_group, base/landed SHAs, LedgerReservation",
-          "workflow_step": "implement",
+          "workflow_step": "done",
           "worktree_pruned_at": "2026-06-03"
         },
         {
@@ -294,14 +292,12 @@
             "docs/handoffs/2026-06-02-P7-S2-surface-reserve-coordinate-cli-prompt.md",
             "docs/reviewer/p7-s2-surface-reserve-coordinate-cli-plan"
           ],
-          "review_active": true,
-          "review_stage": "passed",
           "reviewer_chain": "docs/reviewer/p7-s2-surface-reserve-coordinate-cli-P7-S2-post-slice",
           "started": "2026-06-03",
           "status": "done",
           "tasks": [],
           "title": "surface / reserve / coordinate CLI; reservation refusal + --force --reason; ledger population on archive",
-          "workflow_step": "implement",
+          "workflow_step": "done",
           "worktree_pruned_at": "2026-06-03"
         },
         {
@@ -323,14 +319,12 @@
             "docs/handoffs/2026-06-04-P7-S3-scheduling-overlap-detection-prompt.md",
             "docs/reviewer/p7-s3-scheduling-overlap-detection-plan"
           ],
-          "review_active": true,
-          "review_stage": "passed",
           "reviewer_chain": "docs/reviewer/p7-s3-scheduling-overlap-detection-P7-S3-post-slice",
           "started": "2026-06-04",
           "status": "done",
           "tasks": [],
           "title": "Scheduling overlap detection: ready-slices/schedule warnings, surface check, ratify warning, coordination suppression",
-          "workflow_step": "implement",
+          "workflow_step": "done",
           "worktree_base_sha": "a8e3661b602076becadaa8c6f216a3ef030330b2",
           "worktree_pruned_at": "2026-06-04"
         },
@@ -352,14 +346,12 @@
             "docs/handoffs/2026-06-02-P7-S4-worktree-integration-detection-prompt.md",
             "docs/reviewer/p7-s4-worktree-integration-detection-plan"
           ],
-          "review_active": true,
-          "review_stage": "passed",
           "reviewer_chain": "docs/reviewer/p7-s4-worktree-integration-detection-P7-S4-post-slice",
           "started": "2026-06-03",
           "status": "done",
           "tasks": [],
           "title": "worktree start base-sha + prune landed-sha stamping + worktree status --integration",
-          "workflow_step": "implement",
+          "workflow_step": "done",
           "worktree_pruned_at": "2026-06-03"
         },
         {
@@ -386,14 +378,12 @@
             "docs/reviewer/p7-s5-conservative-worktree-sync-plan",
             "docs/reviewer/p7-s5-conservative-worktree-sync-P7-S5-post-slice"
           ],
-          "review_active": true,
-          "review_stage": "passed",
           "reviewer_chain": "docs/reviewer/p7-s5-conservative-worktree-sync-P7-S5-post-slice",
           "started": "2026-06-05",
           "status": "done",
           "tasks": [],
           "title": "Conservative worktree sync (strict preconditions; advances base-sha)",
-          "workflow_step": "implement",
+          "workflow_step": "done",
           "worktree_base_sha": "0290ebd94333f9c197c8f718ca85c9df539c51fc",
           "worktree_pruned_at": "2026-06-05"
         },
@@ -417,14 +407,12 @@
             "docs/handoffs/2026-06-04-P7-S6-skill-integration-surface-docs-prompt.md",
             "docs/reviewer/p7-s6-skill-integration-surface-docs-plan"
           ],
-          "review_active": true,
-          "review_stage": "passed",
           "reviewer_chain": "docs/reviewer/p7-s6-skill-integration-surface-docs-P7-S6-post-slice",
           "started": "2026-06-05",
           "status": "done",
           "tasks": [],
           "title": "Skill changes: subagent-driven-development checkpoint + registry-merge-playbook; tasklist-discipline; phase-planning/writing-plans tables",
-          "workflow_step": "implement",
+          "workflow_step": "done",
           "worktree_base_sha": "0290ebd94333f9c197c8f718ca85c9df539c51fc",
           "worktree_pruned_at": "2026-06-05"
         },
@@ -452,14 +440,12 @@
             "docs/handoffs/2026-06-05-P7-S7-plan-tracker-drift-validation-prompt.md",
             "docs/reviewer/p7-s7-plan-tracker-drift-validation-plan"
           ],
-          "review_active": true,
-          "review_stage": "passed",
           "reviewer_chain": "docs/reviewer/p7-s7-plan-tracker-drift-validation-P7-S7-post-slice",
           "started": "2026-06-05",
           "status": "done",
           "tasks": [],
           "title": "Plan-tracker drift validation (declared surfaces/reservations reflected in plan)",
-          "workflow_step": "implement",
+          "workflow_step": "done",
           "worktree_base_sha": "65acbcbbb849509088a9625088322dfe12ef7a4b",
           "worktree_pruned_at": "2026-06-05"
         },
