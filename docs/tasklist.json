@@ -430,7 +430,7 @@
         },
         {
           "blocked_on": null,
-          "closed": null,
+          "closed": "2026-06-05",
           "created": "2026-06-02",
           "depends_on": [
             "P7.S1",
@@ -451,9 +451,11 @@
             "docs/handoffs/2026-06-05-P7-S7-plan-tracker-drift-validation-prompt.md",
             "docs/reviewer/p7-s7-plan-tracker-drift-validation-plan"
           ],
-          "reviewer_chain": "docs/reviewer/p7-s7-plan-tracker-drift-validation-plan",
+          "review_active": true,
+          "review_stage": "passed",
+          "reviewer_chain": "docs/reviewer/p7-s7-plan-tracker-drift-validation-P7-S7-post-slice",
           "started": "2026-06-05",
-          "status": "in_progress",
+          "status": "done",
           "tasks": [],
           "title": "Plan-tracker drift validation (declared surfaces/reservations reflected in plan)",
           "workflow_step": "implement",
