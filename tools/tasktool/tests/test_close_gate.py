@@ -168,3 +168,40 @@ def test_cross_item_with_unlanded_branch_is_gated(tmp_path):
     r = run(root, "close", "X1")
     assert r.returncode == 1, r.stdout + r.stderr
     assert "wt-x1" in (r.stdout + r.stderr)
+
+
+# ───── Task 2: gate on cmd_set --status done ─────
+
+def test_set_done_refuses_unlanded_branch(tmp_path):
+    root, _wt = start_with_unlanded_commit(tmp_path)
+    r = run(root, "set", "P1.S1", "--status", "done", "--skip-review-gate")
+    assert r.returncode == 1, r.stdout + r.stderr
+    out = r.stdout + r.stderr
+    assert "not landed" in out
+    assert BRANCH in out
+    assert the_slice(root)["status"] != "done"
+
+
+def test_set_done_allow_unlanded_closes_and_audits(tmp_path):
+    root, _wt = start_with_unlanded_commit(tmp_path)
+    r = run(
+        root,
+        "set",
+        "P1.S1",
+        "--status",
+        "done",
+        "--skip-review-gate",
+        "--allow-unlanded",
+        "--reason",
+        "landed via squash outside git",
+    )
+    assert r.returncode == 0, r.stdout + r.stderr
+    sl = the_slice(root)
+    assert sl["status"] == "done"
+    assert "allow-unlanded override for P1.S1: landed via squash outside git" in sl["notes"]
+
+
+def test_set_non_done_status_is_not_gated(tmp_path):
+    root, _wt = start_with_unlanded_commit(tmp_path)
+    r = run(root, "set", "P1.S1", "--status", "ready")
+    assert r.returncode == 0, r.stdout + r.stderr

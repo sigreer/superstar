@@ -1121,6 +1121,7 @@ def cmd_set(
     reviewer_chain: Path | None = None,
     skip_review_gate: bool = False,
     allow_ready_close: bool = False,
+    allow_unlanded: bool = False,
     reason: str | None = None,
 ) -> None:
     # Tolerate the historical positional/keyword `repo_root=` calling style: it
@@ -1160,6 +1161,15 @@ def cmd_set(
                         f"or use `tasktool set {qid} --status done --allow-ready-close --reason ...` if applicable"
                     )
                 _apply_ready_close_override(qid, item, reason=reason)
+            if new_status == Status.DONE and kind in ("slice", "cross"):
+                _apply_landed_gate(
+                    write_root,
+                    qid,
+                    item,
+                    allow_unlanded=allow_unlanded,
+                    reason=reason,
+                    command="set",
+                )
             if new_status == Status.IN_PROGRESS:
                 _start_item(qid, item)
             else:

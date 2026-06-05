@@ -119,9 +119,19 @@ def test_start_on_done_row_does_not_create_worktree(tmp_path):
     expected_name = "worktree-p1-s1-lifecycle-core"
     _git(root, "worktree", "remove", "--force", f".worktrees/{expected_name}")
     _git(root, "branch", "-D", expected_name)
-    # Re-record the worktree fields as null so the second `start` can't classify the
-    # row as "needs repair"; mark slice done directly via `set --status done --skip-review-gate`.
-    assert run(root, "set", "P1.S1", "--status", "done", "--skip-review-gate").returncode == 0
+    # Keep the recorded, deleted branch in place and use the explicit
+    # unlanded override to mark the row done for this setup.
+    assert run(
+        root,
+        "set",
+        "P1.S1",
+        "--status",
+        "done",
+        "--skip-review-gate",
+        "--allow-unlanded",
+        "--reason",
+        "test setup deleted the branch before marking done",
+    ).returncode == 0
     r = run(root, "start", "P1.S1")
     assert r.returncode != 0
     assert "already done" in (r.stdout + r.stderr)

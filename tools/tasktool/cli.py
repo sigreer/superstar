@@ -102,6 +102,12 @@ def _build_parser() -> argparse.ArgumentParser:
     p_set.add_argument("--skip-review-gate", action="store_true")
     p_set.add_argument("--allow-ready-close", action="store_true")
     p_set.add_argument("--reason")
+    p_set.add_argument(
+        "--allow-unlanded",
+        action="store_true",
+        help="Allow --status done although the recorded worktree branch has "
+        "not landed; requires --reason (recorded as an audit note)",
+    )
 
     p_infer = sub.add_parser("infer-step")
     group = p_infer.add_mutually_exclusive_group(required=True)
@@ -419,7 +425,9 @@ def main(argv: list[str]) -> int:
                 review_active=review_active_bool,
                 review_stage=args.review_stage,
                 reviewer_chain=args.reviewer_chain, skip_review_gate=args.skip_review_gate,
-                allow_ready_close=args.allow_ready_close, reason=args.reason,
+                allow_ready_close=args.allow_ready_close,
+                allow_unlanded=args.allow_unlanded,
+                reason=args.reason,
             )
         elif args.cmd == "infer-step":
             return commands.cmd_infer_step(
