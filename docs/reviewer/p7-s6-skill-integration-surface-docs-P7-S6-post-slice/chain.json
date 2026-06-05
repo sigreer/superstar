@@ -114,10 +114,119 @@
       "base_ref": null,
       "base_ref_source": null,
       "diff_included": false
+    },
+    {
+      "round": 2,
+      "reviewers": [
+        {
+          "role": "primary",
+          "sweep_group": null,
+          "parent_round": 2,
+          "request": "r2-2026-06-05T0118-primary-request.md",
+          "response": "r2-2026-06-05T0118-primary-response.md",
+          "verdict": "ready",
+          "verdict_valid": true,
+          "returncode": 0,
+          "status": "ok",
+          "provider": "codex",
+          "caller_provider": "claude",
+          "model": null,
+          "sandbox": {
+            "repo_root": "/home/simon/Dev/sigreer/skills/superstar/.worktrees/worktree-p7-s6-skill-changes-subagent-driven",
+            "scratch_dir": "/tmp/superstar-reviewer-p7-s6-skill-integration-surface-docs-P7-S6-post-slice-r2-primary-b_6dx1gc",
+            "response_dir": "docs/reviewer/p7-s6-skill-integration-surface-docs-P7-S6-post-slice/.reviewer-output/r2-primary",
+            "mode": "workspace-write-with-read-access"
+          },
+          "started_at": "2026-06-05T00:18:18.444Z",
+          "finished_at": "2026-06-05T00:22:31.970Z",
+          "duration_ms": 253526,
+          "estimated_usage": {
+            "formula": "ceil(chars / 4)",
+            "prompt_chars": 180706,
+            "response_chars": 1957,
+            "estimated_input_tokens": 45177,
+            "estimated_output_tokens": 490,
+            "estimated_total_tokens": 45667
+          },
+          "exact_usage": null,
+          "usage_capture_status": "estimated_only",
+          "usage_capture_error": null
+        },
+        {
+          "role": "sweep",
+          "sweep_group": 1,
+          "parent_round": 2,
+          "request": "r2-2026-06-05T0118-sweep1-request.md",
+          "response": "r2-2026-06-05T0118-sweep1-response.md",
+          "verdict": "ready",
+          "verdict_valid": true,
+          "returncode": 0,
+          "status": "ok",
+          "provider": "codex",
+          "caller_provider": "claude",
+          "model": null,
+          "sandbox": {
+            "repo_root": "/home/simon/Dev/sigreer/skills/superstar/.worktrees/worktree-p7-s6-skill-changes-subagent-driven",
+            "scratch_dir": "/tmp/superstar-reviewer-p7-s6-skill-integration-surface-docs-P7-S6-post-slice-r2-sweep1-1m4eyfwb",
+            "response_dir": "docs/reviewer/p7-s6-skill-integration-surface-docs-P7-S6-post-slice/.reviewer-output/r2-sweep1",
+            "mode": "workspace-write-with-read-access"
+          },
+          "started_at": "2026-06-05T00:22:31.973Z",
+          "finished_at": "2026-06-05T00:25:34.848Z",
+          "duration_ms": 182875,
+          "estimated_usage": {
+            "formula": "ceil(chars / 4)",
+            "prompt_chars": 57704,
+            "response_chars": 1517,
+            "estimated_input_tokens": 14426,
+            "estimated_output_tokens": 380,
+            "estimated_total_tokens": 14806
+          },
+          "exact_usage": null,
+          "usage_capture_status": "estimated_only",
+          "usage_capture_error": null
+        }
+      ],
+      "status": "ok",
+      "returncode": 0,
+      "started_at": "2026-06-05T00:18:18.444Z",
+      "finished_at": "2026-06-05T00:22:31.970Z",
+      "duration_ms": 253526,
+      "provider": "codex",
+      "caller_provider": "claude",
+      "model": null,
+      "estimated_usage": {
+        "formula": "ceil(chars / 4)",
+        "prompt_chars": 180706,
+        "response_chars": 1957,
+        "estimated_input_tokens": 45177,
+        "estimated_output_tokens": 490,
+        "estimated_total_tokens": 45667
+      },
+      "exact_usage": null,
+      "usage_capture_status": "estimated_only",
+      "usage_capture_error": null,
+      "merged_verdict": "ready",
+      "merged_findings": "r2-merged-findings.md",
+      "request": "r2-2026-06-05T0118-primary-request.md",
+      "response": "r2-2026-06-05T0118-primary-response.md",
+      "resolution": "r1-resolution.md",
+      "resolution_parse_status": "ok",
+      "resolution_waiver": false,
+      "head_sha_at_request": "8280dbe32de1a26e18f1c7cfb79e7dbd0bc49c08",
+      "head_sha_after_round": "8280dbe32de1a26e18f1c7cfb79e7dbd0bc49c08",
+      "worktree_dirty_at_request": false,
+      "verdict": "ready",
+      "verdict_valid": true,
+      "findings_count": 1,
+      "blocking_findings_count": 1,
+      "base_ref": "84cc48e383a43efd6bbacae6bfe6da26c5eba175",
+      "base_ref_source": "auto",
+      "diff_included": true
     }
   ],
   "sweep_checkpoints": {
     "first-round": "completed",
-    "final-ready": "pending"
+    "final-ready": "completed"
   }
 }
