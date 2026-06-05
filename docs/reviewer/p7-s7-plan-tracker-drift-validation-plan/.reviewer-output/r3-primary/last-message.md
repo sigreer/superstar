@@ -1,0 +1,32 @@
+1. Findings
+
+F1 Severity: blocking — RESOLVED  
+The plan still requires adding S7’s real `validate` integration surface before ratification. See `docs/plans/2026-06-05-P7-S7-plan-tracker-drift-validation.md:21` and Task 5 at `:552-572`.
+
+F2 Severity: blocking — RESOLVED  
+The `cmd_validate` fixture now correctly exercises both checks: empty `integration_surfaces` with `parallel_group="core"` for Check 1, plus a missing reservation token for Check 2. See `docs/plans/2026-06-05-P7-S7-plan-tracker-drift-validation.md:402-412`.
+
+F3 Severity: important — RESOLVED  
+The S7 handoff ref is no longer a false live-baseline claim. `docs/tasklist.json:444-448` references the handoff, and `docs/handoffs/2026-06-05-P7-S7-plan-tracker-drift-validation-prompt.md` exists on disk. I also ran `tasktool validate --format json`; it returned `ok: true` with empty `errors` and `warnings`, matching the plan’s smoke expectation at `docs/plans/2026-06-05-P7-S7-plan-tracker-drift-validation.md:511-514`.
+
+2. Open questions / assumptions
+
+Assumption: the current unstaged/dirty artifact state is normal for this in-progress review round. `tasktool artifact status P7.S7 --strict` still reports the plan artifact is not staged, but that is an artifact staging/commit state issue, not a plan-content blocker.
+
+3. Suggested document edits
+
+None required.
+
+4. Verification gaps / commands
+
+Verified:
+`test -f docs/handoffs/2026-06-05-P7-S7-plan-tracker-drift-validation-prompt.md`
+`tasktool validate --format json`
+`tasktool show P7.S7`
+`tasktool schedule P7`
+`tasktool ready-slices P7`
+
+Residual operator step before committing: stage/commit the reviewed artifacts so `tasktool artifact status P7.S7 --strict` can pass.
+
+Overall verdict: ready
+
