@@ -67,7 +67,7 @@ def _start_worktree(repo: Path, slice_qid: str) -> Path:
 
 
 def _land_sibling(repo: Path, sibling_qid: str) -> None:
-    """Close + merge + prune a sibling so it stamps landed_base_sha."""
+    """Merge + close + prune a sibling so it stamps landed_base_sha."""
     data = json.loads((repo / "docs" / "tasklist.json").read_text())
     slc = next(
         s for ph in data["phases"] for s in ph["slices"]
@@ -79,13 +79,13 @@ def _land_sibling(repo: Path, sibling_qid: str) -> None:
     (wt_path / "sibling-work").write_text("x")
     _run(wt_path, "git", "add", "sibling-work")
     _run(wt_path, "git", "commit", "-q", "-m", "sibling work")
-    _tasktool(repo, "close", sibling_qid, "--skip-review-gate")
-    # start/close route tasklist mutations to the authoritative checkout, leaving
+    # start routes tasklist mutations to the authoritative checkout, leaving
     # docs/tasklist.json dirty on main; commit it so the sibling-branch merge
-    # (which carries its own docs/tasklist.json) is not refused.
+    # is not refused.
     _run(repo, "git", "add", "docs/tasklist.json")
     _run(repo, "git", "commit", "-q", "-m", f"route mutations before merge {branch}")
     _run(repo, "git", "merge", "--no-ff", "-q", "-m", f"merge {branch}", branch)
+    _tasktool(repo, "close", sibling_qid, "--skip-review-gate")
     _tasktool(repo, "worktree", "prune", sibling_qid)
 
 
@@ -110,14 +110,14 @@ def test_integration_reports_landed_sibling_via_ancestry_fallback(tmp_path):
     data = json.loads((repo / "docs" / "tasklist.json").read_text())
     sib = next(s for s in data["phases"][0]["slices"] if s["id"] == "S2")
     branch = sib["worktree_branch"]
-    # Real commit, close, merge — but DO NOT prune (so no landed_base_sha stamp).
+    # Real commit, merge, close — but DO NOT prune (so no landed_base_sha stamp).
     (sib_wt / "w").write_text("x")
     _run(sib_wt, "git", "add", "w")
     _run(sib_wt, "git", "commit", "-q", "-m", "w")
-    _tasktool(repo, "close", "P1.S2", "--skip-review-gate")
     _run(repo, "git", "add", "docs/tasklist.json")
     _run(repo, "git", "commit", "-q", "-m", "route mutations")
     _run(repo, "git", "merge", "--no-ff", "-q", "-m", "m", branch)
+    _tasktool(repo, "close", "P1.S2", "--skip-review-gate")
     out = _tasktool(repo, "worktree", "status", "P1.S1", "--integration").stdout
     assert "P1.S2 (ancestry)" in out
 
@@ -153,10 +153,10 @@ def test_integration_ancestry_not_landed_when_sibling_merged_before_base_sha(tmp
     (sib_wt / "w").write_text("x")
     _run(sib_wt, "git", "add", "w")
     _run(sib_wt, "git", "commit", "-q", "-m", "w")
-    _tasktool(repo, "close", "P1.S2", "--skip-review-gate")
     _run(repo, "git", "add", "docs/tasklist.json")
     _run(repo, "git", "commit", "-q", "-m", "route mutations")
     _run(repo, "git", "merge", "--no-ff", "-q", "-m", "m", branch)
+    _tasktool(repo, "close", "P1.S2", "--skip-review-gate")
     # NOTE: do NOT prune S2, so it has no landed_base_sha and falls to the
     # ancestry branch. Its branch ref still exists and IS an ancestor of main.
     # NOW this slice branches — base_sha = main HEAD, which already contains S2.

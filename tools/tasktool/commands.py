@@ -705,6 +705,52 @@ def _apply_ready_close_override(qid: str, item, *, reason: str | None) -> None:
     audit = f"[{ts}] ready-close override for {qid}: {reason.strip()}"
     item.notes = (item.notes + "\n" + audit).strip() if item.notes else audit
 
+def _apply_landed_gate(
+    write_root: Path,
+    qid: str,
+    item,
+    *,
+    allow_unlanded: bool,
+    reason: str | None,
+    command: str,
+) -> None:
+    kind = parse_id(qid)[0]
+    if kind not in ("slice", "cross"):
+        return
+    if getattr(item, "worktree_in_place", False):
+        return
+    branch = getattr(item, "worktree_branch", None)
+    if not branch:
+        return
+    if allow_unlanded:
+        if not reason or not reason.strip():
+            raise CommandError(f"{qid}: --allow-unlanded requires --reason")
+        ts = _dt.datetime.now().isoformat(timespec="seconds")
+        audit = f"[{ts}] allow-unlanded override for {qid}: {reason.strip()}"
+        item.notes = (item.notes + "\n" + audit).strip() if item.notes else audit
+        return
+
+    from tasktool import worktree as wt
+
+    parent = _authoritative_parent_branch(write_root, qid)
+    if not wt.branch_exists(write_root, branch):
+        raise CommandError(
+            f"{qid}: recorded worktree branch {branch!r} no longer exists; "
+            f"cannot verify it landed on {parent!r}. Any review/started gates "
+            f"already passed, but the {command} was NOT performed. If you know "
+            f"the work landed, re-run with --allow-unlanded --reason \"...\""
+        )
+    if not wt.branch_is_merged(write_root, branch=branch, into=parent):
+        raise CommandError(
+            f"{qid}: worktree branch {branch!r} has not landed on {parent!r}. "
+            f"Any review/started gates already passed, but the {command} was "
+            f"NOT performed. Merge back first:\n"
+            f"  cd {write_root}\n"
+            f"  git merge --no-ff {branch}\n"
+            f"  tasktool {command} {qid} ...\n"
+            f"Escape hatch (records an audit note): --allow-unlanded --reason \"...\""
+        )
+
 def _archive_cross_at_root(
     write_root: Path,
     p: Project,
@@ -1164,6 +1210,7 @@ def cmd_close(
     reviewer_chain: Path | None = None, skip_review_gate: bool = False,
     allow_ready_close: bool = False, reason: str | None = None,
     no_archive: bool = False,
+    allow_unlanded: bool = False,
 ) -> None:
     with _write_context(repo_root) as write_root:
         p = _load(write_root)
@@ -1182,6 +1229,15 @@ def cmd_close(
             if not allow_ready_close:
                 raise CommandError(f"{qid} must be started before close; run `tasktool start {qid}` first")
             _apply_ready_close_override(qid, item, reason=reason)
+        if kind in ("slice", "cross"):
+            _apply_landed_gate(
+                write_root,
+                qid,
+                item,
+                allow_unlanded=allow_unlanded,
+                reason=reason,
+                command="close",
+            )
         item.status = Status.DONE
         item.closed = closed_date or _today()
         if refs:

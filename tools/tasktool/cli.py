@@ -161,6 +161,11 @@ def _build_parser() -> argparse.ArgumentParser:
     p_close.add_argument("--allow-ready-close", action="store_true")
     p_close.add_argument("--reason")
     p_close.add_argument("--no-archive", action="store_true")
+    p_close.add_argument(
+        "--allow-unlanded", action="store_true",
+        help="Close even though the recorded worktree branch has not landed "
+             "on the base branch; requires --reason (recorded as an audit note)",
+    )
 
     p_cancel = sub.add_parser("cancel")
     p_cancel.add_argument("id")
@@ -482,6 +487,7 @@ def main(argv: list[str]) -> int:
                 reviewer_chain=args.reviewer_chain, skip_review_gate=args.skip_review_gate,
                 allow_ready_close=args.allow_ready_close, reason=args.reason,
                 no_archive=args.no_archive,
+                allow_unlanded=args.allow_unlanded,
             )
         elif args.cmd == "cancel":
             commands.cmd_cancel(

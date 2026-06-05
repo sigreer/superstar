@@ -154,7 +154,15 @@ def test_prune_refuses_when_branch_unmerged(project_with_worktree):
     (wt / "feature.txt").write_text("x")
     _run(wt, "git", "add", "feature.txt")
     _run(wt, "git", "commit", "-q", "-m", "feature work")
-    _tasktool(repo, "close", "P1.S1", "--skip-review-gate")
+    _tasktool(
+        repo,
+        "close",
+        "P1.S1",
+        "--skip-review-gate",
+        "--allow-unlanded",
+        "--reason",
+        "exercise prune unmerged-branch guard",
+    )
     res = _tasktool(repo, "worktree", "prune", "P1.S1", check=False)
     assert res.returncode != 0
     assert "merged" in res.stderr.lower()
@@ -259,7 +267,15 @@ def _project_with_closed_unmerged(tmp_path):
     (wt_path / "f").write_text("x")
     _run(wt_path, "git", "add", "f")
     _run(wt_path, "git", "commit", "-q", "-m", "work")
-    _tasktool(repo, "close", "P1.S1", "--skip-review-gate")
+    _tasktool(
+        repo,
+        "close",
+        "P1.S1",
+        "--skip-review-gate",
+        "--allow-unlanded",
+        "--reason",
+        "fixture intentionally closed before merge",
+    )
     return repo, wt_path
 
 
