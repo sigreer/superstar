@@ -279,7 +279,7 @@
             "docs/reviewer/p8-s1-close-gate-lifecycle-auto-commit-plan"
           ],
           "review_active": true,
-          "review_stage": "applying_fixes",
+          "review_stage": "passed",
           "reviewer_chain": "docs/reviewer/p8-s1-close-gate-lifecycle-auto-commit-plan",
           "started": "2026-06-05",
           "status": "in_progress",
