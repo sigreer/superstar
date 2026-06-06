@@ -676,6 +676,27 @@ def utc_now_iso() -> str:
     return dt.datetime.now(dt.timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
 
+def parse_since(value: str) -> dt.datetime:
+    """Parse --since as UTC; date-only values mean midnight UTC."""
+    parsed = dt.datetime.fromisoformat(value)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=dt.timezone.utc)
+    return parsed
+
+
+def _round_started_at(round_entry: dict) -> dt.datetime | None:
+    raw = round_entry.get("started_at")
+    if not raw:
+        return None
+    try:
+        parsed = dt.datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=dt.timezone.utc)
+    return parsed
+
+
 def migrate_manifest_inplace(manifest: dict) -> None:
     """Add `status` and `returncode` keys to legacy round/reviewer entries.
 
@@ -1972,6 +1993,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     sp_stats = subparsers.add_parser("stats", help="Summarize review-chain usage and timing metrics")
     sp_stats.add_argument("--output-dir", default="docs/reviewer")
     sp_stats.add_argument("--json", action="store_true", help="Emit normalized JSON instead of a text table")
+    sp_stats.add_argument(
+        "--since",
+        default=None,
+        help="Only count rounds started on/after this UTC date/datetime (ISO format).",
+    )
 
     return parser.parse_args(argv)
 
@@ -2210,10 +2236,13 @@ def _provider_usage_records_for_stats(chain_dir: Path, round_entry: dict) -> lis
     return records
 
 
-def collect_review_stats(output_dir: Path) -> dict:
+def collect_review_stats(output_dir: Path, since: dt.datetime | None = None) -> dict:
     groups = {kind: _empty_stats_group() for kind in STATS_KINDS}
     providers: dict[str, dict] = {}
     chain_count = 0
+    excluded_legacy_rounds = 0
+    uncorrelated_chains: list[str] = []
+    slice_chains: dict[str, dict[str, list]] = {}
 
     for manifest_path in sorted(output_dir.glob("**/chain.json")):
         try:
@@ -2225,7 +2254,20 @@ def collect_review_stats(output_dir: Path) -> dict:
         chain_count += 1
         kind = manifest.get("kind") if manifest.get("kind") in STATS_KINDS else "other"
         group = groups[kind]
+
+        # Filter rounds by --since window.
+        in_window_rounds = []
         for round_entry in manifest.get("rounds", []) or []:
+            if since is not None:
+                started = _round_started_at(round_entry)
+                if started is None:
+                    excluded_legacy_rounds += 1
+                    continue
+                if started < since:
+                    continue
+            in_window_rounds.append(round_entry)
+
+        for round_entry in in_window_rounds:
             group["round_count"] += 1
             duration = round_entry.get("duration_ms")
             if isinstance(duration, (int, float)):
@@ -2262,6 +2304,14 @@ def collect_review_stats(output_dir: Path) -> dict:
                 if isinstance(invocation_duration, (int, float)):
                     provider_stats["total_duration_ms"] += int(invocation_duration)
 
+        # Per-slice correlation: spec/plan/post-slice chains only.
+        if kind in ("spec", "plan", "post-slice") and in_window_rounds:
+            work_id = manifest.get("work_id")
+            if work_id is None:
+                uncorrelated_chains.append(manifest.get("chain") or manifest_path.parent.name)
+            else:
+                slice_chains.setdefault(work_id, {}).setdefault(kind, []).extend(in_window_rounds)
+
     for group in groups.values():
         if group["round_count"]:
             group["average_duration_ms"] = round(group["total_duration_ms"] / group["round_count"])
@@ -2276,11 +2326,44 @@ def collect_review_stats(output_dir: Path) -> dict:
             provider_stats["average_duration_ms"] = round(
                 provider_stats["total_duration_ms"] / provider_stats["round_count"]
             )
+
+    # Compute per-slice metrics.
+    PASSING = ("ready", "ready with small edits")
+    passing_slices = []
+    for work_id, kinds in slice_chains.items():
+        post_rounds = kinds.get("post-slice", [])
+        if not post_rounds:
+            continue
+        latest = max(
+            post_rounds,
+            key=lambda r: (_round_started_at(r) or dt.datetime.min.replace(tzinfo=dt.timezone.utc)),
+        )
+        if (latest.get("merged_verdict") or latest.get("verdict")) in PASSING:
+            passing_slices.append(work_id)
+    # Numerator counts reviewer INVOCATIONS, not manifest round entries:
+    # a thorough round stores its sweeps inside round_entry["reviewers"].
+    # Legacy/single-reviewer rounds have no "reviewers" key -> count 1.
+    rounds_total = sum(
+        len(round_entry.get("reviewers") or [None])
+        for work_id in passing_slices
+        for rounds in slice_chains[work_id].values()
+        for round_entry in rounds
+    )
+    per_slice = {
+        "slice_count": len(passing_slices),
+        "rounds_total": rounds_total,
+        "rounds_per_slice": (round(rounds_total / len(passing_slices), 2) if passing_slices else None),
+        "uncorrelated_chains": sorted(uncorrelated_chains),
+        "per_slice_complete": not uncorrelated_chains,
+    }
+
     return {
         "chain_count": chain_count,
         "round_count": sum(g["round_count"] for g in groups.values()),
+        "excluded_legacy_rounds": excluded_legacy_rounds,
         "groups": groups,
         "provider_comparison": providers,
+        "per_slice": per_slice,
     }
 
 
@@ -2303,10 +2386,22 @@ def print_stats_table(stats: dict) -> None:
                 f"{data['estimated_output_tokens']:>11} {data['estimated_total_tokens']:>10} "
                 f"{data['average_duration_ms']:>7}"
             )
+    ps = stats.get("per_slice") or {}
+    print()
+    print(f"per-slice: slices={ps.get('slice_count')} rounds={ps.get('rounds_total')} "
+          f"rounds/slice={ps.get('rounds_per_slice')} complete={ps.get('per_slice_complete')}")
+    if ps.get("uncorrelated_chains"):
+        print(f"  WARNING: {len(ps['uncorrelated_chains'])} uncorrelated chain(s) "
+              f"(missing work_id) — early-gate rounds may be undercounted; "
+              f"rounds/slice is not claimable from this window: "
+              f"{', '.join(ps['uncorrelated_chains'])}")
+    if stats.get("excluded_legacy_rounds"):
+        print(f"  note: {stats['excluded_legacy_rounds']} round(s) without timestamps excluded by --since")
 
 
 def run_stats(args) -> int:
-    stats = collect_review_stats(Path(args.output_dir))
+    since = parse_since(args.since) if args.since else None
+    stats = collect_review_stats(Path(args.output_dir), since=since)
     if args.json:
         print(json.dumps(stats, indent=2))
     else:
