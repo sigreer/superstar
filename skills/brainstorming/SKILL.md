@@ -124,7 +124,7 @@ After writing the spec document, look at it with fresh eyes:
 Fix any issues inline. No need to re-review — just fix and move on.
 
 **External Spec Review Gate:**
-After the spec self-review loop passes, invoke `[[external-review]]` with `--kind spec` against the written spec. Pass `docs/tasklist.json` (or `tasktool render` output) as context when present, and iterate until the verdict is `ready` or `ready with small edits`.
+After the spec self-review loop passes, invoke `[[external-review]]` with `--kind spec` against the written spec. Pass `--work-id <id>` when the spec maps to a tasktool row, and pass `tasktool brief <id>` output (written to a scratch file) as tracker context instead of the full `docs/tasklist.json` when the tasklist is large. Iterate until the verdict is `ready` or `ready with small edits`. If a round returns `revise`, write `r{N}-resolution.md` in the chain folder before re-submitting — the CLI refuses the next round without it.
 
 If the reviewer returns `revise`, apply the findings directly, update the spec, and re-submit. If a finding requires a product decision that was not resolved during brainstorming, ask the user the narrow question needed to unblock the review. Otherwise, continue without pausing.
 
