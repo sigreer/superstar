@@ -1,3 +1,4 @@
 [tool.pytest.ini_options]
 addopts = "--import-mode=importlib"
-testpaths = ["scripts/tests", "tools/tasktool/tests", "skills/external-review/tests"]
+testpaths = ["scripts/tests", "tools/tasktool/tests", "skills/external-review/tests", "tools/timeline/tests"]
+pythonpath = ["tools"]
