@@ -34,3 +34,18 @@ def test_quiet_gaps_between_coverage():
     gaps = render.quiet_gaps([(s, e) for _, s, e in spans])
     # P1->P2 gap is 12h: below the 24h threshold, not reported.
     assert gaps == [(D(5), D(9))]
+
+
+def test_quiet_gaps_split_by_interior_anchor():
+    # A rendered event inside a coverage hole must never sit inside a
+    # reported gap: the anchor splits the gap.
+    cover = [(D(1), D(3)), (D(9), D(10))]
+    gaps = render.quiet_gaps(cover, anchors=[D(6)])
+    assert gaps == [(D(3), D(6)), (D(6), D(9))]
+
+
+def test_quiet_gaps_anchor_near_edge_suppresses_short_remainder():
+    # Anchor 12h after coverage ends: the sub-gap before it is below the
+    # threshold and disappears; only the long remainder is reported.
+    gaps = render.quiet_gaps([(D(1), D(3)), (D(9), D(10))], anchors=[D(3, 12)])
+    assert gaps == [(D(3, 12), D(9))]

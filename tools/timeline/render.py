@@ -46,13 +46,17 @@ def visible_items(items):
 def phase_span(phase, items):
     """-> (start|None, end|None, close_only). end None means the phase is open.
 
-    close_only is True when no resolvable start exists."""
+    close_only is True when no resolvable start exists. When the phase has no
+    `started`, the earliest slice activity (start OR close) is used: a slice
+    closing proves the phase was active by then, and legacy phases often have
+    slice closes but no slice starts (multistore P11)."""
     start = phase.started.when
     if start is None:
-        slice_starts = [s.started.when for s in items
-                        if s.kind == "slice" and s.parent == phase.key
-                        and s.started.when]
-        start = min(slice_starts) if slice_starts else None
+        slice_dates = [d for s in items
+                       if s.kind == "slice" and s.parent == phase.key
+                       for d in (s.started.when, s.closed.when)
+                       if d is not None]
+        start = min(slice_dates) if slice_dates else None
     if start is None:
         start = phase.created.when
     end = phase.closed.when
@@ -114,12 +118,17 @@ def assign_lanes(spans):
     return assignment, len(lane_ends)
 
 
-def quiet_gaps(intervals, threshold_hours=GAP_THRESHOLD_HOURS):
+def quiet_gaps(intervals, threshold_hours=GAP_THRESHOLD_HOURS, anchors=()):
     """Merge phase coverage intervals; return gaps longer than the threshold.
 
     intervals: list of (start, end) datetimes (end None = open: covers to max).
+    anchors: datetimes of every rendered point event (slice closes, X closes,
+    phase boundaries). Each anchor counts as zero-length coverage, so a
+    reported gap can never contain a rendered item — an anchor inside a hole
+    splits it.
     -> list of (gap_start, gap_end)
     """
+    intervals = list(intervals) + [(a, a) for a in anchors]
     if not intervals:
         return []
     inf = dt.datetime.max
@@ -220,7 +229,7 @@ def render_html(project, items, *, generated, show_x=False):
 
     # Quiet gaps.
     for gap_start, gap_end in quiet_gaps(
-            [(s, e) for s, e, _ in spans.values()]):
+            [(s, e) for s, e, _ in spans.values()], anchors=anchors):
         gy0, gy1 = scale.y(gap_start), scale.y(gap_end)
         days = max(1, round((gap_end - gap_start).total_seconds() / 86400))
         parts.append(
@@ -279,11 +288,12 @@ def _overlap_keys(spans):
 
 
 def _phase_start_node(p, y, off, color):
+    sd = p.started if p.started.when else p.created
+    clause = f'<span class="dim"> started {_fmt(sd)}</span>' if sd.when else ""
     return (f'<div class="phase-node" style="top:{y:.0f}px;'
             f'margin-left:{off:.0f}px;background:{color}"></div>'
             f'<div class="phase-title" style="top:{y:.0f}px">'
-            f'{_html.escape(p.key)} — {_html.escape(p.label())}'
-            f'<span class="dim"> started {_fmt(p.started) if p.started.when else _fmt(p.created)}</span></div>')
+            f'{_html.escape(p.key)} — {_html.escape(p.label())}{clause}</div>')
 
 
 def _duration_text(started, closed):
@@ -305,9 +315,11 @@ def _duration_text(started, closed):
 
 
 def _card(item, y, side, color, off, css):
+    started_clause = (f'started {_fmt(item.started)} · '
+                      if item.started.when else "")
     detail = (f'<div class="detail">{_html.escape(item.key)} · '
               f'{_html.escape(item.title)}<br>'
-              f'started {_fmt(item.started)} · closed {_fmt(item.closed)}'
+              f'{started_clause}closed {_fmt(item.closed)}'
               f'{_duration_text(item.started, item.closed)}</div>')
     dot_css = "dot x-node" if "x-node" in css else "dot"
     return (f'<div class="{css} {side}" title="{_html.escape(item.label())}" '

@@ -116,3 +116,60 @@ def test_card_hover_and_open_untruncate():
     h = render.render_html("fixture", _items(), generated=GEN).html
     assert ".slice-card:hover,.slice-card.open{" in h
     assert "white-space:normal" in h
+
+
+def test_unknown_start_omits_started_clause():
+    # Phase with no started/created (multistore P11): the node still renders
+    # (span derived from slice closes) but never shows a dangling "started —".
+    p = model._item("P11", "phase", None,
+                    phase("P11", status="done", closed="2026-05-19",
+                          title="Toolkit convergence"))
+    s = model._item("P11.S1", "slice", "P11",
+                    slice_("S1", status="done", closed="2026-05-15"))
+    h = render.render_html("fixture", [p, s], generated=GEN).html
+    assert "Toolkit convergence" in h
+    assert "started —" not in h
+
+
+def test_gap_markup_never_spans_rendered_anchors():
+    # Two close-only phases ten days apart with an X completion in between:
+    # the X anchor splits the quiet gap, so two gap labels render, not one
+    # ten-day gap drawn across the X card.
+    p1 = model._item("P1", "phase", None,
+                     phase("P1", status="done", closed="2026-05-01"))
+    p2 = model._item("P2", "phase", None,
+                     phase("P2", status="done", closed="2026-05-11"))
+    x1 = model._item("X1", "x", None,
+                     x("X1", status="done", closed="2026-05-06"))
+    h = render.render_html("fixture", [p1, p2, x1], generated=GEN).html
+    assert h.count("gap-label") >= 2          # split into two gaps
+    assert "10 quiet days" not in h           # never one gap across the anchor
+
+
+def test_cancelled_phase_without_done_slices_absent_from_html():
+    p = model._item("P16", "phase", None,
+                    phase("P16", status="cancelled", closed="2026-05-24",
+                          title="Variant separation"))
+    s = model._item("P16.S4", "slice", "P16",
+                    slice_("S4", status="cancelled", closed="2026-05-24"))
+    h = render.render_html("fixture", _items() + [p, s], generated=GEN).html
+    assert "P16" not in h and "Variant separation" not in h
+
+
+def test_cancelled_phase_with_done_slices_rendered_as_cancelled():
+    # Spec: cancelled phases show when they have >=1 done slice, rendered
+    # with the grey "cancelled" close treatment and only their done slices.
+    p = model._item("P16", "phase", None,
+                    phase("P16", status="cancelled", closed="2026-05-24",
+                          title="Variant separation"))
+    s_done = model._item("P16.S1", "slice", "P16",
+                         slice_("S1", status="done", started="2026-05-23",
+                                closed="2026-05-23", title="Done bit"))
+    s_canc = model._item("P16.S4", "slice", "P16",
+                         slice_("S4", status="cancelled", closed="2026-05-24",
+                                title="Cancelled bit"))
+    h = render.render_html("fixture", _items() + [p, s_done, s_canc],
+                           generated=GEN).html
+    assert "Variant separation" in h and "cancelled" in h
+    assert "Done bit" in h
+    assert "Cancelled bit" not in h
