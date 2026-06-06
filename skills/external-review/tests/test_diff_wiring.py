@@ -104,7 +104,8 @@ def test_round2_embeds_diff_in_prompt_for_spec_kind(tmp_path):
     (repo / "plan.md").write_text("# plan\nv1\nv2-changed\n")
     subprocess.run(["git", "-C", str(repo), "add", "."], check=True)
     subprocess.run(["git", "-C", str(repo), "commit", "-q", "-m", "edit"], check=True)
-    r = _run(repo, ["review", "--kind", "plan", "--file", "plan.md", "--emit", "json"],
+    r = _run(repo, ["review", "--kind", "plan", "--file", "plan.md", "--emit", "json",
+                    "--allow-missing-resolution"],
              env_extra={"AGENT_REVIEWER_CMD": str(reviewer)})
     assert r.returncode == 0, r.stderr
     payload = json.loads(r.stdout)
@@ -127,7 +128,8 @@ def test_no_diff_flag_suppresses_diff(tmp_path):
     (repo / "plan.md").write_text("# plan\nv1\nv2\n")
     subprocess.run(["git", "-C", str(repo), "add", "."], check=True)
     subprocess.run(["git", "-C", str(repo), "commit", "-q", "-m", "e"], check=True)
-    r = _run(repo, ["review", "--kind", "plan", "--file", "plan.md", "--emit", "json", "--no-diff"],
+    r = _run(repo, ["review", "--kind", "plan", "--file", "plan.md", "--emit", "json", "--no-diff",
+                    "--allow-missing-resolution"],
              env_extra={"AGENT_REVIEWER_CMD": str(reviewer)})
     assert r.returncode == 0, r.stderr
     payload = json.loads(r.stdout)
@@ -154,7 +156,7 @@ def test_base_ref_explicit_override(tmp_path):
     subprocess.run(["git", "-C", str(repo), "commit", "-q", "-m", "C"], check=True)
 
     r = _run(repo, ["review", "--kind", "plan", "--file", "plan.md", "--emit", "json",
-                    "--base-ref", sha_b],
+                    "--base-ref", sha_b, "--allow-missing-resolution"],
              env_extra={"AGENT_REVIEWER_CMD": str(reviewer)})
     assert r.returncode == 0, r.stderr
     payload = json.loads(r.stdout)
@@ -175,7 +177,7 @@ def test_changed_files_limits_diff_scope(tmp_path):
     subprocess.run(["git", "-C", str(repo), "commit", "-q", "-m", "two"], check=True)
 
     r = _run(repo, ["review", "--kind", "plan", "--file", "plan.md", "--emit", "json",
-                    "--changed-files", "plan.md"],
+                    "--changed-files", "plan.md", "--allow-missing-resolution"],
              env_extra={"AGENT_REVIEWER_CMD": str(reviewer)})
     assert r.returncode == 0, r.stderr
     payload = json.loads(r.stdout)
@@ -191,7 +193,7 @@ def test_max_diff_lines_truncates(tmp_path):
     subprocess.run(["git", "-C", str(repo), "add", "."], check=True)
     subprocess.run(["git", "-C", str(repo), "commit", "-q", "-m", "big"], check=True)
     r = _run(repo, ["review", "--kind", "plan", "--file", "plan.md", "--emit", "json",
-                    "--max-diff-lines", "20"],
+                    "--max-diff-lines", "20", "--allow-missing-resolution"],
              env_extra={"AGENT_REVIEWER_CMD": str(reviewer)})
     assert r.returncode == 0, r.stderr
     payload = json.loads(r.stdout)

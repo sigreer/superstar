@@ -1853,7 +1853,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     sp_review.add_argument(
         "--allow-missing-resolution",
         action="store_true",
-        help="Waive the resolution-required gate for post-slice/post-phase round 2+.",
+        help="Waive the resolution-required gate for round 2+ (any kind).",
     )
     sp_review.add_argument(
         "--mode",
@@ -2545,8 +2545,7 @@ def main() -> int:
             manifest["work_id"] = args.work_id
 
     if (
-        args.kind in ("post-slice", "post-phase")
-        and manifest["rounds"]
+        manifest["rounds"]
         and not args.allow_missing_resolution
     ):
         prior = manifest["rounds"][-1]

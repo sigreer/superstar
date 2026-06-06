@@ -30,26 +30,36 @@ def _run(repo, *args, env=None):
     )
 
 
-def test_post_slice_round_2_blocked_without_resolution(tmp_path):
+def test_spec_round2_refused_without_resolution(tmp_path):
     repo = _init_repo(tmp_path)
-    r1 = _run(repo, "--kind", "post-slice", "--work-id", "P1.S1",
-              "--file", "plan.md", "--emit", "json")
+    r1 = _run(repo, "--kind", "spec", "--file", "plan.md", "--emit", "json")
     assert r1.returncode == 0, r1.stderr
-
-    r2 = _run(repo, "--kind", "post-slice", "--work-id", "P1.S1",
-              "--file", "plan.md", "--emit", "json")
+    r2 = _run(repo, "--kind", "spec", "--file", "plan.md", "--emit", "json")
     assert r2.returncode == 3, r2.stderr + r2.stdout
     assert "r1-resolution.md" in r2.stderr
 
 
-def test_post_slice_round_2_proceeds_with_waiver(tmp_path):
+def test_spec_round2_proceeds_with_resolution(tmp_path):
     repo = _init_repo(tmp_path)
-    r1 = _run(repo, "--kind", "post-slice", "--work-id", "P1.S1",
-              "--file", "plan.md", "--emit", "json")
-    assert r1.returncode == 0
+    _run(repo, "--kind", "spec", "--file", "plan.md", "--emit", "json")
+    chain_dir = next((repo / "docs" / "reviewer").glob("*-spec"))
+    (chain_dir / "r1-resolution.md").write_text(
+        "# Resolution for r1\n\n## F1\nStatus: fixed\n", encoding="utf-8")
+    r2 = _run(repo, "--kind", "spec", "--file", "plan.md", "--emit", "json")
+    assert r2.returncode == 0, r2.stderr
 
-    r2 = _run(repo, "--kind", "post-slice", "--work-id", "P1.S1",
-              "--file", "plan.md", "--emit", "json",
+
+def test_spec_round2_waiver_bypasses(tmp_path):
+    repo = _init_repo(tmp_path)
+    _run(repo, "--kind", "spec", "--file", "plan.md", "--emit", "json")
+    r2 = _run(repo, "--kind", "spec", "--file", "plan.md", "--emit", "json",
               "--allow-missing-resolution")
     assert r2.returncode == 0, r2.stderr
 
+
+def test_plan_round2_refused_without_resolution(tmp_path):
+    repo = _init_repo(tmp_path)
+    r1 = _run(repo, "--kind", "plan", "--file", "plan.md", "--emit", "json")
+    assert r1.returncode == 0, r1.stderr
+    r2 = _run(repo, "--kind", "plan", "--file", "plan.md", "--emit", "json")
+    assert r2.returncode == 3, r2.stderr + r2.stdout
