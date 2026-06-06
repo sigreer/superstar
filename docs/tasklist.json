@@ -207,7 +207,21 @@
       "title": "Integration-surface-aware parallel slice safety"
     }
   ],
-  "cross_cutting": [],
+  "cross_cutting": [
+    {
+      "closed": null,
+      "created": "2026-06-06",
+      "id": "X29",
+      "notes": "",
+      "refs": [
+        "docs/specs/2026-06-06-X29-timeline-design.md",
+        "docs/reviewer/x29-timeline-design-spec"
+      ],
+      "started": null,
+      "status": "ready",
+      "title": "Visual work-history timeline generator (tools/timeline)"
+    }
+  ],
   "last_reviewed": "2026-05-18",
   "north_star": "",
   "phases": [

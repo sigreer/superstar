@@ -1,0 +1,89 @@
+{
+  "schema_version": 1,
+  "chain": "x29-timeline-design-spec",
+  "kind": "spec",
+  "target": "docs/specs/2026-06-06-X29-timeline-design.md",
+  "work_id": null,
+  "legacy_migrated": false,
+  "rounds": [
+    {
+      "round": 1,
+      "reviewers": [
+        {
+          "role": "primary",
+          "sweep_group": null,
+          "parent_round": 1,
+          "request": "r1-2026-06-06T1627-request.md",
+          "response": "r1-2026-06-06T1627-response.md",
+          "verdict": "ready with small edits",
+          "verdict_valid": true,
+          "returncode": 0,
+          "status": "ok",
+          "provider": "codex",
+          "caller_provider": "claude",
+          "model": null,
+          "sandbox": {
+            "repo_root": "/home/simon/Dev/sigreer/skills/superstar",
+            "scratch_dir": "/tmp/superstar-reviewer-x29-timeline-design-spec-r1-primary-m816a2pj",
+            "response_dir": "docs/reviewer/x29-timeline-design-spec/.reviewer-output/r1-primary",
+            "mode": "workspace-write-with-read-access"
+          },
+          "started_at": "2026-06-06T15:27:37.460Z",
+          "finished_at": "2026-06-06T15:29:22.272Z",
+          "duration_ms": 104811,
+          "estimated_usage": {
+            "formula": "ceil(chars / 4)",
+            "prompt_chars": 23325,
+            "response_chars": 3904,
+            "estimated_input_tokens": 5832,
+            "estimated_output_tokens": 976,
+            "estimated_total_tokens": 6808
+          },
+          "exact_usage": null,
+          "usage_capture_status": "estimated_only",
+          "usage_capture_error": null
+        }
+      ],
+      "status": "ok",
+      "returncode": 0,
+      "started_at": "2026-06-06T15:27:37.460Z",
+      "finished_at": "2026-06-06T15:29:22.272Z",
+      "duration_ms": 104811,
+      "provider": "codex",
+      "caller_provider": "claude",
+      "model": null,
+      "estimated_usage": {
+        "formula": "ceil(chars / 4)",
+        "prompt_chars": 23325,
+        "response_chars": 3904,
+        "estimated_input_tokens": 5832,
+        "estimated_output_tokens": 976,
+        "estimated_total_tokens": 6808
+      },
+      "exact_usage": null,
+      "usage_capture_status": "estimated_only",
+      "usage_capture_error": null,
+      "merged_verdict": "ready with small edits",
+      "merged_findings": null,
+      "request": "r1-2026-06-06T1627-request.md",
+      "response": "r1-2026-06-06T1627-response.md",
+      "resolution": null,
+      "resolution_parse_status": null,
+      "resolution_waiver": false,
+      "head_sha_at_request": "f4c4b55c23818293e240ed36603ae8a648ec4aac",
+      "head_sha_after_round": "f4c4b55c23818293e240ed36603ae8a648ec4aac",
+      "worktree_dirty_at_request": true,
+      "verdict": "ready with small edits",
+      "verdict_valid": true,
+      "findings_count": 3,
+      "blocking_findings_count": 0,
+      "base_ref": null,
+      "base_ref_source": null,
+      "diff_included": false
+    }
+  ],
+  "sweep_checkpoints": {
+    "first-round": "pending",
+    "final-ready": "pending"
+  }
+}
