@@ -101,8 +101,11 @@ For each of `created`/`started`/`closed` on each item:
 
 3. **Git replay** — walk every commit touching `docs/tasklist.json` oldest→newest
    (`git log --reverse --format=%H %ct -- docs/tasklist.json`), parse the file at each
-   revision (`git show SHA:docs/tasklist.json`), and record status transitions and date
-   field changes per item with the commit timestamp. Replay:
+   revision (`git show SHA:docs/tasklist.json`), and record **status transitions** per
+   item with the commit timestamp. Date *fields* are deliberately not change-tracked:
+   their final values are read once from the current file (rule 2) and are already
+   authoritative for the date — replay's only job is supplying transition timing.
+   Replay:
    - upgrades a field date to **minute precision** when the replay-observed transition
      falls on the same calendar day;
    - fills a field that is null in the tracker (e.g. missing `started`: first transition

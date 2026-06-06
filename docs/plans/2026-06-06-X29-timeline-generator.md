@@ -1,0 +1,2334 @@
+# X29 — Visual Work-History Timeline Generator Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superstar:subagent-driven-development (recommended) or superstar:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** A zero-dependency Python tool (`tools/timeline/`) that renders any tasktool-managed repo's phase/slice/X-item history as a single self-contained, browser-viewable HTML timeline, plus a run-once legacy backfill utility.
+
+**Architecture:** Four-layer pipeline — `extract.py` (git replay + live tracker + archive JSON blocks), `model.py` (the only schema-aware module; normalizes to `TimelineItem`), `render.py` (braided centre-spine HTML), `timeline.py` (CLI). `backfill.py` is a separate run-once migrator. Spec: `docs/specs/2026-06-06-X29-timeline-design.md`.
+
+**Tech Stack:** Python 3 stdlib only. Git via `subprocess`. Tests with pytest (fixture git repos built in tmpdir).
+
+**Tracker row:** `X29` (cross-cutting). First execution step: `tasktool set X29 --status in_progress`. Commit messages prefixed `X29:`. Execution should run from an isolated worktree per `superstar:using-git-worktrees`.
+
+**Scheduling:** Cross-cutting row — no `depends_on`/`parallel_group`/surface reservations apply. No sibling slices can overlap this work; it touches only `tools/timeline/**` and one line in `pyproject.toml`.
+
+---
+
+### Task 1: Scaffolding and pytest discovery
+
+**Files:**
+- Create: `tools/timeline/__init__.py` (empty)
+- Create: `tools/timeline/tests/__init__.py` (empty)
+- Create: `tools/timeline/tests/helpers.py`
+- Modify: `pyproject.toml:3`
+
+- [ ] **Step 1: Create the package skeleton**
+
+```bash
+mkdir -p tools/timeline/tests
+touch tools/timeline/__init__.py tools/timeline/tests/__init__.py
+```
+
+- [ ] **Step 2: Add `tools/timeline/tests` to pytest discovery**
+
+In `pyproject.toml`, change the `[tool.pytest.ini_options]` table to:
+
+```toml
+[tool.pytest.ini_options]
+addopts = "--import-mode=importlib"
+testpaths = ["scripts/tests", "tools/tasktool/tests", "skills/external-review/tests", "tools/timeline/tests"]
+pythonpath = ["tools"]
+```
+
+This makes the import strategy explicit: tests import `from timeline import ...`
+with `tools` on `sys.path` (the same convention `tasktool` tests rely on
+implicitly), and the CLI entrypoints insert `tools` themselves when run as
+scripts. `pythonpath` is additive — it does not disturb the existing
+`scripts/tests` and `skills/external-review/tests` suites.
+
+- [ ] **Step 3: Write the shared test helpers**
+
+Create `tools/timeline/tests/helpers.py`:
+
+```python
+"""Shared fixture builders for timeline tests."""
+
+import json
+import os
+import subprocess
+
+
+def doc(phases=None, cross=None):
+    return {
+        "schema_version": 1,
+        "project": "fixture",
+        "north_star": "",
+        "last_reviewed": None,
+        "phases": phases or [],
+        "cross_cutting": cross or [],
+        "archived_phases": [],
+        "archived_cross_cutting": [],
+    }
+
+
+def phase(pid, status="ready", created=None, started=None, closed=None,
+          slices=None, title=None):
+    return {
+        "id": pid, "status": status, "created": created, "started": started,
+        "closed": closed, "title": title or f"Phase {pid}",
+        "slices": slices or [], "notes": "",
+    }
+
+
+def slice_(sid, status="ready", created=None, started=None, closed=None, title=None):
+    return {
+        "id": sid, "status": status, "created": created, "started": started,
+        "closed": closed, "title": title or f"Slice {sid}",
+        "tasks": [], "refs": [], "notes": "",
+    }
+
+
+def x(xid, status="ready", created=None, started=None, closed=None, title=None):
+    return {
+        "id": xid, "status": status, "created": created, "started": started,
+        "closed": closed, "title": title or f"Cross {xid}", "notes": "",
+    }
+
+
+def make_repo(tmp_path, snapshots):
+    """Create a git repo with one commit of docs/tasklist.json per snapshot.
+
+    snapshots: list of (iso_datetime_with_offset, doc_dict),
+               e.g. ("2026-06-01T10:00:00 +0000", doc(...)).
+    Returns the repo path.
+    """
+    repo = tmp_path / "repo"
+    (repo / "docs").mkdir(parents=True)
+    run = lambda *a, **kw: subprocess.run(a, cwd=repo, check=True,
+                                          capture_output=True, **kw)
+    run("git", "init", "-q")
+    run("git", "config", "user.email", "test@test")
+    run("git", "config", "user.name", "test")
+    for iso, d in snapshots:
+        (repo / "docs" / "tasklist.json").write_text(json.dumps(d, indent=2))
+        env = {**os.environ, "GIT_AUTHOR_DATE": iso, "GIT_COMMITTER_DATE": iso}
+        run("git", "add", "-A")
+        subprocess.run(["git", "commit", "-q", "-m", "snap"], cwd=repo,
+                       check=True, capture_output=True, env=env)
+    return repo
+```
+
+- [ ] **Step 4: Verify pytest discovers the (empty) test dir without error**
+
+Run: `python3 -m pytest tools/timeline/tests -q`
+Expected: `no tests ran` (exit code 5 is fine at this stage)
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add tools/timeline pyproject.toml
+git commit -m "X29: scaffold tools/timeline package and pytest discovery"
+```
+
+---
+
+### Task 2: `model.py` — date parsing and item construction
+
+**Files:**
+- Create: `tools/timeline/model.py`
+- Test: `tools/timeline/tests/test_model.py`
+
+- [ ] **Step 1: Write the failing tests**
+
+Create `tools/timeline/tests/test_model.py`:
+
+```python
+import datetime as dt
+
+import pytest
+
+from timeline import model
+from timeline.tests.helpers import doc, phase, slice_, x
+
+
+def test_parse_tracker_date_day():
+    when, precision = model.parse_tracker_date("2026-05-20")
+    assert when == dt.datetime(2026, 5, 20)
+    assert precision == "day"
+
+
+def test_parse_tracker_date_minute():
+    when, precision = model.parse_tracker_date("2026-05-20T14:30:00")
+    assert when == dt.datetime(2026, 5, 20, 14, 30)
+    assert precision == "minute"
+
+
+def test_parse_tracker_date_absent_and_epoch():
+    assert model.parse_tracker_date(None) == (None, "day")
+    assert model.parse_tracker_date("") == (None, "day")
+    assert model.parse_tracker_date("1970-01-01") == (None, "day")
+
+
+def test_items_from_project_walks_phases_slices_cross():
+    d = doc(
+        phases=[phase("P1", status="done", closed="2026-05-01",
+                      slices=[slice_("S1", status="done", closed="2026-05-01")])],
+        cross=[x("X1", status="done", closed="2026-05-02")],
+    )
+    items = {i.key: i for i in model.items_from_project(d)}
+    assert set(items) == {"P1", "P1.S1", "X1"}
+    assert items["P1"].kind == "phase" and items["P1"].parent is None
+    assert items["P1.S1"].kind == "slice" and items["P1.S1"].parent == "P1"
+    assert items["X1"].kind == "x"
+    assert items["P1.S1"].closed.when == dt.datetime(2026, 5, 1)
+    assert items["P1.S1"].closed.source == "field"
+
+
+def test_item_from_cross():
+    it = model.item_from_cross(x("X9", status="done", closed="2026-05-03"))
+    assert (it.key, it.kind, it.status) == ("X9", "x", "done")
+
+
+def test_collect_dedup_first_wins():
+    live = doc(phases=[phase("P2", status="ready", created="2026-06-01")])
+    arch = doc(phases=[phase("P2", status="done", closed="2026-05-30")])
+    items = model.collect(live, [arch], [])
+    p2 = [i for i in items if i.key == "P2"]
+    assert len(p2) == 1 and p2[0].status == "ready"  # live wins
+
+
+def test_label_prefers_display_title():
+    it = model.item_from_cross(x("X9", title="raw jargon title"))
+    assert it.label() == "raw jargon title"
+    it.display_title = "Friendly name"
+    assert it.label() == "Friendly name"
+```
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+Run: `python3 -m pytest tools/timeline/tests/test_model.py -q`
+Expected: FAIL — `ModuleNotFoundError` on `timeline.model` (run from the repo root)
+
+- [ ] **Step 3: Implement `model.py` (construction half)**
+
+Create `tools/timeline/model.py`:
+
+```python
+"""Normalized tracker model for the timeline generator.
+
+This is the ONLY module that knows the docs/tasklist.json schema. If a shared
+tracker-model module is later extracted from tasktool, replace this module's
+internals; TimelineItem is the seam consumed by extract/render/timeline.
+"""
+
+from __future__ import annotations
+
+import datetime as dt
+from dataclasses import dataclass, field
+
+EPOCH_PLACEHOLDER = "1970-01-01"
+TERMINAL_STATUSES = {"done", "cancelled"}
+START_STATUSES = {"in_progress", "started"}
+
+
+def parse_tracker_date(raw):
+    """ISO 'YYYY-MM-DD' or 'YYYY-MM-DDTHH:MM[:SS]' -> (datetime|None, precision)."""
+    if not raw or raw == EPOCH_PLACEHOLDER:
+        return None, "day"
+    if "T" in raw:
+        return dt.datetime.fromisoformat(raw), "minute"
+    d = dt.date.fromisoformat(raw)
+    return dt.datetime(d.year, d.month, d.day), "day"
+
+
+@dataclass
+class DateValue:
+    when: dt.datetime | None = None
+    precision: str = "day"      # "day" | "minute"
+    source: str = "field"       # "field" | "replay" | "override"
+
+
+@dataclass
+class TimelineItem:
+    key: str                    # "P21", "P21.S4", "X13"
+    kind: str                   # "phase" | "slice" | "x"
+    parent: str | None
+    title: str
+    status: str
+    display_title: str | None = None
+    created: DateValue = field(default_factory=DateValue)
+    started: DateValue = field(default_factory=DateValue)
+    closed: DateValue = field(default_factory=DateValue)
+    excluded: bool = False
+
+    def label(self):
+        return self.display_title or self.title
+
+
+def _date_value(obj, name):
+    when, precision = parse_tracker_date(obj.get(name))
+    return DateValue(when, precision, "field")
+
+
+def _item(key, kind, parent, obj):
+    return TimelineItem(
+        key=key, kind=kind, parent=parent,
+        title=obj.get("title") or key,
+        status=obj.get("status", "unknown"),
+        created=_date_value(obj, "created"),
+        started=_date_value(obj, "started"),
+        closed=_date_value(obj, "closed"),
+    )
+
+
+def items_from_project(doc):
+    """Walk a project-shaped dict (live tasklist.json or an archived
+    '## Full phase JSON' block) into TimelineItem records."""
+    items = []
+    for p in doc.get("phases", []):
+        pk = p["id"]
+        items.append(_item(pk, "phase", None, p))
+        for s in p.get("slices", []):
+            items.append(_item(f"{pk}.{s['id']}", "slice", pk, s))
+    for c in doc.get("cross_cutting", []):
+        items.append(_item(c["id"], "x", None, c))
+    return items
+
+
+def item_from_cross(obj):
+    """A single archived cross-cutting item object
+    (from a '## Full cross-cutting JSON' block)."""
+    return _item(obj["id"], "x", None, obj)
+
+
+def collect(live_doc, archive_project_docs, archive_x_objects):
+    """Merge all sources into one item list. First occurrence of a key wins,
+    and live is read first, so live data shadows any stale archive copy."""
+    seen, items = set(), []
+    sources = [items_from_project(live_doc)]
+    sources += [items_from_project(d) for d in archive_project_docs]
+    sources += [[item_from_cross(o)] for o in archive_x_objects]
+    for source in sources:
+        for it in source:
+            if it.key not in seen:
+                seen.add(it.key)
+                items.append(it)
+    return items
+```
+
+- [ ] **Step 4: Run tests to verify they pass**
+
+Run: `python3 -m pytest tools/timeline/tests/test_model.py -q`
+Expected: all PASS
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add tools/timeline
+git commit -m "X29: model.py — tracker date parsing and TimelineItem construction"
+```
+
+---
+
+### Task 3: `extract.py` — archive JSON block reading
+
+**Files:**
+- Create: `tools/timeline/extract.py`
+- Test: `tools/timeline/tests/test_extract_archives.py`
+
+- [ ] **Step 1: Write the failing tests**
+
+Create `tools/timeline/tests/test_extract_archives.py`:
+
+````python
+import json
+
+from timeline import extract
+from timeline.tests.helpers import doc, phase, x
+
+PHASE_MD = """# P3 — Old phase
+
+status: done
+closed: 2026-05-04
+
+## Slices
+
+- **S1** [done] — closed 2026-05-04 — something
+
+## Full phase JSON (for tasktool unarchive)
+
+```json
+{}
+```
+"""
+
+CROSS_MD = """# X7 — Old cross item
+
+status: done
+
+## Full cross-cutting JSON (for tasktool unarchive)
+
+```json
+{}
+```
+"""
+
+LEGACY_MD = """# P1 — Legacy phase ✅ `DONE 2026-04-29`
+
+## S1 — Old slice ✅ `DONE 2026-04-29`
+"""
+
+BROKEN_MD = """# P9 — Broken
+
+## Full phase JSON (for tasktool unarchive)
+
+```json
+{ this is not json
+```
+"""
+
+
+def _write_archives(tmp_path, files):
+    arch = tmp_path / "docs" / "archived-tasks"
+    arch.mkdir(parents=True)
+    for name, text in files.items():
+        (arch / name).write_text(text)
+    return tmp_path
+
+
+def test_reads_phase_and_cross_blocks(tmp_path):
+    p3 = doc(phases=[phase("P3", status="done", closed="2026-05-04")])
+    x7 = x("X7", status="done", closed="2026-05-05")
+    _write_archives(tmp_path, {
+        "P3-old.md": PHASE_MD.format(json.dumps(p3, indent=2)),
+        "X7-old.md": CROSS_MD.format(json.dumps(x7, indent=2)),
+        "P1-legacy.md": LEGACY_MD,
+    })
+    project_docs, x_objects, warnings = extract.read_archives(tmp_path)
+    assert [d["phases"][0]["id"] for d in project_docs] == ["P3"]
+    assert [o["id"] for o in x_objects] == ["X7"]
+    assert warnings == []  # legacy file silently ignored — it has no JSON block
+
+
+def test_unparseable_block_warns_not_fatal(tmp_path):
+    _write_archives(tmp_path, {"P9-broken.md": BROKEN_MD})
+    project_docs, x_objects, warnings = extract.read_archives(tmp_path)
+    assert project_docs == [] and x_objects == []
+    assert len(warnings) == 1 and "P9-broken.md" in warnings[0]
+
+
+def test_no_archive_dir_is_fine(tmp_path):
+    project_docs, x_objects, warnings = extract.read_archives(tmp_path)
+    assert (project_docs, x_objects, warnings) == ([], [], [])
+````
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+Run: `python3 -m pytest tools/timeline/tests/test_extract_archives.py -q`
+Expected: FAIL — `ModuleNotFoundError` on `timeline.extract`
+
+- [ ] **Step 3: Implement the archive reader in `extract.py`**
+
+Create `tools/timeline/extract.py`:
+
+````python
+"""Read tracker data out of a repo: live file, archive JSON blocks, git replay."""
+
+from __future__ import annotations
+
+import json
+import re
+import subprocess
+from dataclasses import dataclass, field
+from pathlib import Path
+
+TRACKER = "docs/tasklist.json"
+
+_PHASE_BLOCK_RE = re.compile(
+    r"^## Full phase JSON.*?^```json\n(.*?)^```", re.S | re.M)
+_CROSS_BLOCK_RE = re.compile(
+    r"^## Full cross-cutting JSON.*?^```json\n(.*?)^```", re.S | re.M)
+
+
+def git(repo, *args, check=True):
+    proc = subprocess.run(["git", "-C", str(repo), *args],
+                          capture_output=True, text=True)
+    if check and proc.returncode != 0:
+        raise SystemExit(f"timeline: git {' '.join(args)} failed: "
+                         f"{proc.stderr.strip()}")
+    return proc.stdout
+
+
+def repo_root(path):
+    return Path(git(path, "rev-parse", "--show-toplevel").strip())
+
+
+def read_live(repo):
+    p = Path(repo) / TRACKER
+    if not p.exists():
+        raise SystemExit(f"timeline: {p} not found — not a tasktool project")
+    return json.loads(p.read_text())
+
+
+def read_archives(repo):
+    """-> (project_docs, x_objects, warnings).
+
+    Reads both '## Full phase JSON' blocks (a project-shaped object whose
+    `phases` array holds the archived phase) and '## Full cross-cutting JSON'
+    blocks (a single item object). Files with neither block (pure-legacy
+    markdown) are ignored — they are backfill.py's input, not ours.
+    """
+    project_docs, x_objects, warnings = [], [], []
+    arch = Path(repo) / "docs" / "archived-tasks"
+    files = sorted(arch.glob("*.md")) if arch.is_dir() else []
+    for f in files:
+        text = f.read_text()
+        pm = _PHASE_BLOCK_RE.search(text)
+        cm = _CROSS_BLOCK_RE.search(text)
+        try:
+            if pm:
+                project_docs.append(json.loads(pm.group(1)))
+            elif cm:
+                x_objects.append(json.loads(cm.group(1)))
+        except json.JSONDecodeError as e:
+            warnings.append(f"{f.name}: unparseable JSON block: {e}")
+    return project_docs, x_objects, warnings
+````
+
+- [ ] **Step 4: Run tests to verify they pass**
+
+Run: `python3 -m pytest tools/timeline/tests/test_extract_archives.py -q`
+Expected: all PASS
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add tools/timeline
+git commit -m "X29: extract.py — archive phase and cross-cutting JSON block reader"
+```
+
+---
+
+### Task 4: `extract.py` — git replay
+
+**Files:**
+- Modify: `tools/timeline/extract.py` (append)
+- Test: `tools/timeline/tests/test_extract_replay.py`
+
+- [ ] **Step 1: Write the failing tests**
+
+Create `tools/timeline/tests/test_extract_replay.py`:
+
+```python
+import datetime as dt
+
+from timeline import extract
+from timeline.tests.helpers import doc, make_repo, phase, slice_, x
+
+
+def test_replay_records_transitions_with_commit_times(tmp_path):
+    s_ready = slice_("S1", status="ready", created="2026-06-01")
+    s_prog = slice_("S1", status="in_progress", created="2026-06-01")
+    s_done = slice_("S1", status="done", created="2026-06-01", closed="2026-06-02")
+    repo = make_repo(tmp_path, [
+        ("2026-06-01T10:00:00 +0000", doc(phases=[phase("P1", slices=[s_ready])])),
+        ("2026-06-01T15:30:00 +0000", doc(phases=[phase("P1", slices=[s_prog])])),
+        ("2026-06-02T09:45:00 +0000", doc(phases=[phase("P1", slices=[s_done])])),
+    ])
+    histories, warnings = extract.replay(repo)
+    assert warnings == []
+    ts = [(t.old, t.new) for t in histories["P1.S1"].transitions]
+    assert ts == [(None, "ready"), ("ready", "in_progress"), ("in_progress", "done")]
+    done = histories["P1.S1"].transitions[-1]
+    expected = int(dt.datetime(2026, 6, 2, 9, 45,
+                               tzinfo=dt.timezone.utc).timestamp())
+    assert done.ts == expected
+
+
+def test_replay_suppresses_import_artifacts(tmp_path):
+    # P0 arrives already done in the first commit: no usable transition.
+    imported = phase("P0", status="done", closed="2026-05-01")
+    repo = make_repo(tmp_path, [
+        ("2026-06-01T10:00:00 +0000", doc(phases=[imported])),
+    ])
+    histories, _ = extract.replay(repo)
+    assert "P0" not in histories
+
+
+def test_replay_skips_unparseable_revision(tmp_path):
+    repo = make_repo(tmp_path, [
+        ("2026-06-01T10:00:00 +0000", doc(phases=[phase("P1", status="ready")])),
+    ])
+    # Hand-commit a broken revision, then a good one.
+    import subprocess, os, json
+    (repo / "docs" / "tasklist.json").write_text("{ broken")
+    env = {**os.environ, "GIT_AUTHOR_DATE": "2026-06-01T11:00:00 +0000",
+           "GIT_COMMITTER_DATE": "2026-06-01T11:00:00 +0000"}
+    subprocess.run(["git", "add", "-A"], cwd=repo, check=True, capture_output=True)
+    subprocess.run(["git", "commit", "-q", "-m", "broken"], cwd=repo, check=True,
+                   capture_output=True, env=env)
+    good = doc(phases=[phase("P1", status="done", closed="2026-06-01")])
+    (repo / "docs" / "tasklist.json").write_text(json.dumps(good))
+    env["GIT_AUTHOR_DATE"] = env["GIT_COMMITTER_DATE"] = "2026-06-01T12:00:00 +0000"
+    subprocess.run(["git", "add", "-A"], cwd=repo, check=True, capture_output=True)
+    subprocess.run(["git", "commit", "-q", "-m", "good"], cwd=repo, check=True,
+                   capture_output=True, env=env)
+
+    histories, warnings = extract.replay(repo)
+    assert len(warnings) == 1 and "skipped unparseable" in warnings[0]
+    assert [t.new for t in histories["P1"].transitions] == ["ready", "done"]
+
+
+def test_replay_tracks_cross_items(tmp_path):
+    repo = make_repo(tmp_path, [
+        ("2026-06-01T10:00:00 +0000", doc(cross=[x("X1", status="ready")])),
+        ("2026-06-03T16:20:00 +0000",
+         doc(cross=[x("X1", status="done", closed="2026-06-03")])),
+    ])
+    histories, _ = extract.replay(repo)
+    assert [t.new for t in histories["X1"].transitions] == ["ready", "done"]
+```
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+Run: `python3 -m pytest tools/timeline/tests/test_extract_replay.py -q`
+Expected: FAIL — `AttributeError: module ... has no attribute 'replay'`
+
+- [ ] **Step 3: Append the replayer to `extract.py`**
+
+```python
+@dataclass
+class Transition:
+    ts: int          # unix commit timestamp
+    old: str | None
+    new: str
+
+
+@dataclass
+class KeyHistory:
+    transitions: list = field(default_factory=list)
+
+
+def _statuses(doc):
+    cur = {}
+    for p in doc.get("phases", []):
+        cur[p["id"]] = p.get("status", "?")
+        for s in p.get("slices", []):
+            cur[f"{p['id']}.{s['id']}"] = s.get("status", "?")
+    for c in doc.get("cross_cutting", []):
+        cur[c["id"]] = c.get("status", "?")
+    return cur
+
+
+def replay(repo):
+    """Walk every commit touching docs/tasklist.json oldest->newest and record
+    per-item status transitions with commit timestamps.
+
+    Deliberately status-only: date *fields* are read once from the final file
+    and stay authoritative for the date — replay supplies transition timing
+    (see the spec's "Git replay" section).
+
+    Import-artifact suppression: an item whose first observation is already
+    terminal (done/cancelled) arrived via a migration commit — that observation
+    carries no real timing and is dropped entirely.
+    """
+    out = git(repo, "log", "--reverse", "--format=%H %ct", "--", TRACKER)
+    commits = [line.split() for line in out.splitlines() if line]
+    prev, histories, warnings = {}, {}, []
+    for sha, ts in commits:
+        ts = int(ts)
+        proc = subprocess.run(
+            ["git", "-C", str(repo), "show", f"{sha}:{TRACKER}"],
+            capture_output=True, text=True)
+        if proc.returncode != 0:
+            continue  # file absent at this revision
+        try:
+            doc = json.loads(proc.stdout)
+        except json.JSONDecodeError:
+            warnings.append(f"replay: skipped unparseable revision {sha[:8]}")
+            continue
+        cur = _statuses(doc)
+        for key, status in cur.items():
+            old = prev.get(key)
+            if old == status:
+                continue
+            if old is None and status in ("done", "cancelled"):
+                continue  # import artifact
+            histories.setdefault(key, KeyHistory()).transitions.append(
+                Transition(ts, old, status))
+        prev = cur
+    return histories, warnings
+
+
+def is_shallow(repo):
+    return git(repo, "rev-parse", "--is-shallow-repository").strip() == "true"
+```
+
+- [ ] **Step 4: Run tests to verify they pass**
+
+Run: `python3 -m pytest tools/timeline/tests/test_extract_replay.py -q`
+Expected: all PASS
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add tools/timeline
+git commit -m "X29: extract.py — git replay of tracker status transitions"
+```
+
+---
+
+### Task 5: `model.py` — replay merge (precedence + precision upgrade)
+
+**Files:**
+- Modify: `tools/timeline/model.py` (append)
+- Test: `tools/timeline/tests/test_model_merge.py`
+
+- [ ] **Step 1: Write the failing tests**
+
+Create `tools/timeline/tests/test_model_merge.py`:
+
+```python
+import datetime as dt
+
+from timeline import extract, model
+from timeline.tests.helpers import phase, slice_
+
+
+def _ts(*args):
+    return int(dt.datetime(*args).timestamp())
+
+
+def _hist(*transitions):
+    h = extract.KeyHistory()
+    h.transitions = [extract.Transition(ts, old, new) for ts, old, new in transitions]
+    return h
+
+
+def test_replay_upgrades_same_day_field_to_minute():
+    it = model._item("P1.S1", "slice", "P1",
+                     slice_("S1", status="done", closed="2026-06-02"))
+    h = _hist((_ts(2026, 6, 2, 9, 45), "in_progress", "done"))
+    model.apply_replay(it, h)
+    assert it.closed.when == dt.datetime(2026, 6, 2, 9, 45)
+    assert it.closed.precision == "minute" and it.closed.source == "replay"
+
+
+def test_replay_does_not_override_conflicting_field_date():
+    # Field says 06-03, replay observed the transition on 06-02: field wins.
+    it = model._item("P1.S1", "slice", "P1",
+                     slice_("S1", status="done", closed="2026-06-03"))
+    model.apply_replay(it, _hist((_ts(2026, 6, 2, 9, 45), "in_progress", "done")))
+    assert it.closed.when == dt.datetime(2026, 6, 3)
+    assert it.closed.precision == "day" and it.closed.source == "field"
+
+
+def test_replay_fills_null_started():
+    it = model._item("P1.S1", "slice", "P1", slice_("S1", status="done"))
+    model.apply_replay(it, _hist((_ts(2026, 6, 1, 8, 0), "ready", "in_progress"),
+                                 (_ts(2026, 6, 2, 9, 0), "in_progress", "done")))
+    assert it.started.when == dt.datetime(2026, 6, 1, 8, 0)
+    assert it.started.source == "replay"
+
+
+def test_replay_never_invents_phase_closed():
+    it = model._item("P1", "phase", None, phase("P1", status="ready"))
+    model.apply_replay(it, _hist((_ts(2026, 6, 2, 9, 0), "ready", "done")))
+    assert it.closed.when is None  # phase closed comes from the field or not at all
+
+
+def test_replay_fills_slice_closed_when_field_null():
+    it = model._item("P1.S1", "slice", "P1", slice_("S1", status="done"))
+    model.apply_replay(it, _hist((_ts(2026, 6, 2, 9, 0), "in_progress", "done")))
+    assert it.closed.when == dt.datetime.fromtimestamp(_ts(2026, 6, 2, 9, 0))
+    assert it.closed.source == "replay"
+```
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+Run: `python3 -m pytest tools/timeline/tests/test_model_merge.py -q`
+Expected: FAIL — `AttributeError: ... no attribute 'apply_replay'`
+
+- [ ] **Step 3: Append the merge logic to `model.py`**
+
+```python
+def apply_replay(item, history):
+    """Merge replay-observed status transitions into an item.
+
+    Field dates stay the authoritative *date*; a replay transition on the same
+    calendar day upgrades the value to minute precision. A null field is
+    filled from replay — except a phase's `closed`, which is never invented
+    (an unclosed phase renders as open).
+    """
+    started_ts = next((t.ts for t in history.transitions
+                       if t.new in START_STATUSES), None)
+    closed_ts = next((t.ts for t in history.transitions
+                      if t.new in TERMINAL_STATUSES), None)
+    _merge_date(item, "started", started_ts, fill=True)
+    _merge_date(item, "closed", closed_ts, fill=item.kind != "phase")
+
+
+def _merge_date(item, name, ts, fill):
+    if ts is None:
+        return
+    when = dt.datetime.fromtimestamp(ts)
+    current = getattr(item, name)
+    if current.when is None:
+        if fill:
+            setattr(item, name, DateValue(when, "minute", "replay"))
+    elif current.precision == "day" and current.when.date() == when.date():
+        setattr(item, name, DateValue(when, "minute", "replay"))
+```
+
+Note for the implementer: `test_replay_records_transitions_with_commit_times` uses
+`utcfromtimestamp` because `make_repo` commits with `+0000` offsets; `apply_replay`
+uses local `fromtimestamp` deliberately — rendered times should be the operator's
+local wall clock, matching `git log --format=%ci` output.
+
+- [ ] **Step 4: Run tests to verify they pass**
+
+Run: `python3 -m pytest tools/timeline/tests/test_model_merge.py -q`
+Expected: all PASS
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add tools/timeline
+git commit -m "X29: model.py — replay merge with precedence and precision upgrade"
+```
+
+---
+
+### Task 6: `model.py` — overrides
+
+**Files:**
+- Modify: `tools/timeline/model.py` (append)
+- Test: `tools/timeline/tests/test_model_overrides.py`
+
+- [ ] **Step 1: Write the failing tests**
+
+Create `tools/timeline/tests/test_model_overrides.py`:
+
+```python
+import datetime as dt
+
+import pytest
+
+from timeline import model
+from timeline.tests.helpers import phase, slice_, x
+
+
+def _items():
+    return [
+        model._item("P14", "phase", None,
+                    phase("P14", status="done", started="2026-05-24",
+                          closed="2026-05-24")),
+        model._item("P21.S2", "slice", "P21",
+                    slice_("S2", status="done", closed="2026-06-02")),
+        model._item("X12", "x", None, x("X12", status="done", closed="2026-06-01")),
+    ]
+
+
+def test_override_date_wins_over_field():
+    items = _items()
+    model.apply_overrides(items, {"items": {"P14": {"started": "2026-05-20"}}})
+    p14 = items[0]
+    assert p14.started.when == dt.datetime(2026, 5, 20)
+    assert p14.started.source == "override"
+
+
+def test_override_display_title_and_exclude():
+    items = _items()
+    model.apply_overrides(items, {"items": {
+        "P21.S2": {"display_title": "Quiet-launch controls"},
+        "X12": {"exclude": True},
+    }})
+    assert items[1].label() == "Quiet-launch controls"
+    assert items[2].excluded is True
+
+
+def test_unknown_override_key_is_fatal():
+    with pytest.raises(SystemExit):
+        model.apply_overrides(_items(), {"items": {"P14": {"startd": "2026-05-20"}}})
+
+
+def test_unknown_item_id_warns_not_fatal():
+    warnings = model.apply_overrides(_items(), {"items": {"P99": {"exclude": True}}})
+    assert len(warnings) == 1 and "P99" in warnings[0]
+
+
+def test_no_overrides_is_noop():
+    assert model.apply_overrides(_items(), {}) == []
+```
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+Run: `python3 -m pytest tools/timeline/tests/test_model_overrides.py -q`
+Expected: FAIL — no attribute `apply_overrides`
+
+- [ ] **Step 3: Append overrides handling to `model.py`**
+
+```python
+OVERRIDE_DATE_KEYS = {"created", "started", "closed"}
+OVERRIDE_KEYS = OVERRIDE_DATE_KEYS | {"display_title", "exclude"}
+
+
+def apply_overrides(items, overrides):
+    """Apply docs/timeline-overrides.json. Returns warning strings.
+
+    Unknown keys inside an item entry are fatal (fail loud, never silently
+    ignore a typo'd correction). An entry whose item id matches nothing is a
+    warning — the item may belong to data not yet backfilled.
+    """
+    warnings = []
+    by_key = {i.key: i for i in items}
+    for key, entry in (overrides.get("items") or {}).items():
+        unknown = set(entry) - OVERRIDE_KEYS
+        if unknown:
+            raise SystemExit(
+                f"timeline: unknown override key(s) for {key}: {sorted(unknown)}")
+        item = by_key.get(key)
+        if item is None:
+            warnings.append(f"overrides: no item with id {key}")
+            continue
+        for name in OVERRIDE_DATE_KEYS & set(entry):
+            when, precision = parse_tracker_date(entry[name])
+            setattr(item, name, DateValue(when, precision, "override"))
+        if "display_title" in entry:
+            item.display_title = entry["display_title"]
+        if entry.get("exclude"):
+            item.excluded = True
+    return warnings
+```
+
+- [ ] **Step 4: Run tests to verify they pass**
+
+Run: `python3 -m pytest tools/timeline/tests/test_model_overrides.py -q`
+Expected: all PASS
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add tools/timeline
+git commit -m "X29: model.py — overrides (dates, display_title, exclude)"
+```
+
+---
+
+### Task 7: `render.py` — visibility rules and derived spans
+
+**Files:**
+- Create: `tools/timeline/render.py`
+- Test: `tools/timeline/tests/test_render_rules.py`
+
+- [ ] **Step 1: Write the failing tests**
+
+Create `tools/timeline/tests/test_render_rules.py`:
+
+```python
+import datetime as dt
+
+from timeline import model, render
+from timeline.tests.helpers import phase, slice_, x
+
+
+def _phase(pid, **kw):
+    return model._item(pid, "phase", None, phase(pid, **kw))
+
+
+def _slice(pid, sid, **kw):
+    return model._item(f"{pid}.{sid}", "slice", pid, slice_(sid, **kw))
+
+
+def _x(xid, **kw):
+    return model._item(xid, "x", None, x(xid, **kw))
+
+
+def test_cancelled_phase_without_done_slice_omitted():
+    items = [_phase("P5", status="cancelled", closed="2026-05-24"),
+             _slice("P5", "S1", status="cancelled")]
+    assert render.visible_items(items) == []
+
+
+def test_cancelled_phase_with_done_slice_kept_cancelled_slices_dropped():
+    items = [_phase("P16", status="cancelled", closed="2026-05-24"),
+             _slice("P16", "S1", status="done", closed="2026-05-23"),
+             _slice("P16", "S2", status="cancelled")]
+    keys = [i.key for i in render.visible_items(items)]
+    assert keys == ["P16", "P16.S1"]
+
+
+def test_only_done_dated_slices_and_x_items_visible():
+    items = [_phase("P1", status="ready", created="2026-06-01"),
+             _slice("P1", "S1", status="in_progress"),
+             _slice("P1", "S2", status="done", closed="2026-06-02"),
+             _x("X1", status="done", closed="2026-06-03"),
+             _x("X2", status="ready"),
+             _x("X3", status="done")]  # done but dateless -> not placeable
+    keys = [i.key for i in render.visible_items(items)]
+    assert keys == ["P1", "P1.S2", "X1"]
+
+
+def test_excluded_items_dropped():
+    it = _x("X1", status="done", closed="2026-06-03")
+    it.excluded = True
+    assert render.visible_items([it]) == []
+
+
+def test_phase_span_prefers_started_then_slice_then_created():
+    p = _phase("P2", status="done", created="2026-06-01", closed="2026-06-05")
+    s = _slice("P2", "S1", status="done", started="2026-06-02", closed="2026-06-04")
+    start, end, close_only = render.phase_span(p, [p, s])
+    assert start == dt.datetime(2026, 6, 2)   # earliest slice start
+    assert end == dt.datetime(2026, 6, 5)
+    assert close_only is False
+
+
+def test_close_only_phase():
+    p = _phase("P1", status="done", closed="2026-04-29")
+    start, end, close_only = render.phase_span(p, [p])
+    assert start is None and end == dt.datetime(2026, 4, 29) and close_only is True
+```
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+Run: `python3 -m pytest tools/timeline/tests/test_render_rules.py -q`
+Expected: FAIL — `ModuleNotFoundError` on `timeline.render`
+
+- [ ] **Step 3: Implement the rules half of `render.py`**
+
+Create `tools/timeline/render.py`:
+
+```python
+"""Render TimelineItem records to a single self-contained HTML page."""
+
+from __future__ import annotations
+
+import bisect
+import datetime as dt
+import html as _html
+
+PALETTE = ["#7c5cff", "#10ac84", "#ff9f43", "#4cc2ff",
+           "#ee5253", "#f368e0", "#01a3a4", "#feca57"]
+SLATE = "#8395a7"
+PX_PER_HOUR = 3.0
+MIN_GAP_PX = 34     # bursts expand to at least this much per adjacent pair
+MAX_GAP_PX = 140    # quiet stretches compress to at most this much
+GAP_THRESHOLD_HOURS = 24
+
+
+def _done_slices(phase_key, items):
+    return [i for i in items
+            if i.kind == "slice" and i.parent == phase_key and i.status == "done"]
+
+
+def visible_items(items):
+    """Apply the spec's display rules; preserves input order."""
+    out = []
+    for it in items:
+        if it.excluded:
+            continue
+        if it.kind == "phase":
+            if it.status == "cancelled" and not _done_slices(it.key, items):
+                continue
+            out.append(it)
+        elif it.kind == "slice":
+            if it.status != "done" or it.closed.when is None:
+                continue
+            parent = next((p for p in items if p.key == it.parent), None)
+            if parent and parent.excluded:
+                continue
+            out.append(it)
+        else:  # x
+            if it.status == "done" and it.closed.when is not None:
+                out.append(it)
+    return out
+
+
+def phase_span(phase, items):
+    """-> (start|None, end|None, close_only). end None means the phase is open."""
+    start = phase.started.when
+    if start is None:
+        slice_starts = [s.started.when for s in items
+                        if s.kind == "slice" and s.parent == phase.key
+                        and s.started.when]
+        start = min(slice_starts) if slice_starts else None
+    if start is None:
+        start = phase.created.when
+    end = phase.closed.when
+    return start, end, start is None
+```
+
+- [ ] **Step 4: Run tests to verify they pass**
+
+Run: `python3 -m pytest tools/timeline/tests/test_render_rules.py -q`
+Expected: all PASS
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add tools/timeline
+git commit -m "X29: render.py — visibility rules and derived phase spans"
+```
+
+---
+
+### Task 8: `render.py` — guard-railed time scale
+
+**Files:**
+- Modify: `tools/timeline/render.py` (append)
+- Test: `tools/timeline/tests/test_render_scale.py`
+
+- [ ] **Step 1: Write the failing tests**
+
+Create `tools/timeline/tests/test_render_scale.py`:
+
+```python
+import datetime as dt
+
+from timeline import render
+
+
+def test_proportional_between_guards():
+    t0 = dt.datetime(2026, 6, 1, 12, 0)
+    # 20h apart at 3 px/h = 60px: inside [34, 140] so exactly proportional.
+    scale = render.TimeScale([t0, t0 + dt.timedelta(hours=20)])
+    assert scale.y(t0) == 0
+    assert scale.y(t0 + dt.timedelta(hours=20)) == 60
+
+
+def test_min_gap_expands_bursts():
+    t0 = dt.datetime(2026, 6, 5, 11, 0)
+    # 5 minutes apart -> 0.25px proportional -> clamped to MIN_GAP_PX.
+    scale = render.TimeScale([t0, t0 + dt.timedelta(minutes=5)])
+    assert scale.y(t0 + dt.timedelta(minutes=5)) == render.MIN_GAP_PX
+
+
+def test_max_gap_compresses_quiet_stretches():
+    t0 = dt.datetime(2026, 5, 30)
+    # 10 days -> 720px proportional -> clamped to MAX_GAP_PX.
+    scale = render.TimeScale([t0, t0 + dt.timedelta(days=10)])
+    assert scale.y(t0 + dt.timedelta(days=10)) == render.MAX_GAP_PX
+
+
+def test_interpolates_between_anchors():
+    t0 = dt.datetime(2026, 6, 1)
+    t1 = t0 + dt.timedelta(hours=20)
+    scale = render.TimeScale([t0, t1])
+    assert scale.y(t0 + dt.timedelta(hours=10)) == 30  # halfway
+
+
+def test_monotonic_and_height():
+    t0 = dt.datetime(2026, 6, 1)
+    ts = [t0, t0 + dt.timedelta(minutes=1), t0 + dt.timedelta(days=30)]
+    scale = render.TimeScale(ts)
+    ys = [scale.y(t) for t in ts]
+    assert ys == sorted(ys)
+    assert scale.height > ys[-1]
+```
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+Run: `python3 -m pytest tools/timeline/tests/test_render_scale.py -q`
+Expected: FAIL — no attribute `TimeScale`
+
+- [ ] **Step 3: Append `TimeScale` to `render.py`**
+
+```python
+class TimeScale:
+    """Piecewise-linear time->y mapping: proportional between anchor events,
+    clamped per adjacent pair to [MIN_GAP_PX, MAX_GAP_PX]."""
+
+    def __init__(self, timestamps, px_per_hour=PX_PER_HOUR,
+                 min_gap=MIN_GAP_PX, max_gap=MAX_GAP_PX):
+        self._anchors = sorted(set(timestamps))
+        self._ys = []
+        y = 0.0
+        for i, t in enumerate(self._anchors):
+            if i:
+                hours = (t - self._anchors[i - 1]).total_seconds() / 3600.0
+                y += min(max(hours * px_per_hour, min_gap), max_gap)
+            self._ys.append(y)
+
+    def y(self, when):
+        i = bisect.bisect_left(self._anchors, when)
+        if i < len(self._anchors) and self._anchors[i] == when:
+            return self._ys[i]
+        if i == 0:
+            return self._ys[0] if self._ys else 0.0
+        if i == len(self._anchors):
+            return self._ys[-1]
+        a0, a1 = self._anchors[i - 1], self._anchors[i]
+        frac = (when - a0).total_seconds() / (a1 - a0).total_seconds()
+        return self._ys[i - 1] + frac * (self._ys[i] - self._ys[i - 1])
+
+    @property
+    def height(self):
+        return (self._ys[-1] if self._ys else 0.0) + 80.0
+```
+
+- [ ] **Step 4: Run tests to verify they pass**
+
+Run: `python3 -m pytest tools/timeline/tests/test_render_scale.py -q`
+Expected: all PASS
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add tools/timeline
+git commit -m "X29: render.py — guard-railed proportional time scale"
+```
+
+---
+
+### Task 9: `render.py` — strand lanes and quiet gaps
+
+**Files:**
+- Modify: `tools/timeline/render.py` (append)
+- Test: `tools/timeline/tests/test_render_lanes.py`
+
+- [ ] **Step 1: Write the failing tests**
+
+Create `tools/timeline/tests/test_render_lanes.py`:
+
+```python
+import datetime as dt
+
+from timeline import render
+
+D = lambda day, hour=0: dt.datetime(2026, 6, day, hour)
+
+
+def test_sequential_phases_share_lane_zero():
+    spans = [("P1", D(1), D(3)), ("P2", D(4), D(6))]
+    lanes, n = render.assign_lanes(spans)
+    assert lanes == {"P1": 0, "P2": 0} and n == 1
+
+
+def test_two_overlapping_phases_get_two_lanes():
+    spans = [("P1", D(1), D(5)), ("P2", D(3), D(8))]
+    lanes, n = render.assign_lanes(spans)
+    assert n == 2 and lanes["P1"] != lanes["P2"]
+
+
+def test_three_way_overlap_gets_three_lanes():
+    spans = [("P14", D(1), D(9)), ("P16", D(4), D(6)), ("P17", D(5), D(7))]
+    lanes, n = render.assign_lanes(spans)
+    assert n == 3 and len(set(lanes.values())) == 3
+
+
+def test_lane_frees_after_phase_closes():
+    spans = [("P1", D(1), D(3)), ("P2", D(2), D(8)), ("P3", D(4), D(6))]
+    lanes, n = render.assign_lanes(spans)
+    assert n == 2 and lanes["P3"] == lanes["P1"]
+
+
+def test_quiet_gaps_between_coverage():
+    spans = [("P1", D(1), D(3)), ("P2", D(3, 12), D(5)), ("P3", D(9), D(10))]
+    gaps = render.quiet_gaps([(s, e) for _, s, e in spans])
+    # P1->P2 gap is 12h: below the 24h threshold, not reported.
+    assert gaps == [(D(5), D(9))]
+```
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+Run: `python3 -m pytest tools/timeline/tests/test_render_lanes.py -q`
+Expected: FAIL — no attribute `assign_lanes`
+
+- [ ] **Step 3: Append lanes and gaps to `render.py`**
+
+```python
+def assign_lanes(spans):
+    """Greedy interval lane assignment for phase strands.
+
+    spans: iterable of (key, start, end) with start/end datetimes (end may be
+    None for an open phase — treat as datetime.max for packing).
+    -> ({key: lane}, lane_count)
+    """
+    assignment, lane_ends = {}, []
+    inf = dt.datetime.max
+    ordered = sorted(spans, key=lambda s: (s[1], s[2] or inf))
+    for key, start, end in ordered:
+        end = end or inf
+        for lane, lane_end in enumerate(lane_ends):
+            if start >= lane_end:
+                lane_ends[lane] = end
+                assignment[key] = lane
+                break
+        else:
+            lane_ends.append(end)
+            assignment[key] = len(lane_ends) - 1
+    return assignment, len(lane_ends)
+
+
+def quiet_gaps(intervals, threshold_hours=GAP_THRESHOLD_HOURS):
+    """Merge phase coverage intervals; return gaps longer than the threshold.
+
+    intervals: list of (start, end) datetimes (end None = open: covers to max).
+    -> list of (gap_start, gap_end)
+    """
+    if not intervals:
+        return []
+    inf = dt.datetime.max
+    merged = []
+    for start, end in sorted((s, e or inf) for s, e in intervals):
+        if merged and start <= merged[-1][1]:
+            merged[-1][1] = max(merged[-1][1], end)
+        else:
+            merged.append([start, end])
+    gaps = []
+    for (s0, e0), (s1, e1) in zip(merged, merged[1:]):
+        if (s1 - e0).total_seconds() / 3600.0 > threshold_hours:
+            gaps.append((e0, s1))
+    return gaps
+```
+
+- [ ] **Step 4: Run tests to verify they pass**
+
+Run: `python3 -m pytest tools/timeline/tests/test_render_lanes.py -q`
+Expected: all PASS
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add tools/timeline
+git commit -m "X29: render.py — strand lane assignment and quiet-gap detection"
+```
+
+---
+
+### Task 10: `render.py` — HTML emission
+
+**Files:**
+- Modify: `tools/timeline/render.py` (append)
+- Test: `tools/timeline/tests/test_render_html.py`
+
+- [ ] **Step 1: Write the failing tests**
+
+Create `tools/timeline/tests/test_render_html.py`:
+
+```python
+import datetime as dt
+
+from timeline import model, render
+from timeline.tests.helpers import phase, slice_, x
+
+GEN = dt.datetime(2026, 6, 6, 12, 0)
+
+
+def _items():
+    p20 = model._item("P20", "phase", None,
+                      phase("P20", status="done", started="2026-05-29",
+                            closed="2026-05-30", title="Marketing library"))
+    s1 = model._item("P20.S1", "slice", "P20",
+                     slice_("S1", status="done", closed="2026-05-29",
+                            title="Component inventory"))
+    p1 = model._item("P1", "phase", None,
+                     phase("P1", status="done", closed="2026-04-29",
+                           title="Legacy close-only"))
+    x1 = model._item("X1", "x", None,
+                     x("X1", status="done", closed="2026-05-29",
+                       title="Cross item"))
+    open_p = model._item("P23", "phase", None,
+                         phase("P23", status="ready", started="2026-06-05",
+                               title="Open phase"))
+    return [p1, p20, s1, x1, open_p]
+
+
+def test_render_produces_selfcontained_html():
+    result = render.render_html("fixture", _items(), generated=GEN)
+    h = result.html
+    assert h.startswith("<!DOCTYPE html>")
+    for needle in ("Marketing library", "Component inventory", "Cross item",
+                   "phase-node", "slice-card", "x-node", "showX",
+                   "Legacy close-only", "Open phase"):
+        assert needle in h
+    # Self-contained: no external fetches.
+    assert "http://" not in h and "https://" not in h and "src=" not in h
+
+
+def test_day_precision_shows_no_time_minute_shows_time():
+    items = _items()
+    items[2].closed = model.DateValue(dt.datetime(2026, 5, 29, 10, 14),
+                                      "minute", "replay")
+    h = render.render_html("fixture", items, generated=GEN).html
+    assert "10:14" in h
+    h2 = render.render_html("fixture", _items(), generated=GEN).html
+    assert "00:00" not in h2  # day precision never fakes a midnight time
+
+
+def test_show_x_flag_sets_initial_body_class():
+    off = render.render_html("fixture", _items(), generated=GEN).html
+    on = render.render_html("fixture", _items(), generated=GEN, show_x=True).html
+    assert '<body class="">' in off
+    assert '<body class="show-x">' in on
+
+
+def test_unplaced_items_reported_not_rendered():
+    dateless = model._item("P99", "phase", None, phase("P99", status="ready"))
+    result = render.render_html("fixture", _items() + [dateless], generated=GEN)
+    assert "P99" in result.unplaced
+    assert "P99" not in result.html
+
+
+def test_x_dot_hidden_with_card():
+    h = render.render_html("fixture", _items(), generated=GEN).html
+    assert 'class="dot x-node' in h  # the X dot toggles with the card
+
+
+def test_detail_includes_duration():
+    items = _items()
+    items[2].started = model.DateValue(dt.datetime(2026, 5, 29, 8, 0),
+                                       "minute", "replay")
+    items[2].closed = model.DateValue(dt.datetime(2026, 5, 29, 10, 14),
+                                      "minute", "replay")
+    h = render.render_html("fixture", items, generated=GEN).html
+    assert "2h 14m" in h
+
+
+def test_header_shows_date_span():
+    h = render.render_html("fixture", _items(), generated=GEN).html
+    assert "29 Apr 2026" in h and "6 Jun 2026" in h
+
+
+def test_html_escapes_titles():
+    bad = model._item("X5", "x", None,
+                      x("X5", status="done", closed="2026-05-29",
+                        title="<script>alert(1)</script>"))
+    h = render.render_html("fixture", _items() + [bad], generated=GEN).html
+    assert "<script>alert(1)</script>" not in h
+    assert "&lt;script&gt;" in h
+```
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+Run: `python3 -m pytest tools/timeline/tests/test_render_html.py -q`
+Expected: FAIL — no attribute `render_html`
+
+- [ ] **Step 3: Append the HTML emitter to `render.py`**
+
+```python
+from dataclasses import dataclass as _dataclass
+
+
+@_dataclass
+class RenderResult:
+    html: str
+    unplaced: list
+
+
+def _color(phase_key):
+    try:
+        return PALETTE[int(phase_key.lstrip("PX")) % len(PALETTE)]
+    except ValueError:
+        return SLATE
+
+
+def _fmt(dv):
+    if dv.when is None:
+        return "—"
+    if dv.precision == "minute":
+        return dv.when.strftime("%-d %b %Y, %H:%M")
+    return dv.when.strftime("%-d %b %Y")
+
+
+def render_html(project, items, *, generated, show_x=False):
+    vis = visible_items(items)
+    phases = [i for i in vis if i.kind == "phase"]
+    slices = [i for i in vis if i.kind == "slice"]
+    xs = [i for i in vis if i.kind == "x"]
+
+    spans, unplaced = {}, []
+    for p in phases:
+        start, end, close_only = phase_span(p, items)
+        if start is None and end is None:
+            unplaced.append(p.key)
+            continue
+        spans[p.key] = (start or end, end, close_only)
+    placeable_phases = [p for p in phases if p.key in spans]
+
+    anchors = []
+    for start, end, _ in spans.values():
+        anchors.append(start)
+        anchors.append(end or generated)
+    anchors += [s.closed.when for s in slices if s.parent in spans]
+    anchors += [i.closed.when for i in xs]
+    if not anchors:
+        anchors = [generated]
+    scale = TimeScale(anchors)
+    span_text = (f"{min(anchors):%-d %b %Y} – {max(anchors):%-d %b %Y}"
+                 if len(anchors) > 1 else "")
+
+    lane_of, lane_count = assign_lanes(
+        [(k, s, e) for k, (s, e, _) in spans.items()])
+    overlapping = _overlap_keys(spans)
+    strand_off = lambda lane: (lane - (lane_count - 1) / 2) * 12
+
+    parts = []
+    # Strands + phase nodes + close rings.
+    for p in placeable_phases:
+        start, end, close_only = spans[p.key]
+        color = _color(p.key)
+        off = strand_off(lane_of[p.key])
+        y0, y1 = scale.y(start), scale.y(end or generated)
+        if not close_only:
+            parts.append(
+                f'<div class="strand" style="top:{y0:.0f}px;'
+                f'height:{max(y1 - y0, 2):.0f}px;'
+                f'margin-left:{off:.0f}px;background:{color}"></div>')
+            parts.append(_phase_start_node(p, y0, off, color))
+        if end is not None:
+            ring = "#9aa0a6" if p.status == "cancelled" else color
+            label = "cancelled" if p.status == "cancelled" else "complete"
+            parts.append(
+                f'<div class="phase-ring" style="top:{y1:.0f}px;'
+                f'margin-left:{off:.0f}px;border-color:{ring}"></div>'
+                f'<div class="ring-label" style="top:{y1:.0f}px;color:{ring}">'
+                f'{_html.escape(p.key)} {label} · {_fmt(p.closed)}</div>')
+        else:
+            parts.append(
+                f'<div class="open-label" style="top:{y1 + 24:.0f}px;'
+                f'color:{color}">{_html.escape(p.key)} in progress…</div>')
+
+    # Quiet gaps.
+    for gap_start, gap_end in quiet_gaps(
+            [(s, e) for s, e, _ in spans.values()]):
+        gy0, gy1 = scale.y(gap_start), scale.y(gap_end)
+        days = max(1, round((gap_end - gap_start).total_seconds() / 86400))
+        parts.append(
+            f'<div class="gap" style="top:{gy0:.0f}px;'
+            f'height:{gy1 - gy0:.0f}px"></div>'
+            f'<div class="gap-label" style="top:{(gy0 + gy1) / 2:.0f}px">'
+            f'{days} quiet day{"s" if days != 1 else ""}</div>')
+
+    # Slice cards: phase owns a side while overlapping, else alternate.
+    counters = {}
+    for s in sorted(slices, key=lambda i: i.closed.when):
+        if s.parent not in spans:
+            unplaced.append(s.key)
+            continue
+        color = _color(s.parent)
+        n = counters[s.parent] = counters.get(s.parent, -1) + 1
+        if s.parent in overlapping:
+            side = "left" if lane_of[s.parent] % 2 == 0 else "right"
+        else:
+            side = "left" if n % 2 == 0 else "right"
+        parts.append(_card(s, scale.y(s.closed.when), side, color,
+                           strand_off(lane_of[s.parent]), css="slice-card"))
+
+    # X-items: neutral, alternating, hidden unless body.show-x.
+    for n, i in enumerate(sorted(xs, key=lambda i: i.closed.when)):
+        side = "left" if n % 2 == 0 else "right"
+        parts.append(_card(i, scale.y(i.closed.when), side, SLATE, 0,
+                           css="slice-card x-node"))
+
+    legend = "".join(
+        f'<span class="chip"><i style="background:{_color(p.key)}"></i>'
+        f'{_html.escape(p.key)}</span>' for p in placeable_phases)
+    done_slices = len(slices)
+    body_class = "show-x" if show_x else ""
+    html_out = _SHELL.format(
+        project=_html.escape(project), legend=legend, span=span_text,
+        n_phases=sum(1 for p in placeable_phases if p.status == "done"),
+        n_slices=done_slices, height=int(scale.height),
+        generated=generated.strftime("%-d %b %Y %H:%M"),
+        body_class=body_class, checked="checked" if show_x else "",
+        content="\n".join(parts))
+    return RenderResult(html_out, unplaced)
+
+
+def _overlap_keys(spans):
+    keys = list(spans)
+    out = set()
+    inf = dt.datetime.max
+    for i, a in enumerate(keys):
+        s0, e0, _ = spans[a]
+        for b in keys[i + 1:]:
+            s1, e1, _ = spans[b]
+            if s0 < (e1 or inf) and s1 < (e0 or inf):
+                out.update((a, b))
+    return out
+
+
+def _phase_start_node(p, y, off, color):
+    return (f'<div class="phase-node" style="top:{y:.0f}px;'
+            f'margin-left:{off:.0f}px;background:{color}"></div>'
+            f'<div class="phase-title" style="top:{y:.0f}px">'
+            f'{_html.escape(p.key)} — {_html.escape(p.label())}'
+            f'<span class="dim"> started {_fmt(p.started) if p.started.when else _fmt(p.created)}</span></div>')
+
+
+def _duration_text(started, closed):
+    if started.when is None or closed.when is None:
+        return ""
+    delta = closed.when - started.when
+    total = int(delta.total_seconds())
+    if total <= 0:
+        return ""
+    days, rem = divmod(total, 86400)
+    hours, rem = divmod(rem, 3600)
+    minutes = rem // 60
+    if started.precision == "day" or closed.precision == "day":
+        d = max(days, 1)
+        return f" · {d} day{'s' if d != 1 else ''}"
+    if days:
+        return f" · {days}d {hours}h"
+    return f" · {hours}h {minutes:02d}m"
+
+
+def _card(item, y, side, color, off, css):
+    detail = (f'<div class="detail">{_html.escape(item.key)} · '
+              f'{_html.escape(item.title)}<br>'
+              f'started {_fmt(item.started)} · closed {_fmt(item.closed)}'
+              f'{_duration_text(item.started, item.closed)}</div>')
+    dot_css = "dot x-node" if "x-node" in css else "dot"
+    return (f'<div class="{css} {side}" onclick="this.classList.toggle(\'open\')" '
+            f'style="top:{y:.0f}px;border-color:{color}66;background:{color}14">'
+            f'<b>{_html.escape(item.key)}</b> {_html.escape(item.label())}'
+            f'<span class="dim"> {_fmt(item.closed)}</span>{detail}</div>'
+            f'<div class="{dot_css} {side}-dot" '
+            f'style="top:{y:.0f}px;margin-left:{off:.0f}px;background:{color}"></div>')
+
+
+_SHELL = """<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>{project} — timeline</title>
+<style>
+body{{font-family:system-ui,sans-serif;background:#fafafa;color:#333;margin:0}}
+header{{position:sticky;top:0;background:#fff;border-bottom:1px solid #e5e5e5;
+  padding:14px 28px;z-index:10}}
+header h1{{font-size:18px;margin:0 0 4px}}
+header .meta{{font-size:12px;color:#888}}
+.chip{{font-size:11px;margin-right:10px;color:#555}}
+.chip i{{display:inline-block;width:9px;height:9px;border-radius:50%;
+  margin-right:4px}}
+#wrap{{position:relative;max-width:980px;margin:30px auto;height:{height}px}}
+.strand{{position:absolute;left:50%;width:4px;border-radius:2px;
+  transform:translateX(-50%)}}
+.phase-node{{position:absolute;left:50%;width:18px;height:18px;
+  border-radius:50%;border:3px solid #fff;transform:translate(-50%,-50%);
+  box-shadow:0 0 0 2px currentColor;z-index:3}}
+.phase-ring{{position:absolute;left:50%;width:14px;height:14px;
+  border-radius:50%;background:#fff;border:3px solid;
+  transform:translate(-50%,-50%);z-index:3}}
+.phase-title{{position:absolute;left:50%;margin-left:26px;font-size:13px;
+  font-weight:700;transform:translateY(-50%);max-width:40%}}
+.ring-label{{position:absolute;right:50%;margin-right:26px;font-size:11px;
+  font-weight:600;transform:translateY(-50%)}}
+.open-label{{position:absolute;left:50%;margin-left:26px;font-size:11px;
+  font-style:italic;transform:translateY(-50%)}}
+.dim{{color:#999;font-weight:400;font-size:11px}}
+.gap{{position:absolute;left:50%;border-left:3px dotted #aaa;
+  transform:translateX(-50%)}}
+.gap-label{{position:absolute;left:50%;margin-left:14px;font-size:10px;
+  color:#999;font-style:italic;transform:translateY(-50%)}}
+.slice-card{{position:absolute;max-width:38%;font-size:12px;cursor:pointer;
+  border:1px solid;border-radius:6px;padding:6px 10px;
+  transform:translateY(-50%);z-index:2}}
+.slice-card.left{{right:50%;margin-right:22px;text-align:right}}
+.slice-card.right{{left:50%;margin-left:22px}}
+.dot{{position:absolute;left:50%;width:11px;height:11px;border-radius:50%;
+  transform:translate(-50%,-50%);z-index:3}}
+.detail{{display:none;margin-top:6px;padding-top:6px;
+  border-top:1px solid rgba(0,0,0,.1);font-size:11px;color:#666}}
+.slice-card.open .detail{{display:block}}
+.x-node{{display:none}}
+body.show-x .x-node{{display:block}}
+body.show-x .dot.x-node{{display:block}}
+label.xtoggle{{font-size:12px;color:#555;float:right;cursor:pointer}}
+</style></head>
+<body class="{body_class}">
+<header><h1>{project} — work timeline</h1>
+<div class="meta">{span} · {n_phases} phases · {n_slices} slices completed ·
+generated {generated}
+<label class="xtoggle"><input type="checkbox" id="showX" {checked}
+onchange="document.body.classList.toggle('show-x',this.checked)">
+show cross-cutting items</label></div>
+<div>{legend}</div></header>
+<div id="wrap">
+{content}
+</div></body></html>
+"""
+```
+
+- [ ] **Step 4: Run tests to verify they pass**
+
+Run: `python3 -m pytest tools/timeline/tests/test_render_html.py -q`
+Expected: all PASS. If a strftime `%-d` failure occurs the platform is non-glibc; replace `%-d` with `%d` and strip leading zeros manually — but on Linux (the target) `%-d` is correct.
+
+- [ ] **Step 5: Run the full render test group**
+
+Run: `python3 -m pytest tools/timeline/tests -q`
+Expected: all PASS
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add tools/timeline
+git commit -m "X29: render.py — self-contained HTML emission with braid, gaps, X toggle"
+```
+
+---
+
+### Task 11: `timeline.py` — CLI end-to-end
+
+**Files:**
+- Create: `tools/timeline/timeline.py`
+- Test: `tools/timeline/tests/test_cli.py`
+
+- [ ] **Step 1: Write the failing tests**
+
+Create `tools/timeline/tests/test_cli.py`:
+
+```python
+import json
+
+import pytest
+
+from timeline import timeline
+from timeline.tests.helpers import doc, make_repo, phase, slice_, x
+
+
+def _project_repo(tmp_path):
+    s_done = slice_("S1", status="done", created="2026-06-01", closed="2026-06-02",
+                    title="Build the widget")
+    snapshots = [
+        ("2026-06-01T10:00:00 +0000",
+         doc(phases=[phase("P1", status="ready", created="2026-06-01",
+                           slices=[slice_("S1", status="ready",
+                                          created="2026-06-01",
+                                          title="Build the widget")])])),
+        ("2026-06-02T16:30:00 +0000",
+         doc(phases=[phase("P1", status="done", created="2026-06-01",
+                           started="2026-06-01", closed="2026-06-02",
+                           slices=[s_done])],
+             cross=[x("X1", status="done", closed="2026-06-02",
+                      title="Cross thing")])),
+    ]
+    return make_repo(tmp_path, snapshots)
+
+
+def test_end_to_end(tmp_path, capsys):
+    repo = _project_repo(tmp_path)
+    out = tmp_path / "t.html"
+    timeline.main(["--repo", str(repo), "-o", str(out)])
+    h = out.read_text()
+    assert "Build the widget" in h and "Cross thing" in h
+    # Replay upgraded the same-day close to minute precision. Rendered times
+    # are local wall clock, so compute the expectation from the commit epoch.
+    import datetime as dt
+    ts = int(dt.datetime(2026, 6, 2, 16, 30, tzinfo=dt.timezone.utc).timestamp())
+    assert dt.datetime.fromtimestamp(ts).strftime("%H:%M") in h
+
+
+def test_overrides_applied(tmp_path):
+    repo = _project_repo(tmp_path)
+    (repo / "docs" / "timeline-overrides.json").write_text(json.dumps(
+        {"items": {"P1.S1": {"display_title": "Friendly widget"}}}))
+    out = tmp_path / "t.html"
+    timeline.main(["--repo", str(repo), "-o", str(out)])
+    assert "Friendly widget" in out.read_text()
+
+
+def test_missing_tracker_is_fatal(tmp_path):
+    import subprocess
+    bare = tmp_path / "bare"
+    bare.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=bare, check=True)
+    with pytest.raises(SystemExit):
+        timeline.main(["--repo", str(bare), "-o", str(tmp_path / "x.html")])
+
+
+def test_direct_script_invocation(tmp_path):
+    # The acceptance commands run the file directly from the repo root —
+    # cover the script-mode sys.path shim, not just the package import.
+    import subprocess, sys
+    from pathlib import Path
+    repo = _project_repo(tmp_path)
+    out = tmp_path / "direct.html"
+    script = Path(__file__).resolve().parents[1] / "timeline.py"
+    proc = subprocess.run(
+        [sys.executable, str(script), "--repo", str(repo), "-o", str(out)],
+        capture_output=True, text=True, cwd=Path(__file__).resolve().parents[3])
+    assert proc.returncode == 0, proc.stderr
+    assert "Build the widget" in out.read_text()
+
+
+def test_unplaced_summary_on_stderr(tmp_path, capsys):
+    repo = _project_repo(tmp_path)
+    live = json.loads((repo / "docs" / "tasklist.json").read_text())
+    live["phases"].append(phase("P9", status="ready"))  # no dates at all
+    (repo / "docs" / "tasklist.json").write_text(json.dumps(live))
+    timeline.main(["--repo", str(repo), "-o", str(tmp_path / "t.html")])
+    assert "P9" in capsys.readouterr().err
+```
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+Run: `python3 -m pytest tools/timeline/tests/test_cli.py -q`
+Expected: FAIL — `ModuleNotFoundError` on `timeline.timeline`
+
+- [ ] **Step 3: Implement `timeline.py`**
+
+Create `tools/timeline/timeline.py`:
+
+```python
+#!/usr/bin/env python3
+"""Generate a self-contained HTML timeline of a tasktool project's history.
+
+Human-facing utility. Never referenced by skills or hooks; adds no agent
+context. Usage:
+
+    python3 tools/timeline/timeline.py --repo ~/Dev/proj -o timeline.html
+"""
+
+from __future__ import annotations
+
+import argparse
+import datetime as dt
+import json
+import sys
+from pathlib import Path
+
+if __package__ in (None, ""):  # support `python3 tools/timeline/timeline.py`
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # tools/
+    from timeline import extract, model, render
+else:
+    from . import extract, model, render
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--repo", default=".", help="target repo (default: cwd)")
+    ap.add_argument("-o", "--output", default="timeline.html")
+    ap.add_argument("--show-x", action="store_true",
+                    help="start with cross-cutting items visible")
+    ap.add_argument("--overrides", default=None,
+                    help="overrides JSON (default: <repo>/docs/timeline-overrides.json)")
+    args = ap.parse_args(argv)
+
+    root = extract.repo_root(args.repo)
+    warnings = []
+    if extract.is_shallow(root):
+        warnings.append("shallow clone: replay limited; some items stay day-precision")
+
+    live = extract.read_live(root)
+    project_docs, x_objects, w = extract.read_archives(root)
+    warnings += w
+    histories, w = extract.replay(root)
+    warnings += w
+
+    items = model.collect(live, project_docs, x_objects)
+    for it in items:
+        h = histories.get(it.key)
+        if h:
+            model.apply_replay(it, h)
+
+    ov_path = Path(args.overrides) if args.overrides \
+        else root / "docs" / "timeline-overrides.json"
+    if ov_path.exists():
+        warnings += model.apply_overrides(items, json.loads(ov_path.read_text()))
+    elif args.overrides:
+        raise SystemExit(f"timeline: overrides file not found: {ov_path}")
+
+    project = live.get("project") or root.name
+    result = render.render_html(project, items,
+                                generated=dt.datetime.now(), show_x=args.show_x)
+    Path(args.output).write_text(result.html)
+
+    for warning in warnings:
+        print(f"timeline: {warning}", file=sys.stderr)
+    if result.unplaced:
+        print(f"timeline: {len(result.unplaced)} item(s) had no resolvable "
+              f"dates and were omitted: {', '.join(sorted(result.unplaced))}",
+              file=sys.stderr)
+    print(f"timeline: wrote {args.output}", file=sys.stderr)
+
+
+if __name__ == "__main__":
+    main()
+```
+
+- [ ] **Step 4: Run tests to verify they pass**
+
+Run: `python3 -m pytest tools/timeline/tests/test_cli.py -q`
+Expected: all PASS
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add tools/timeline
+git commit -m "X29: timeline.py — CLI entry, end-to-end pipeline"
+```
+
+---
+
+### Task 12: `backfill.py` — legacy parsing and commit mining
+
+**Files:**
+- Create: `tools/timeline/backfill.py`
+- Test: `tools/timeline/tests/test_backfill_parse.py`
+
+- [ ] **Step 1: Write the failing tests**
+
+Create `tools/timeline/tests/test_backfill_parse.py`:
+
+```python
+from timeline import backfill
+
+LEGACY = """# P1 — Stabilise baseline ✅ `DONE 2026-04-29`
+
+Archived from the legacy `docs/TASKLIST.md`. Closed 2026-04-29.
+
+## S1 — Baseline upgrade & validation ✅ `DONE 2026-04-29`
+
+- ✅ **T1** Upgrade and pin the stack.
+
+## S2 — Second slice ✅ `DONE 2026-04-30`
+"""
+
+
+def test_parse_legacy_archive():
+    parsed = backfill.parse_legacy(LEGACY)
+    assert parsed.phase_id == "P1"
+    assert parsed.closed == "2026-04-29"
+    assert [(s.sid, s.title, s.closed) for s in parsed.slices] == [
+        ("S1", "Baseline upgrade & validation", "2026-04-29"),
+        ("S2", "Second slice", "2026-04-30"),
+    ]
+
+
+def test_parse_legacy_returns_none_without_done_heading():
+    assert backfill.parse_legacy("# Notes\n\nNothing here.") is None
+
+
+def test_mine_first_mentions():
+    subjects = [
+        (100, "*DOCS*: P2.S3 close — resolve schema"),
+        (200, "feat p2-s4 add importer"),
+        (300, "P2: wrap up phase"),
+        (400, "P3.S1 start"),
+    ]
+    first = backfill.first_mentions(subjects)
+    assert first["P2.S3"] == 100
+    assert first["P2.S4"] == 200
+    assert first["P2"] == 100      # phase inherits its earliest item mention
+    assert first["P3.S1"] == 400
+    assert first["P3"] == 400
+```
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+Run: `python3 -m pytest tools/timeline/tests/test_backfill_parse.py -q`
+Expected: FAIL — `ModuleNotFoundError` on `timeline.backfill`
+
+- [ ] **Step 3: Implement the parsing half of `backfill.py`**
+
+Create `tools/timeline/backfill.py`:
+
+```python
+#!/usr/bin/env python3
+"""Run-once legacy backfill: migrate pre-tasktool archive markdown into the
+canonical 'Full phase JSON' blocks so timeline.py never needs legacy parsing.
+
+Dry-run by default (prints a unified diff); --write applies. Never invoked by
+timeline.py.
+"""
+
+from __future__ import annotations
+
+import argparse
+import difflib
+import json
+import re
+import sys
+from dataclasses import dataclass
+from pathlib import Path
+
+if __package__ in (None, ""):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # tools/
+    from timeline import extract
+else:
+    from . import extract
+
+_PHASE_HEAD_RE = re.compile(
+    r"^# (P\d+)\s+[—-]\s+(.+?)\s+✅\s+`DONE (\d{4}-\d{2}-\d{2})`", re.M)
+_SLICE_HEAD_RE = re.compile(
+    r"^## (S\d+)\s+[—-]\s+(.+?)\s+✅\s+`DONE (\d{4}-\d{2}-\d{2})`", re.M)
+_MENTION_RE = re.compile(r"\b[pP](\d{1,2})(?:[.\-]?[sS](\d{1,2}))?\b")
+
+
+@dataclass
+class LegacySlice:
+    sid: str
+    title: str
+    closed: str
+
+
+@dataclass
+class LegacyPhase:
+    phase_id: str
+    title: str
+    closed: str
+    slices: list
+
+
+def parse_legacy(text):
+    """Parse a pure-legacy archive markdown file. None if not legacy format."""
+    head = _PHASE_HEAD_RE.search(text)
+    if not head:
+        return None
+    slices = [LegacySlice(m.group(1), m.group(2), m.group(3))
+              for m in _SLICE_HEAD_RE.finditer(text)]
+    return LegacyPhase(head.group(1), head.group(2), head.group(3), slices)
+
+
+def first_mentions(subjects):
+    """subjects: iterable of (ts, subject). -> {key: first_ts} where key is
+    'P<n>' or 'P<n>.S<m>'. A phase's first mention is the earliest of its own
+    and any of its slices' mentions."""
+    first = {}
+    for ts, subject in subjects:
+        for m in _MENTION_RE.finditer(subject):
+            pid = f"P{m.group(1)}"
+            keys = [pid]
+            if m.group(2):
+                keys.append(f"{pid}.S{int(m.group(2))}")
+            for key in keys:
+                if key not in first or ts < first[key]:
+                    first[key] = ts
+    return first
+
+
+def commit_subjects(repo):
+    out = extract.git(repo, "log", "--reverse", "--format=%ct%x01%s")
+    pairs = []
+    for line in out.splitlines():
+        if "\x01" in line:
+            ts, subject = line.split("\x01", 1)
+            pairs.append((int(ts), subject))
+    return pairs
+```
+
+- [ ] **Step 4: Run tests to verify they pass**
+
+Run: `python3 -m pytest tools/timeline/tests/test_backfill_parse.py -q`
+Expected: all PASS
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add tools/timeline
+git commit -m "X29: backfill.py — legacy archive parsing and commit-mention mining"
+```
+
+---
+
+### Task 13: `backfill.py` — archive JSON rewrite with dry-run diff
+
+**Files:**
+- Modify: `tools/timeline/backfill.py` (append)
+- Test: `tools/timeline/tests/test_backfill_rewrite.py`
+
+- [ ] **Step 1: Write the failing tests**
+
+Create `tools/timeline/tests/test_backfill_rewrite.py`:
+
+````python
+import datetime as dt
+import json
+
+from timeline import backfill
+from timeline.tests.helpers import doc, phase
+
+ARCHIVE_TEMPLATE = """# P1 — Stabilise baseline
+
+status: done
+closed: 2026-04-29
+
+## Slices
+
+
+## Full phase JSON (for tasktool unarchive)
+
+```json
+{}
+```
+"""
+
+LEGACY = """# P1 — Stabilise baseline ✅ `DONE 2026-04-29`
+
+## S1 — Baseline upgrade ✅ `DONE 2026-04-29`
+"""
+
+
+def _setup(tmp_path):
+    arch = tmp_path / "docs" / "archived-tasks"
+    arch.mkdir(parents=True)
+    empty = doc(phases=[phase("P1", status="done", closed="2026-04-29",
+                              created="1970-01-01")])
+    (arch / "P1-tasktool.md").write_text(
+        ARCHIVE_TEMPLATE.format(json.dumps(empty, indent=2)))
+    (arch / "P1-legacy.md").write_text(LEGACY)
+    return tmp_path
+
+
+def test_plan_rewrites_fills_slices_and_started(tmp_path):
+    root = _setup(tmp_path)
+    mentions = {"P1": int(dt.datetime(2026, 4, 25, 9, 0).timestamp())}
+    changes = backfill.plan_rewrites(root, mentions)
+    assert len(changes) == 1
+    path, new_text = changes[0]
+    assert path.name == "P1-tasktool.md"
+    block = json.loads(backfill._json_block(new_text))
+    p1 = block["phases"][0]
+    assert p1["started"] == "2026-04-25"
+    assert [(s["id"], s["status"], s["closed"]) for s in p1["slices"]] == [
+        ("S1", "done", "2026-04-29")]
+    assert p1["closed"] == "2026-04-29"  # existing values never overwritten
+
+
+def test_existing_slices_not_touched(tmp_path):
+    root = _setup(tmp_path)
+    arch = root / "docs" / "archived-tasks" / "P1-tasktool.md"
+    filled = doc(phases=[phase("P1", status="done", closed="2026-04-29",
+                               slices=[{"id": "S1", "status": "done",
+                                        "closed": "2026-04-29",
+                                        "title": "already here"}])])
+    arch.write_text(ARCHIVE_TEMPLATE.format(json.dumps(filled, indent=2)))
+    changes = backfill.plan_rewrites(root, {"P1": 1000})
+    if changes:  # only the started fill may remain
+        block = json.loads(backfill._json_block(changes[0][1]))
+        assert block["phases"][0]["slices"][0]["title"] == "already here"
+
+
+def test_started_clamped_to_previous_phase_close(tmp_path):
+    # Mined mention predates the previous phase's close: sequential-era
+    # cross-check clamps the start to the previous close.
+    root = _setup(tmp_path)
+    arch = root / "docs" / "archived-tasks"
+    p0 = doc(phases=[phase("P0", status="done", closed="2026-04-27")])
+    (arch / "P0-tasktool.md").write_text(
+        ARCHIVE_TEMPLATE.replace("P1", "P0").format(json.dumps(p0, indent=2)))
+    early = int(dt.datetime(2026, 4, 20, 9, 0).timestamp())
+    changes = backfill.plan_rewrites(root, {"P1": early})
+    target = next(c for c in changes if c[0].name == "P1-tasktool.md")
+    block = json.loads(backfill._json_block(target[1]))
+    assert block["phases"][0]["started"] == "2026-04-27"  # clamped, not 04-20
+
+
+def test_started_kept_when_after_previous_close(tmp_path):
+    root = _setup(tmp_path)
+    arch = root / "docs" / "archived-tasks"
+    p0 = doc(phases=[phase("P0", status="done", closed="2026-04-20")])
+    (arch / "P0-tasktool.md").write_text(
+        ARCHIVE_TEMPLATE.replace("P1", "P0").format(json.dumps(p0, indent=2)))
+    mined = int(dt.datetime(2026, 4, 25, 9, 0).timestamp())
+    changes = backfill.plan_rewrites(root, {"P1": mined})
+    target = next(c for c in changes if c[0].name == "P1-tasktool.md")
+    block = json.loads(backfill._json_block(target[1]))
+    assert block["phases"][0]["started"] == "2026-04-25"  # mined date kept
+
+
+def test_diff_output_and_write(tmp_path, capsys):
+    root = _setup(tmp_path)
+    backfill.run(root, mentions={"P1": 1000}, write=False)
+    assert "P1-tasktool.md" in capsys.readouterr().out
+    before = (root / "docs" / "archived-tasks" / "P1-tasktool.md").read_text()
+    backfill.run(root, mentions={"P1": 1000}, write=True)
+    after = (root / "docs" / "archived-tasks" / "P1-tasktool.md").read_text()
+    assert before != after and '"S1"' in after
+````
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+Run: `python3 -m pytest tools/timeline/tests/test_backfill_rewrite.py -q`
+Expected: FAIL — no attribute `plan_rewrites`
+
+- [ ] **Step 3: Append the rewrite half to `backfill.py`**
+
+````python
+_BLOCK_RE = re.compile(r"(^## Full phase JSON.*?^```json\n)(.*?)(^```)",
+                       re.S | re.M)
+
+
+def _json_block(text):
+    m = _BLOCK_RE.search(text)
+    return m.group(2) if m else None
+
+
+def _ts_to_date(ts):
+    import datetime as dt
+    return dt.datetime.fromtimestamp(ts).strftime("%Y-%m-%d")
+
+
+def _phase_closes(blocks, legacy):
+    """{phase_id: closed_date} across every known source, for the
+    sequential-era cross-check."""
+    closes = {}
+    for text in blocks.values():
+        try:
+            block = json.loads(_json_block(text))
+        except (json.JSONDecodeError, TypeError):
+            continue
+        for p in block.get("phases", []):
+            if p.get("closed"):
+                closes[p["id"]] = p["closed"]
+    for parsed in legacy.values():
+        closes.setdefault(parsed.phase_id, parsed.closed)
+    return closes
+
+
+def _clamp_start(pid, mined_date, closes):
+    """Sequential-era cross-check: a mined start earlier than the previous
+    phase's close is mention noise (an early commit referencing the ID in
+    passing). Clamp to the latest close among lower-numbered phases."""
+    n = int(pid.split(".")[0][1:])
+    prior = [d for p, d in closes.items() if int(p[1:]) < n and d]
+    if prior:
+        prev_close = max(prior)
+        if mined_date < prev_close:
+            return prev_close
+    return mined_date
+
+
+def plan_rewrites(root, mentions):
+    """-> list of (path, new_text) for tasktool archive files whose phase has a
+    matching legacy file. Fills empty slices arrays and null started fields
+    (mined starts cross-checked against the previous phase close); never
+    overwrites a present value."""
+    arch = Path(root) / "docs" / "archived-tasks"
+    files = sorted(arch.glob("*.md")) if arch.is_dir() else []
+    legacy = {}
+    blocks = {}
+    for f in files:
+        text = f.read_text()
+        if _json_block(text) is not None:
+            blocks[f] = text
+        else:
+            parsed = parse_legacy(text)
+            if parsed:
+                legacy[parsed.phase_id] = parsed
+    closes = _phase_closes(blocks, legacy)
+
+    changes = []
+    for f, text in blocks.items():
+        raw = _json_block(text)
+        try:
+            block = json.loads(raw)
+        except json.JSONDecodeError:
+            print(f"backfill: {f.name}: unparseable JSON block, skipped",
+                  file=sys.stderr)
+            continue
+        dirty = False
+        for p in block.get("phases", []):
+            source = legacy.get(p["id"])
+            if not p.get("slices") and source and source.slices:
+                p["slices"] = [{
+                    "blocked_on": None, "closed": s.closed, "created": None,
+                    "id": s.sid, "notes": "", "plan_path": None, "refs": [],
+                    "reviewer_chain": None, "started": None, "status": "done",
+                    "tasks": [], "title": s.title,
+                } for s in source.slices]
+                dirty = True
+            for obj, key in [(p, p["id"])] + [
+                    (s, f"{p['id']}.{s['id']}") for s in p.get("slices", [])]:
+                if not obj.get("started") and key in mentions:
+                    obj["started"] = _clamp_start(
+                        key, _ts_to_date(mentions[key]), closes)
+                    dirty = True
+        if dirty:
+            new_raw = json.dumps(block, indent=2, sort_keys=True) + "\n"
+            new_text = _BLOCK_RE.sub(
+                lambda m: m.group(1) + new_raw + m.group(3), text, count=1)
+            changes.append((f, new_text))
+    return changes
+
+
+def run(root, mentions=None, write=False):
+    if mentions is None:
+        mentions = first_mentions(commit_subjects(root))
+    changes = plan_rewrites(root, mentions)
+    if not changes:
+        print("backfill: nothing to do")
+        return
+    for path, new_text in changes:
+        old = path.read_text()
+        diff = difflib.unified_diff(
+            old.splitlines(keepends=True), new_text.splitlines(keepends=True),
+            fromfile=str(path), tofile=f"{path} (backfilled)")
+        sys.stdout.writelines(diff)
+        if write:
+            path.write_text(new_text)
+    verb = "wrote" if write else "would change (dry run; use --write)"
+    print(f"backfill: {verb} {len(changes)} file(s)")
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--repo", default=".")
+    ap.add_argument("--write", action="store_true",
+                    help="apply changes (default: dry-run diff)")
+    args = ap.parse_args(argv)
+    root = extract.repo_root(args.repo)
+    run(root, write=args.write)
+
+
+if __name__ == "__main__":
+    main()
+````
+
+- [ ] **Step 4: Run tests to verify they pass**
+
+Run: `python3 -m pytest tools/timeline/tests/test_backfill_rewrite.py -q`
+Expected: all PASS
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add tools/timeline
+git commit -m "X29: backfill.py — archive JSON rewrite with dry-run diff"
+```
+
+---
+
+### Task 14: Acceptance — full suite plus real-repo renders
+
+**Files:**
+- None created; verification only (fix anything that surfaces, in the module that owns it).
+
+- [ ] **Step 1: Run the complete test suite via default discovery**
+
+Run: `python3 -m pytest -q`
+Expected: all PASS, and the run includes `tools/timeline/tests` (visible in the collected count vs. before).
+
+- [ ] **Step 2: Render this repo**
+
+Run: `python3 tools/timeline/timeline.py --repo . -o /tmp/superstar-timeline.html`
+Expected: exits 0; stderr reports the output path; any unplaced items are listed, not silently dropped.
+
+- [ ] **Step 3: Render multistore (spec acceptance 1)**
+
+Run: `python3 tools/timeline/timeline.py --repo /home/simon/Dev/sigreer/multistore -o /tmp/multistore-timeline.html`
+Expected: exits 0. Verify in the HTML text: `grep -c 'phase-node' /tmp/multistore-timeline.html` ≥ 10; minute times present (e.g. `grep '15:51' /tmp/multistore-timeline.html` finds P21.S4's close); `x-node` markup present.
+
+- [ ] **Step 4: Backfill dry-run against multistore (spec acceptance 2 — dry-run only here)**
+
+Run: `python3 tools/timeline/backfill.py --repo /home/simon/Dev/sigreer/multistore`
+Expected: unified diffs for the legacy-era phase archives (P1–P10, P12); no files modified. The actual `--write` happens in the multistore repo with the user reviewing — not part of this repo's execution.
+
+- [ ] **Step 5: Ask the human partner to open both HTML files in a browser**
+
+This is the eyeball check the spec scopes in place of visual regression tests:
+braided strands, coloured slice cards, dotted quiet gaps, X toggle, click-to-expand.
+
+- [ ] **Step 6: Commit any fixes that surfaced, then close out**
+
+```bash
+git add -A tools/timeline
+git commit -m "X29: acceptance fixes from real-repo renders"  # only if needed
+```
+
+Then: external post-work review per workflow, and close the row with
+`tasktool close X29` (the cross-cutting close gate; closes and archives the
+row by default, which is the intended end state). Per CLAUDE.md, ask the user
+about a version bump before any release scripts run.
