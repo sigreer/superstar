@@ -98,3 +98,31 @@ def collect(live_doc, archive_project_docs, archive_x_objects):
                 seen.add(it.key)
                 items.append(it)
     return items
+
+
+def apply_replay(item, history):
+    """Merge replay-observed status transitions into an item.
+
+    Field dates stay the authoritative *date*; a replay transition on the same
+    calendar day upgrades the value to minute precision. A null field is
+    filled from replay — except a phase's `closed`, which is never invented
+    (an unclosed phase renders as open).
+    """
+    started_ts = next((t.ts for t in history.transitions
+                       if t.new in START_STATUSES), None)
+    closed_ts = next((t.ts for t in history.transitions
+                      if t.new in TERMINAL_STATUSES), None)
+    _merge_date(item, "started", started_ts, fill=True)
+    _merge_date(item, "closed", closed_ts, fill=item.kind != "phase")
+
+
+def _merge_date(item, name, ts, fill):
+    if ts is None:
+        return
+    when = dt.datetime.fromtimestamp(ts)
+    current = getattr(item, name)
+    if current.when is None:
+        if fill:
+            setattr(item, name, DateValue(when, "minute", "replay"))
+    elif current.precision == "day" and current.when.date() == when.date():
+        setattr(item, name, DateValue(when, "minute", "replay"))
