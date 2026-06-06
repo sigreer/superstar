@@ -88,3 +88,31 @@ def test_html_escapes_titles():
     h = render.render_html("fixture", _items() + [bad], generated=GEN).html
     assert "<script>alert(1)</script>" not in h
     assert "&lt;script&gt;" in h
+
+
+def test_card_title_attribute_carries_full_title():
+    h = render.render_html("fixture", _items(), generated=GEN).html
+    assert 'title="Component inventory"' in h
+    assert 'title="Cross item"' in h
+
+
+def test_card_title_attribute_escapes_malicious_titles():
+    bad = model._item("X6", "x", None,
+                      x("X6", status="done", closed="2026-05-29",
+                        title='"x" onmouseover="alert(1)"'))
+    h = render.render_html("fixture", _items() + [bad], generated=GEN).html
+    assert 'onmouseover="alert(1)"' not in h
+    assert "&quot;x&quot; onmouseover=&quot;alert(1)&quot;" in h
+
+
+def test_card_truncation_css_present():
+    h = render.render_html("fixture", _items(), generated=GEN).html
+    assert "white-space:nowrap" in h
+    assert "overflow:hidden" in h
+    assert "text-overflow:ellipsis" in h
+
+
+def test_card_hover_and_open_untruncate():
+    h = render.render_html("fixture", _items(), generated=GEN).html
+    assert ".slice-card:hover,.slice-card.open{" in h
+    assert "white-space:normal" in h

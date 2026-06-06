@@ -310,7 +310,8 @@ def _card(item, y, side, color, off, css):
               f'started {_fmt(item.started)} · closed {_fmt(item.closed)}'
               f'{_duration_text(item.started, item.closed)}</div>')
     dot_css = "dot x-node" if "x-node" in css else "dot"
-    return (f'<div class="{css} {side}" onclick="this.classList.toggle(\'open\')" '
+    return (f'<div class="{css} {side}" title="{_html.escape(item.label())}" '
+            f'onclick="this.classList.toggle(\'open\')" '
             f'style="top:{y:.0f}px;border-color:{color}66;background:{color}14">'
             f'<b>{_html.escape(item.key)}</b> {_html.escape(item.label())}'
             f'<span class="dim"> {_fmt(item.closed)}</span>{detail}</div>'
@@ -351,7 +352,10 @@ header .meta{{font-size:12px;color:#888}}
   color:#999;font-style:italic;transform:translateY(-50%)}}
 .slice-card{{position:absolute;max-width:38%;font-size:12px;cursor:pointer;
   border:1px solid;border-radius:6px;padding:6px 10px;
-  transform:translateY(-50%);z-index:2}}
+  transform:translateY(-50%);z-index:2;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}
+.slice-card:hover,.slice-card.open{{white-space:normal;overflow:visible;
+  text-overflow:clip;z-index:6;background:#fff!important}}
 .slice-card.left{{right:50%;margin-right:22px;text-align:right}}
 .slice-card.right{{left:50%;margin-left:22px}}
 .dot{{position:absolute;left:50%;width:11px;height:11px;border-radius:50%;
