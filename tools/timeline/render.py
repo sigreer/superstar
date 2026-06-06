@@ -326,8 +326,14 @@ def render_html(project, items, *, generated, show_x=False):
                        (("L" if side == "left" else "R", 14), ("C", 7)),
                        item=i, side=side))
 
-    content_bottom = layout(els, scale, "asc")
-    pt = lambda e: f"{e.ys['asc'] + PAD_TOP:.0f}"
+    # Both reading orders are laid out up front; the in-page toggle swaps
+    # positions via the data attributes. Default = newest at top ("desc").
+    bottom_a = layout(els, scale, "asc")
+    bottom_d = layout(els, scale, "desc")
+    height_a = int(bottom_a + PAD_TOP + PAD_BOTTOM)
+    height_d = int(bottom_d + PAD_TOP + PAD_BOTTOM)
+    tops = lambda e: (f"{e.ys['asc'] + PAD_TOP:.0f}",
+                      f"{e.ys['desc'] + PAD_TOP:.0f}")
 
     parts = []
     # Strands + bands first: they paint behind nodes and cards.
@@ -341,43 +347,53 @@ def render_html(project, items, *, generated, show_x=False):
             continue
         color = _color(p.key)
         off = strand_off(lane_of[p.key])
-        ys = [e.ys["asc"] for e in by_phase[p.key]]
-        y0, h = min(ys) + PAD_TOP, max(max(ys) - min(ys), 2)
+        ysa = [e.ys["asc"] for e in by_phase[p.key]]
+        ysd = [e.ys["desc"] for e in by_phase[p.key]]
+        ya, ha = min(ysa) + PAD_TOP, max(ysa) - min(ysa)
+        yd, hd = min(ysd) + PAD_TOP, max(ysd) - min(ysd)
         parts.append(
             f'<div class="strand" data-key="{_html.escape(p.key)}" '
-            f'style="top:{y0:.0f}px;height:{h:.0f}px;'
+            f'style="top:{yd:.0f}px;height:{hd:.0f}px;'
             f'margin-left:{off:.0f}px;background:{color}" '
-            f'data-ta="{y0:.0f}" data-ha="{h:.0f}"></div>')
+            f'data-ta="{ya:.0f}" data-ha="{ha:.0f}" '
+            f'data-td="{yd:.0f}" data-hd="{hd:.0f}"></div>')
 
     # Quiet gaps: time gaps from coverage+anchors, pixel bounds hugging the
     # final (nudged) positions of the content either side.
     gaps = quiet_gaps([(s, e) for s, e, _ in spans.values()], anchors=anchors)
     for gi, (gap_start, gap_end) in enumerate(gaps):
-        bounds = _gap_bounds(els, "asc", gap_start, gap_end)
-        if not bounds:
+        ba = _gap_bounds(els, "asc", gap_start, gap_end)
+        bd = _gap_bounds(els, "desc", gap_start, gap_end)
+        if not ba or not bd:
             continue
-        g0, g1 = (b + PAD_TOP for b in bounds)
+        ga0, ga1 = (b + PAD_TOP for b in ba)
+        gd0, gd1 = (b + PAD_TOP for b in bd)
         days = max(1, round((gap_end - gap_start).total_seconds() / 86400))
         parts.append(
             f'<div class="gap" data-key="gap{gi}" '
-            f'style="top:{g0:.0f}px;height:{g1 - g0:.0f}px" '
-            f'data-ta="{g0:.0f}" data-ha="{g1 - g0:.0f}"></div>'
+            f'style="top:{gd0:.0f}px;height:{gd1 - gd0:.0f}px" '
+            f'data-ta="{ga0:.0f}" data-ha="{ga1 - ga0:.0f}" '
+            f'data-td="{gd0:.0f}" data-hd="{gd1 - gd0:.0f}"></div>'
             f'<div class="gap-label" data-key="gap{gi}" '
-            f'style="top:{(g0 + g1) / 2:.0f}px" data-ta="{(g0 + g1) / 2:.0f}">'
+            f'style="top:{(gd0 + gd1) / 2:.0f}px" '
+            f'data-ta="{(ga0 + ga1) / 2:.0f}" data-td="{(gd0 + gd1) / 2:.0f}">'
             f'{days} quiet day{"s" if days != 1 else ""}</div>')
 
     # Point elements.
     for e in els:
-        t = pt(e)
+        ta, td = tops(e)
         if e.kind == "node":
-            parts.append(_node_html(e.item, t, strand_off(lane_of[e.key]),
+            parts.append(_node_html(e.item, ta, td,
+                                    strand_off(lane_of[e.key]),
                                     _color(e.key)))
         elif e.kind == "ring":
-            parts.append(_ring_html(e.item, t, strand_off(lane_of[e.key])))
+            parts.append(_ring_html(e.item, ta, td,
+                                    strand_off(lane_of[e.key])))
         elif e.kind == "open":
             parts.append(
                 f'<div class="open-label" data-key="{_html.escape(e.key)}" '
-                f'style="top:{t}px;color:{_color(e.key)}" data-ta="{t}">'
+                f'style="top:{td}px;color:{_color(e.key)}" '
+                f'data-ta="{ta}" data-td="{td}">'
                 f'{_html.escape(e.key)} in progress…</div>')
         else:  # card
             if e.phase:
@@ -385,7 +401,7 @@ def render_html(project, items, *, generated, show_x=False):
                 css = "slice-card"
             else:
                 color, off, css = SLATE, 0, "slice-card x-node"
-            parts.append(_card(e.item, t, e.side, color, off, css=css))
+            parts.append(_card(e.item, ta, td, e.side, color, off, css=css))
 
     legend = "".join(
         f'<span class="chip"><i style="background:{_color(p.key)}"></i>'
@@ -396,7 +412,7 @@ def render_html(project, items, *, generated, show_x=False):
         project=_html.escape(project), legend=legend, span=span_text,
         n_phases=sum(1 for p in placeable_phases if p.status == "done"),
         n_slices=done_slices,
-        height=int(content_bottom + PAD_TOP + PAD_BOTTOM),
+        height=height_d, height_asc=height_a, height_desc=height_d,
         generated=generated.strftime("%-d %b %Y %H:%M"),
         body_class=body_class, checked="checked" if show_x else "",
         content="\n".join(parts))
@@ -416,29 +432,31 @@ def _overlap_keys(spans):
     return out
 
 
-def _node_html(p, t, off, color):
+def _node_html(p, ta, td, off, color):
     sd = p.started if p.started.when else p.created
     clause = f'<span class="dim"> started {_fmt(sd)}</span>' if sd.when else ""
     key = _html.escape(p.key)
+    pos = f'data-ta="{ta}" data-td="{td}"'
     return (f'<div class="phase-band" data-key="{key}" '
-            f'style="top:{t}px;background:{color}0d" data-ta="{t}"></div>'
+            f'style="top:{td}px;background:{color}0d" {pos}></div>'
             f'<div class="phase-node" data-key="{key}" '
-            f'style="top:{t}px;margin-left:{off:.0f}px;background:{color}" '
-            f'data-ta="{t}"></div>'
+            f'style="top:{td}px;margin-left:{off:.0f}px;background:{color}" '
+            f'{pos}></div>'
             f'<div class="phase-title" data-key="{key}" '
-            f'style="top:{t}px;color:{color}" data-ta="{t}">'
+            f'style="top:{td}px;color:{color}" {pos}>'
             f'{key} — {_html.escape(p.label())}{clause}</div>')
 
 
-def _ring_html(p, t, off):
+def _ring_html(p, ta, td, off):
     ring = "#9aa0a6" if p.status == "cancelled" else _color(p.key)
     label = "cancelled" if p.status == "cancelled" else "complete"
     key = _html.escape(p.key)
+    pos = f'data-ta="{ta}" data-td="{td}"'
     return (f'<div class="phase-ring" data-key="{key}" '
-            f'style="top:{t}px;margin-left:{off:.0f}px;border-color:{ring}" '
-            f'data-ta="{t}"></div>'
+            f'style="top:{td}px;margin-left:{off:.0f}px;border-color:{ring}" '
+            f'{pos}></div>'
             f'<div class="ring-label" data-key="{key}" '
-            f'style="top:{t}px;color:{ring}" data-ta="{t}">'
+            f'style="top:{td}px;color:{ring}" {pos}>'
             f'{key} — {_html.escape(p.label())} {label} · {_fmt(p.closed)}</div>')
 
 
@@ -460,7 +478,7 @@ def _duration_text(started, closed):
     return f" · {hours}h {minutes:02d}m"
 
 
-def _card(item, t, side, color, off, css):
+def _card(item, ta, td, side, color, off, css):
     started_clause = (f'started {_fmt(item.started)} · '
                       if item.started.when else "")
     detail = (f'<div class="detail">{_html.escape(item.key)} · '
@@ -469,16 +487,17 @@ def _card(item, t, side, color, off, css):
               f'{_duration_text(item.started, item.closed)}</div>')
     dot_css = "dot x-node" if "x-node" in css else "dot"
     key = _html.escape(item.key)
+    pos = f'data-ta="{ta}" data-td="{td}"'
     return (f'<div class="{css} {side}" data-key="{key}" '
             f'title="{_html.escape(item.label())}" '
             f'onclick="this.classList.toggle(\'open\')" '
-            f'style="top:{t}px;border-color:{color}66;background:{color}14" '
-            f'data-ta="{t}">'
+            f'style="top:{td}px;border-color:{color}66;background:{color}14" '
+            f'{pos}>'
             f'<b>{key}</b> {_html.escape(item.label())}'
             f'<span class="dim"> {_fmt(item.closed)}</span>{detail}</div>'
             f'<div class="{dot_css} {side}-dot" data-key="{key}" '
-            f'style="top:{t}px;margin-left:{off:.0f}px;background:{color}" '
-            f'data-ta="{t}"></div>')
+            f'style="top:{td}px;margin-left:{off:.0f}px;background:{color}" '
+            f'{pos}></div>')
 
 
 _SHELL = """<!DOCTYPE html>
@@ -540,9 +559,27 @@ label.xtoggle{{font-size:12px;color:#555;float:right;cursor:pointer}}
 generated {generated}
 <label class="xtoggle"><input type="checkbox" id="showX" {checked}
 onchange="document.body.classList.toggle('show-x',this.checked)">
-show cross-cutting items</label></div>
+show cross-cutting items</label>
+<label class="xtoggle"><input type="checkbox" id="dirNewest" checked
+onchange="setDir(this.checked)">
+newest first</label></div>
 <div>{legend}</div></header>
 <div id="wrap">
 {content}
-</div></body></html>
+</div>
+<script>
+function setDir(newest){{
+  document.getElementById('wrap').style.height=
+    (newest?{height_desc}:{height_asc})+'px';
+  var els=document.querySelectorAll('#wrap [data-ta]');
+  for(var i=0;i<els.length;i++){{
+    var e=els[i];
+    e.style.top=(newest?e.getAttribute('data-td')
+                       :e.getAttribute('data-ta'))+'px';
+    var hh=newest?e.getAttribute('data-hd'):e.getAttribute('data-ha');
+    if(hh!==null)e.style.height=hh+'px';
+  }}
+}}
+</script>
+</body></html>
 """
