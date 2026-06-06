@@ -57,3 +57,35 @@ def phase_span(phase, items):
         start = phase.created.when
     end = phase.closed.when
     return start, end, start is None
+
+
+class TimeScale:
+    """Piecewise-linear time->y mapping: proportional between anchor events,
+    clamped per adjacent pair to [MIN_GAP_PX, MAX_GAP_PX]."""
+
+    def __init__(self, timestamps, px_per_hour=PX_PER_HOUR,
+                 min_gap=MIN_GAP_PX, max_gap=MAX_GAP_PX):
+        self._anchors = sorted(set(timestamps))
+        self._ys = []
+        y = 0.0
+        for i, t in enumerate(self._anchors):
+            if i:
+                hours = (t - self._anchors[i - 1]).total_seconds() / 3600.0
+                y += min(max(hours * px_per_hour, min_gap), max_gap)
+            self._ys.append(y)
+
+    def y(self, when):
+        i = bisect.bisect_left(self._anchors, when)
+        if i < len(self._anchors) and self._anchors[i] == when:
+            return self._ys[i]
+        if i == 0:
+            return self._ys[0] if self._ys else 0.0
+        if i == len(self._anchors):
+            return self._ys[-1]
+        a0, a1 = self._anchors[i - 1], self._anchors[i]
+        frac = (when - a0).total_seconds() / (a1 - a0).total_seconds()
+        return self._ys[i - 1] + frac * (self._ys[i] - self._ys[i - 1])
+
+    @property
+    def height(self):
+        return (self._ys[-1] if self._ys else 0.0) + 80.0
