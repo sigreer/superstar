@@ -89,3 +89,48 @@ class TimeScale:
     @property
     def height(self):
         return (self._ys[-1] if self._ys else 0.0) + 80.0
+
+
+def assign_lanes(spans):
+    """Greedy interval lane assignment for phase strands.
+
+    spans: iterable of (key, start, end) with start/end datetimes (end may be
+    None for an open phase — treat as datetime.max for packing).
+    -> ({key: lane}, lane_count)
+    """
+    assignment, lane_ends = {}, []
+    inf = dt.datetime.max
+    ordered = sorted(spans, key=lambda s: (s[1], s[2] or inf))
+    for key, start, end in ordered:
+        end = end or inf
+        for lane, lane_end in enumerate(lane_ends):
+            if start >= lane_end:
+                lane_ends[lane] = end
+                assignment[key] = lane
+                break
+        else:
+            lane_ends.append(end)
+            assignment[key] = len(lane_ends) - 1
+    return assignment, len(lane_ends)
+
+
+def quiet_gaps(intervals, threshold_hours=GAP_THRESHOLD_HOURS):
+    """Merge phase coverage intervals; return gaps longer than the threshold.
+
+    intervals: list of (start, end) datetimes (end None = open: covers to max).
+    -> list of (gap_start, gap_end)
+    """
+    if not intervals:
+        return []
+    inf = dt.datetime.max
+    merged = []
+    for start, end in sorted((s, e or inf) for s, e in intervals):
+        if merged and start <= merged[-1][1]:
+            merged[-1][1] = max(merged[-1][1], end)
+        else:
+            merged.append([start, end])
+    gaps = []
+    for (s0, e0), (s1, e1) in zip(merged, merged[1:]):
+        if (s1 - e0).total_seconds() / 3600.0 > threshold_hours:
+            gaps.append((e0, s1))
+    return gaps
