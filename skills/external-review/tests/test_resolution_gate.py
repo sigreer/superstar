@@ -52,4 +52,3 @@ def test_post_slice_round_2_proceeds_with_waiver(tmp_path):
               "--file", "plan.md", "--emit", "json",
               "--allow-missing-resolution")
     assert r2.returncode == 0, r2.stderr
-

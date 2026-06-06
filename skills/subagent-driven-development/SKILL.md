@@ -328,7 +328,7 @@ Done!
 | "I'll read the file to figure out what's wrong before delegating"         | No. Dispatch an investigator subagent and wait for the summary.        |
 | "It's just a one-line change, no need to delegate"                        | Bar is *strictly cheaper than delegating*. When in doubt, delegate.    |
 | "I'll skip post-slice review on this one, it's a small slice"             | No. Slice boundary is a gate. Run `[[external-review]] --kind post-slice`.|
-| "I'll resubmit without the resolution file, the reviewer will figure it out" | No. Post-slice/post-phase round N+1 exits 3 without `r{N-1}-resolution.md` or `--allow-missing-resolution`. |
+| "I'll resubmit without the resolution file, the reviewer will figure it out" | No. Round N+1 of any kind exits 3 without `r{N-1}-resolution.md` or `--allow-missing-resolution`; post-slice/post-phase still delegate fixes to a subagent. |
 | "The plan's final close-out task ran, so I should ask before post-slice review" | No. The slice is not closed until `[[external-review]] --kind post-slice` passes and tasktool close succeeds afterward. |
 
 **Process reds (also never):**
