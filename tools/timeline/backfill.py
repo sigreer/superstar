@@ -167,11 +167,15 @@ def plan_rewrites(root, mentions):
             for obj, key in [(p, p["id"])] + [
                     (s, f"{p['id']}.{s['id']}") for s in p.get("slices", [])]:
                 if not obj.get("started") and key in mentions:
-                    obj["started"] = _clamp_start(
+                    candidate = _clamp_start(
                         key, _ts_to_date(mentions[key]), closes)
+                    if obj.get("closed") and candidate > obj["closed"]:
+                        continue  # never fill a start past the item's close
+                    obj["started"] = candidate
                     dirty = True
         if dirty:
-            new_raw = json.dumps(block, indent=2, sort_keys=True) + "\n"
+            new_raw = json.dumps(block, indent=2, sort_keys=True,
+                                 ensure_ascii=False) + "\n"
             new_text = _BLOCK_RE.sub(
                 lambda m: m.group(1) + new_raw + m.group(3), text, count=1)
             changes.append((f, new_text))
