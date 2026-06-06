@@ -23,7 +23,7 @@ else:
     from . import extract
 
 _PHASE_HEAD_RE = re.compile(
-    r"^# (P\d+)\s+[—-]\s+(.+?)\s+✅\s+`DONE (\d{4}-\d{2}-\d{2})`", re.M)
+    r"^# (P\d+)\s+[—-]\s+(.+?)\s+✅\s+`?DONE (\d{4}-\d{2}-\d{2})`?", re.M)
 _SLICE_HEAD_RE = re.compile(
     r"^## (S\d+)\s+[—-]\s+(.+?)\s+✅\s+`DONE (\d{4}-\d{2}-\d{2})`", re.M)
 _MENTION_RE = re.compile(r"\b[pP](\d{1,2})(?:[.\-]?[sS](\d{1,2}))?\b")

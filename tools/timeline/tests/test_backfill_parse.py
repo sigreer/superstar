@@ -26,6 +26,13 @@ def test_parse_legacy_returns_none_without_done_heading():
     assert backfill.parse_legacy("# Notes\n\nNothing here.") is None
 
 
+def test_parse_legacy_without_backticks():
+    parsed = backfill.parse_legacy(
+        "# P3 — Editor-grade CMS + shared packages ✅ DONE 2026-05-04\n")
+    assert parsed.phase_id == "P3"
+    assert parsed.closed == "2026-05-04"
+
+
 def test_mine_first_mentions():
     subjects = [
         (100, "*DOCS*: P2.S3 close — resolve schema"),
