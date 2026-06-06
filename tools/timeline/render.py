@@ -154,6 +154,95 @@ class RenderResult:
     unplaced: list
 
 
+PAD_TOP = 40        # px of breathing room above the first element
+PAD_BOTTOM = 60
+TRACK_PAD = 6       # extra px between adjacent occupants of the same track
+_RANK = {"node": 0, "card": 1, "open": 1, "ring": 2}  # tie-break at equal y
+
+
+class _El:
+    """One positioned point element (node, ring, card, open-label).
+
+    Strands, bands and gap segments are ranges derived from these after
+    layout. `tracks` lists the vertical columns the element occupies as
+    (track, half-height) pairs: "L"/"R" are the card/label columns either
+    side of the spine, "C" is the spine itself.
+    """
+    __slots__ = ("key", "kind", "when", "tracks", "phase", "item", "side", "ys")
+
+    def __init__(self, key, kind, when, tracks, phase=None, item=None, side=""):
+        self.key, self.kind, self.when = key, kind, when
+        self.tracks = tracks
+        self.phase = phase      # owning phase key (ordering constraints)
+        self.item = item
+        self.side = side
+        self.ys = {}            # direction -> resolved y centre
+
+    def half(self):
+        return max(h for _, h in self.tracks)
+
+
+def layout(els, scale, direction="asc"):
+    """Assign collision-free y centres for one reading direction.
+
+    Sequential order beats strict time-proportionality: per phase, the start
+    node is forced strictly above every other element of that phase and the
+    close ring strictly below, then a monotone sweep nudges elements down
+    until every track keeps a minimum vertical separation. Returns the
+    content bottom (max y + half).
+    """
+    maxy = max((scale.y(e.when) for e in els), default=0.0)
+    for e in els:
+        ty = scale.y(e.when)
+        e.ys[direction] = (maxy - ty) if direction == "desc" else ty
+
+    groups = {}
+    for e in els:
+        if e.phase:
+            groups.setdefault(e.phase, []).append(e)
+    for group in groups.values():
+        node = next((e for e in group if e.kind == "node"), None)
+        ring = next((e for e in group if e.kind == "ring"), None)
+        rest = [e for e in group if e.kind not in ("node", "ring")]
+        if node:
+            others = [e.ys[direction] for e in rest] \
+                + ([ring.ys[direction]] if ring else [])
+            if others and node.ys[direction] >= min(others):
+                node.ys[direction] = min(others) - 1
+        if ring:
+            others = [e.ys[direction] for e in rest] \
+                + ([node.ys[direction]] if node else [])
+            if others and ring.ys[direction] <= max(others):
+                ring.ys[direction] = max(others) + 1
+
+    bottom = {}
+    for e in sorted(els, key=lambda e: (e.ys[direction], _RANK[e.kind], e.key)):
+        y = e.ys[direction]
+        for t, h in e.tracks:
+            if t in bottom:
+                y = max(y, bottom[t] + TRACK_PAD + h)
+        e.ys[direction] = y
+        for t, h in e.tracks:
+            bottom[t] = y + h
+    return max((e.ys[direction] + e.half() for e in els), default=0.0)
+
+
+def _gap_bounds(els, direction, g0, g1):
+    """Pixel bounds for a quiet gap, hugging the actual rendered content on
+    each side (never a dotted segment beside dead space). -> (top, bottom)
+    or None when the nudged layout left no room."""
+    newer_first = direction == "desc"
+    above = [e for e in els if (e.when >= g1 if newer_first else e.when <= g0)]
+    below = [e for e in els if (e.when <= g0 if newer_first else e.when >= g1)]
+    if not above or not below:
+        return None
+    top = max(e.ys[direction] + e.half() for e in above)
+    bot = min(e.ys[direction] - e.half() for e in below)
+    if bot - top < 30:
+        return None
+    return top + 6, bot - 6
+
+
 def _color(phase_key):
     try:
         return PALETTE[int(phase_key.lstrip("PX")) % len(PALETTE)]
@@ -201,63 +290,102 @@ def render_html(project, items, *, generated, show_x=False):
     overlapping = _overlap_keys(spans)
     strand_off = lambda lane: (lane - (lane_count - 1) / 2) * 12
 
-    parts = []
-    # Strands + phase nodes + close rings.
+    # --- Build point elements, then resolve positions with the layout pass.
+    els = []
     for p in placeable_phases:
         start, end, close_only = spans[p.key]
-        color = _color(p.key)
-        off = strand_off(lane_of[p.key])
-        y0, y1 = scale.y(start), scale.y(end or generated)
         if not close_only:
-            parts.append(
-                f'<div class="strand" style="top:{y0:.0f}px;'
-                f'height:{max(y1 - y0, 2):.0f}px;'
-                f'margin-left:{off:.0f}px;background:{color}"></div>')
-            parts.append(_phase_start_node(p, y0, off, color))
+            els.append(_El(p.key, "node", start,
+                           (("C", 12), ("R", 17)), phase=p.key, item=p))
         if end is not None:
-            ring = "#9aa0a6" if p.status == "cancelled" else color
-            label = "cancelled" if p.status == "cancelled" else "complete"
-            parts.append(
-                f'<div class="phase-ring" style="top:{y1:.0f}px;'
-                f'margin-left:{off:.0f}px;border-color:{ring}"></div>'
-                f'<div class="ring-label" style="top:{y1:.0f}px;color:{ring}">'
-                f'{_html.escape(p.key)} — {_html.escape(p.label())} {label} · {_fmt(p.closed)}</div>')
+            els.append(_El(p.key, "ring", end,
+                           (("C", 8), ("L", 9)), phase=p.key, item=p))
         else:
-            parts.append(
-                f'<div class="open-label" style="top:{y1 + 24:.0f}px;'
-                f'color:{color}">{_html.escape(p.key)} in progress…</div>')
+            els.append(_El(p.key, "open", generated,
+                           (("R", 9),), phase=p.key, item=p))
 
-    # Quiet gaps.
-    for gap_start, gap_end in quiet_gaps(
-            [(s, e) for s, e, _ in spans.values()], anchors=anchors):
-        gy0, gy1 = scale.y(gap_start), scale.y(gap_end)
-        days = max(1, round((gap_end - gap_start).total_seconds() / 86400))
-        parts.append(
-            f'<div class="gap" style="top:{gy0:.0f}px;'
-            f'height:{gy1 - gy0:.0f}px"></div>'
-            f'<div class="gap-label" style="top:{(gy0 + gy1) / 2:.0f}px">'
-            f'{days} quiet day{"s" if days != 1 else ""}</div>')
-
-    # Slice cards: phase owns a side while overlapping, else alternate.
     counters = {}
     for s in sorted(slices, key=lambda i: i.closed.when):
         if s.parent not in spans:
             unplaced.append(s.key)
             continue
-        color = _color(s.parent)
         n = counters[s.parent] = counters.get(s.parent, -1) + 1
         if s.parent in overlapping:
             side = "left" if lane_of[s.parent] % 2 == 0 else "right"
         else:
             side = "left" if n % 2 == 0 else "right"
-        parts.append(_card(s, scale.y(s.closed.when), side, color,
-                           strand_off(lane_of[s.parent]), css="slice-card"))
+        els.append(_El(s.key, "card", s.closed.when,
+                       (("L" if side == "left" else "R", 14), ("C", 7)),
+                       phase=s.parent, item=s, side=side))
 
-    # X-items: neutral, alternating, hidden unless body.show-x.
+    # X-items reserve layout space even while hidden, so toggling them on
+    # never overlaps existing content.
     for n, i in enumerate(sorted(xs, key=lambda i: i.closed.when)):
         side = "left" if n % 2 == 0 else "right"
-        parts.append(_card(i, scale.y(i.closed.when), side, SLATE, 0,
-                           css="slice-card x-node"))
+        els.append(_El(i.key, "card", i.closed.when,
+                       (("L" if side == "left" else "R", 14), ("C", 7)),
+                       item=i, side=side))
+
+    content_bottom = layout(els, scale, "asc")
+    pt = lambda e: f"{e.ys['asc'] + PAD_TOP:.0f}"
+
+    parts = []
+    # Strands + bands first: they paint behind nodes and cards.
+    by_phase = {}
+    for e in els:
+        if e.phase:
+            by_phase.setdefault(e.phase, []).append(e)
+    for p in placeable_phases:
+        start, end, close_only = spans[p.key]
+        if close_only:
+            continue
+        color = _color(p.key)
+        off = strand_off(lane_of[p.key])
+        ys = [e.ys["asc"] for e in by_phase[p.key]]
+        y0, h = min(ys) + PAD_TOP, max(max(ys) - min(ys), 2)
+        parts.append(
+            f'<div class="strand" data-key="{_html.escape(p.key)}" '
+            f'style="top:{y0:.0f}px;height:{h:.0f}px;'
+            f'margin-left:{off:.0f}px;background:{color}" '
+            f'data-ta="{y0:.0f}" data-ha="{h:.0f}"></div>')
+
+    # Quiet gaps: time gaps from coverage+anchors, pixel bounds hugging the
+    # final (nudged) positions of the content either side.
+    gaps = quiet_gaps([(s, e) for s, e, _ in spans.values()], anchors=anchors)
+    for gi, (gap_start, gap_end) in enumerate(gaps):
+        bounds = _gap_bounds(els, "asc", gap_start, gap_end)
+        if not bounds:
+            continue
+        g0, g1 = (b + PAD_TOP for b in bounds)
+        days = max(1, round((gap_end - gap_start).total_seconds() / 86400))
+        parts.append(
+            f'<div class="gap" data-key="gap{gi}" '
+            f'style="top:{g0:.0f}px;height:{g1 - g0:.0f}px" '
+            f'data-ta="{g0:.0f}" data-ha="{g1 - g0:.0f}"></div>'
+            f'<div class="gap-label" data-key="gap{gi}" '
+            f'style="top:{(g0 + g1) / 2:.0f}px" data-ta="{(g0 + g1) / 2:.0f}">'
+            f'{days} quiet day{"s" if days != 1 else ""}</div>')
+
+    # Point elements.
+    for e in els:
+        t = pt(e)
+        if e.kind == "node":
+            parts.append(_node_html(e.item, t, strand_off(lane_of[e.key]),
+                                    _color(e.key)))
+        elif e.kind == "ring":
+            parts.append(_ring_html(e.item, t, strand_off(lane_of[e.key])))
+        elif e.kind == "open":
+            parts.append(
+                f'<div class="open-label" data-key="{_html.escape(e.key)}" '
+                f'style="top:{t}px;color:{_color(e.key)}" data-ta="{t}">'
+                f'{_html.escape(e.key)} in progress…</div>')
+        else:  # card
+            if e.phase:
+                color, off = _color(e.phase), strand_off(lane_of[e.phase])
+                css = "slice-card"
+            else:
+                color, off, css = SLATE, 0, "slice-card x-node"
+            parts.append(_card(e.item, t, e.side, color, off, css=css))
 
     legend = "".join(
         f'<span class="chip"><i style="background:{_color(p.key)}"></i>'
@@ -267,7 +395,8 @@ def render_html(project, items, *, generated, show_x=False):
     html_out = _SHELL.format(
         project=_html.escape(project), legend=legend, span=span_text,
         n_phases=sum(1 for p in placeable_phases if p.status == "done"),
-        n_slices=done_slices, height=int(scale.height),
+        n_slices=done_slices,
+        height=int(content_bottom + PAD_TOP + PAD_BOTTOM),
         generated=generated.strftime("%-d %b %Y %H:%M"),
         body_class=body_class, checked="checked" if show_x else "",
         content="\n".join(parts))
@@ -287,13 +416,30 @@ def _overlap_keys(spans):
     return out
 
 
-def _phase_start_node(p, y, off, color):
+def _node_html(p, t, off, color):
     sd = p.started if p.started.when else p.created
     clause = f'<span class="dim"> started {_fmt(sd)}</span>' if sd.when else ""
-    return (f'<div class="phase-node" style="top:{y:.0f}px;'
-            f'margin-left:{off:.0f}px;background:{color}"></div>'
-            f'<div class="phase-title" style="top:{y:.0f}px">'
-            f'{_html.escape(p.key)} — {_html.escape(p.label())}{clause}</div>')
+    key = _html.escape(p.key)
+    return (f'<div class="phase-band" data-key="{key}" '
+            f'style="top:{t}px;background:{color}0d" data-ta="{t}"></div>'
+            f'<div class="phase-node" data-key="{key}" '
+            f'style="top:{t}px;margin-left:{off:.0f}px;background:{color}" '
+            f'data-ta="{t}"></div>'
+            f'<div class="phase-title" data-key="{key}" '
+            f'style="top:{t}px;color:{color}" data-ta="{t}">'
+            f'{key} — {_html.escape(p.label())}{clause}</div>')
+
+
+def _ring_html(p, t, off):
+    ring = "#9aa0a6" if p.status == "cancelled" else _color(p.key)
+    label = "cancelled" if p.status == "cancelled" else "complete"
+    key = _html.escape(p.key)
+    return (f'<div class="phase-ring" data-key="{key}" '
+            f'style="top:{t}px;margin-left:{off:.0f}px;border-color:{ring}" '
+            f'data-ta="{t}"></div>'
+            f'<div class="ring-label" data-key="{key}" '
+            f'style="top:{t}px;color:{ring}" data-ta="{t}">'
+            f'{key} — {_html.escape(p.label())} {label} · {_fmt(p.closed)}</div>')
 
 
 def _duration_text(started, closed):
@@ -314,7 +460,7 @@ def _duration_text(started, closed):
     return f" · {hours}h {minutes:02d}m"
 
 
-def _card(item, y, side, color, off, css):
+def _card(item, t, side, color, off, css):
     started_clause = (f'started {_fmt(item.started)} · '
                       if item.started.when else "")
     detail = (f'<div class="detail">{_html.escape(item.key)} · '
@@ -322,13 +468,17 @@ def _card(item, y, side, color, off, css):
               f'{started_clause}closed {_fmt(item.closed)}'
               f'{_duration_text(item.started, item.closed)}</div>')
     dot_css = "dot x-node" if "x-node" in css else "dot"
-    return (f'<div class="{css} {side}" title="{_html.escape(item.label())}" '
+    key = _html.escape(item.key)
+    return (f'<div class="{css} {side}" data-key="{key}" '
+            f'title="{_html.escape(item.label())}" '
             f'onclick="this.classList.toggle(\'open\')" '
-            f'style="top:{y:.0f}px;border-color:{color}66;background:{color}14">'
-            f'<b>{_html.escape(item.key)}</b> {_html.escape(item.label())}'
+            f'style="top:{t}px;border-color:{color}66;background:{color}14" '
+            f'data-ta="{t}">'
+            f'<b>{key}</b> {_html.escape(item.label())}'
             f'<span class="dim"> {_fmt(item.closed)}</span>{detail}</div>'
-            f'<div class="{dot_css} {side}-dot" '
-            f'style="top:{y:.0f}px;margin-left:{off:.0f}px;background:{color}"></div>')
+            f'<div class="{dot_css} {side}-dot" data-key="{key}" '
+            f'style="top:{t}px;margin-left:{off:.0f}px;background:{color}" '
+            f'data-ta="{t}"></div>')
 
 
 _SHELL = """<!DOCTYPE html>
@@ -345,16 +495,20 @@ header .meta{{font-size:12px;color:#888}}
 #wrap{{position:relative;max-width:980px;margin:30px auto;height:{height}px}}
 .strand{{position:absolute;left:50%;width:4px;border-radius:2px;
   transform:translateX(-50%)}}
-.phase-node{{position:absolute;left:50%;width:18px;height:18px;
+.phase-band{{position:absolute;left:0;right:0;height:34px;
+  transform:translateY(-50%);border-radius:8px;z-index:0}}
+.phase-node{{position:absolute;left:50%;width:20px;height:20px;
   border-radius:50%;border:3px solid #fff;transform:translate(-50%,-50%);
   box-shadow:0 0 0 2px currentColor;z-index:3}}
 .phase-ring{{position:absolute;left:50%;width:14px;height:14px;
   border-radius:50%;background:#fff;border:3px solid;
   transform:translate(-50%,-50%);z-index:3}}
-.phase-title{{position:absolute;left:50%;margin-left:26px;font-size:13px;
-  font-weight:700;transform:translateY(-50%);max-width:40%}}
-.ring-label{{position:absolute;right:50%;margin-right:26px;font-size:11px;
-  font-weight:600;transform:translateY(-50%)}}
+.phase-title{{position:absolute;left:50%;margin-left:28px;font-size:15px;
+  font-weight:800;transform:translateY(-50%);max-width:40%;z-index:4;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}
+.ring-label{{position:absolute;right:50%;margin-right:26px;font-size:12px;
+  font-weight:700;transform:translateY(-50%);max-width:40%;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}
 .open-label{{position:absolute;left:50%;margin-left:26px;font-size:11px;
   font-style:italic;transform:translateY(-50%)}}
 .dim{{color:#999;font-weight:400;font-size:11px}}
