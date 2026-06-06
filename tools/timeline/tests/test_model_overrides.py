@@ -47,3 +47,34 @@ def test_unknown_item_id_warns_not_fatal():
 
 def test_no_overrides_is_noop():
     assert model.apply_overrides(_items(), {}) == []
+
+
+def test_non_string_date_value_is_fatal():
+    with pytest.raises(SystemExit):
+        model.apply_overrides(_items(), {"items": {"P14": {"started": 20260520}}})
+
+
+def test_null_date_value_is_fatal():
+    with pytest.raises(SystemExit):
+        model.apply_overrides(_items(), {"items": {"P14": {"started": None}}})
+
+
+def test_unparseable_date_value_is_fatal():
+    with pytest.raises(SystemExit):
+        model.apply_overrides(_items(), {"items": {"P14": {"started": "not-a-date"}}})
+
+
+def test_non_bool_exclude_is_fatal():
+    with pytest.raises(SystemExit):
+        model.apply_overrides(_items(), {"items": {"X12": {"exclude": "false"}}})
+
+
+def test_exclude_false_is_noop():
+    items = _items()
+    model.apply_overrides(items, {"items": {"X12": {"exclude": False}}})
+    assert items[2].excluded is False
+
+
+def test_non_string_display_title_is_fatal():
+    with pytest.raises(SystemExit):
+        model.apply_overrides(_items(), {"items": {"P21.S2": {"display_title": 123}}})

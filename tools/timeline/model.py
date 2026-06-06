@@ -155,10 +155,27 @@ def apply_overrides(items, overrides):
             warnings.append(f"overrides: no item with id {key}")
             continue
         for name in OVERRIDE_DATE_KEYS & set(entry):
-            when, precision = parse_tracker_date(entry[name])
+            raw = entry[name]
+            try:
+                if not isinstance(raw, str):
+                    raise ValueError(raw)
+                when, precision = parse_tracker_date(raw)
+                if when is None:  # null/empty must not silently clear a date
+                    raise ValueError(raw)
+            except ValueError:
+                raise SystemExit(
+                    f"timeline: invalid {name} for {key}: {raw!r} "
+                    "(expected ISO date or datetime)")
             setattr(item, name, DateValue(when, precision, "override"))
         if "display_title" in entry:
+            if not isinstance(entry["display_title"], str):
+                raise SystemExit(
+                    f"timeline: invalid display_title for {key}: expected string")
             item.display_title = entry["display_title"]
-        if entry.get("exclude"):
-            item.excluded = True
+        if "exclude" in entry:
+            if not isinstance(entry["exclude"], bool):
+                raise SystemExit(
+                    f"timeline: invalid exclude for {key}: expected boolean")
+            if entry["exclude"]:
+                item.excluded = True
     return warnings
