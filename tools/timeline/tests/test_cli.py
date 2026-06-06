@@ -1,9 +1,23 @@
 import json
+import time
 
 import pytest
 
 from timeline import timeline
 from timeline.tests.helpers import doc, make_repo, phase, slice_, x
+
+
+@pytest.fixture
+def utc_tz(monkeypatch):
+    # model._merge_date only upgrades a field to minute precision when the
+    # replay commit's *local* calendar date matches the field date, so
+    # test_end_to_end is TZ-dependent (fails at e.g. UTC+8, where the
+    # 16:30 UTC commit falls on the next local day). Pin UTC, then restore.
+    monkeypatch.setenv("TZ", "UTC")
+    time.tzset()
+    yield
+    monkeypatch.undo()
+    time.tzset()
 
 
 def _project_repo(tmp_path):
@@ -25,7 +39,7 @@ def _project_repo(tmp_path):
     return make_repo(tmp_path, snapshots)
 
 
-def test_end_to_end(tmp_path, capsys):
+def test_end_to_end(tmp_path, capsys, utc_tz):
     repo = _project_repo(tmp_path)
     out = tmp_path / "t.html"
     timeline.main(["--repo", str(repo), "-o", str(out)])
