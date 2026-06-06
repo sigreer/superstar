@@ -44,7 +44,9 @@ def visible_items(items):
 
 
 def phase_span(phase, items):
-    """-> (start|None, end|None, close_only). end None means the phase is open."""
+    """-> (start|None, end|None, close_only). end None means the phase is open.
+
+    close_only is True when no resolvable start exists."""
     start = phase.started.when
     if start is None:
         slice_starts = [s.started.when for s in items

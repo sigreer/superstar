@@ -47,6 +47,14 @@ def test_excluded_items_dropped():
     assert render.visible_items([it]) == []
 
 
+def test_excluded_phase_suppresses_its_slices():
+    p = _phase("P3", status="done", closed="2026-06-05")
+    p.excluded = True
+    s = _slice("P3", "S1", status="done", closed="2026-06-04")
+    keys = [i.key for i in render.visible_items([p, s])]
+    assert keys == []  # both dropped
+
+
 def test_phase_span_prefers_started_then_slice_then_created():
     p = _phase("P2", status="done", created="2026-06-01", closed="2026-06-05")
     s = _slice("P2", "S1", status="done", started="2026-06-02", closed="2026-06-04")
