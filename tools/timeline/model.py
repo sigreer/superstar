@@ -110,7 +110,9 @@ def apply_replay(item, history):
     """
     started_ts = next((t.ts for t in history.transitions
                        if t.new in START_STATUSES), None)
-    closed_ts = next((t.ts for t in history.transitions
+    # Last terminal transition, not first: a cancelled-then-reopened-then-done
+    # item closes at the done, matching its final state.
+    closed_ts = next((t.ts for t in reversed(history.transitions)
                       if t.new in TERMINAL_STATUSES), None)
     _merge_date(item, "started", started_ts, fill=True)
     _merge_date(item, "closed", closed_ts, fill=item.kind != "phase")
@@ -119,6 +121,8 @@ def apply_replay(item, history):
 def _merge_date(item, name, ts, fill):
     if ts is None:
         return
+    # Naive local time on purpose: consistent with field date parsing and
+    # git log %ci display; cross-timezone portability is not guaranteed.
     when = dt.datetime.fromtimestamp(ts)
     current = getattr(item, name)
     if current.when is None:

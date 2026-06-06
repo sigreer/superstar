@@ -51,3 +51,16 @@ def test_replay_fills_slice_closed_when_field_null():
     model.apply_replay(it, _hist((_ts(2026, 6, 2, 9, 0), "in_progress", "done")))
     assert it.closed.when == dt.datetime.fromtimestamp(_ts(2026, 6, 2, 9, 0))
     assert it.closed.source == "replay"
+
+
+def test_replay_closed_picks_last_terminal_transition_after_reopen():
+    # cancelled -> reopened -> done: closed must be the final terminal
+    # transition (the done), not the earlier cancellation.
+    it = model._item("P1.S1", "slice", "P1", slice_("S1", status="done"))
+    t3 = _ts(2026, 6, 4, 11, 30)
+    model.apply_replay(it, _hist(
+        (_ts(2026, 6, 1, 9, 0), "ready", "cancelled"),
+        (_ts(2026, 6, 2, 10, 0), "cancelled", "in_progress"),
+        (t3, "in_progress", "done")))
+    assert it.closed.when == dt.datetime.fromtimestamp(t3)
+    assert it.closed.source == "replay"
