@@ -1747,6 +1747,19 @@ DEPTH_DEFAULTS = {
     "exhaustive": {"policy": "both",        "count_first": 2, "count_final": 2},
 }
 
+# Kind-aware depth defaults (P9.S1): post gates get sweeps by default,
+# planning gates stay cheap. Explicit --review-depth always wins.
+KIND_DEPTH_DEFAULTS = {
+    "post-slice": "thorough",
+    "post-phase": "thorough",
+}
+
+
+def resolve_review_depth(explicit: str | None, kind: str) -> str:
+    if explicit is not None:
+        return explicit
+    return KIND_DEPTH_DEFAULTS.get(kind, "standard")
+
 
 def plan_sweeps(
     *,
@@ -1849,7 +1862,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Override the round-1-vs-N prompt mode. Default 'auto'.",
     )
     sp_review.add_argument("--review-depth", choices=["standard", "thorough", "exhaustive"],
-                        default="standard")
+                        default=None,
+                        help="Default: 'thorough' for post-slice/post-phase, 'standard' otherwise.")
     sp_review.add_argument("--independent-reviewers", type=int, default=None)
     sp_review.add_argument("--sweep-policy",
                         choices=["first-round", "final-ready", "both", "never"], default=None)
@@ -2443,6 +2457,7 @@ def main() -> int:
             file=sys.stderr,
         )
         return 2
+    args.review_depth = resolve_review_depth(args.review_depth, args.kind)
     root = repo_root()
     target = (root / args.file).resolve() if not Path(args.file).is_absolute() else Path(args.file).resolve()
     if not target.exists():
@@ -2855,6 +2870,7 @@ def main() -> int:
         "base_ref": base_ref,
         "base_ref_source": base_source,
         "diff_included": base_source in ("auto", "explicit") and not args.no_diff and bool(diff_section),
+        "depth_resolved": args.review_depth,
     }
     manifest["rounds"].append(round_entry)
     write_manifest(manifest_path, manifest)

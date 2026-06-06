@@ -90,6 +90,8 @@ def test_standard_depth_keeps_original_filenames_and_single_reviewer(tmp_path):
             "P1.S1",
             "--file",
             "plan.md",
+            "--review-depth",
+            "standard",
             "--emit",
             "json",
         ],
