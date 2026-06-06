@@ -1368,9 +1368,10 @@ class ReviewerInvocationContext:
     sweep_index: int | None
     provider: str
     caller_provider: str
+    model: str | None = None
 
     def env(self) -> dict:
-        return {
+        out = {
             "AGENT_REVIEWER_REPO_ROOT": str(self.repo_root),
             "AGENT_REVIEWER_CHAIN_DIR": str(self.chain_dir),
             "AGENT_REVIEWER_REQUEST_FILE": str(self.request_file),
@@ -1383,6 +1384,9 @@ class ReviewerInvocationContext:
             "AGENT_REVIEWER_PROVIDER": self.provider,
             "AGENT_REVIEWER_CALLER": self.caller_provider,
         }
+        if self.model:
+            out["AGENT_REVIEWER_MODEL"] = self.model
+        return out
 
 
 def run_one_reviewer(
@@ -1506,6 +1510,9 @@ def run_one_reviewer(
         args, "provider_resolution",
         ProviderResolution("custom", "unknown", getattr(args, "reviewer_cmd", "reviewer-agent")),
     )
+    model_requested = model_for_invocation(
+        args.kind, role, cli_model=getattr(args, "model", None),
+    )
     invocation_context = ReviewerInvocationContext(
         repo_root=root,
         chain_dir=chain_dir,
@@ -1518,6 +1525,7 @@ def run_one_reviewer(
         sweep_index=sweep_index,
         provider=provider_resolution.provider,
         caller_provider=provider_resolution.caller_provider,
+        model=model_requested,
     )
     sandbox_info = {
         "repo_root": str(root),
@@ -1627,6 +1635,7 @@ def run_one_reviewer(
             response_dir=response_dir,
             provider=invocation_context.provider,
         )
+        model_recorded = usage_capture["model"] or model_requested
         if result.returncode != 0:
             verdict, valid = None, False
         else:
@@ -1643,7 +1652,7 @@ def run_one_reviewer(
             started_at=started_at,
             finished_at=finished_at,
             duration_ms=duration_ms,
-            model=usage_capture["model"],
+            model=model_recorded,
             estimated_usage=usage_capture["estimated_usage"],
             exact_usage=usage_capture["exact_usage"],
             usage_capture_status=usage_capture["usage_capture_status"],
@@ -1761,6 +1770,23 @@ def resolve_review_depth(explicit: str | None, kind: str) -> str:
     return KIND_DEPTH_DEFAULTS.get(kind, "standard")
 
 
+def model_for_invocation(
+    kind: str,
+    role: str,
+    *,
+    cli_model: str | None = None,
+    env: dict | None = None,
+) -> str | None:
+    """P9.S1 model-tier matrix. No cross-tier fallback by design:
+    spec/plan primaries -> LIGHT; post gates and all sweeps -> STRONG."""
+    env = env if env is not None else os.environ
+    if cli_model:
+        return cli_model
+    if role != "primary" or kind in ("post-slice", "post-phase"):
+        return env.get("AGENT_REVIEWER_MODEL_STRONG") or None
+    return env.get("AGENT_REVIEWER_MODEL_LIGHT") or None
+
+
 def plan_sweeps(
     *,
     depth: str,
@@ -1864,6 +1890,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     sp_review.add_argument("--review-depth", choices=["standard", "thorough", "exhaustive"],
                         default=None,
                         help="Default: 'thorough' for post-slice/post-phase, 'standard' otherwise.")
+    sp_review.add_argument(
+        "--model",
+        default=None,
+        help="Override the reviewer model for every reviewer in this round "
+             "(bypasses the LIGHT/STRONG tier matrix).",
+    )
     sp_review.add_argument("--independent-reviewers", type=int, default=None)
     sp_review.add_argument("--sweep-policy",
                         choices=["first-round", "final-ready", "both", "never"], default=None)
