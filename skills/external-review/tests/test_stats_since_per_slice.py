@@ -93,6 +93,20 @@ def test_per_slice_denominator_requires_passing_post_slice(tmp_path):
     assert stats["per_slice"]["slice_count"] == 0
 
 
+def test_per_slice_legacy_rounds_tiebreak_on_round_number(tmp_path):
+    # All rounds lack started_at: the highest round number must win the
+    # "latest" tiebreak, not the first entry max() happens to see.
+    rounds = [
+        {"round": 1, "status": "ok", "verdict": "revise",
+         "merged_verdict": "revise", "verdict_valid": True},
+        {"round": 2, "status": "ok", "verdict": "ready",
+         "merged_verdict": "ready", "verdict_valid": True},
+    ]
+    _chain(tmp_path, "s1-post", "post-slice", "P1.S1", rounds)
+    stats = er.collect_review_stats(tmp_path)
+    assert stats["per_slice"]["slice_count"] == 1
+
+
 def test_per_slice_latest_in_window_round_decides(tmp_path):
     _chain(tmp_path, "s1-post", "post-slice", "P1.S1", [
         _round(1, "2026-06-10T10:00:00.000Z", verdict="revise"),

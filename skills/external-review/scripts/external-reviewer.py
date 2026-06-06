@@ -1996,6 +1996,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     sp_stats.add_argument(
         "--since",
         default=None,
+        type=parse_since,
         help="Only count rounds started on/after this UTC date/datetime (ISO format).",
     )
 
@@ -2307,7 +2308,7 @@ def collect_review_stats(output_dir: Path, since: dt.datetime | None = None) -> 
         # Per-slice correlation: spec/plan/post-slice chains only.
         if kind in ("spec", "plan", "post-slice") and in_window_rounds:
             work_id = manifest.get("work_id")
-            if work_id is None:
+            if not work_id:
                 uncorrelated_chains.append(manifest.get("chain") or manifest_path.parent.name)
             else:
                 slice_chains.setdefault(work_id, {}).setdefault(kind, []).extend(in_window_rounds)
@@ -2336,7 +2337,7 @@ def collect_review_stats(output_dir: Path, since: dt.datetime | None = None) -> 
             continue
         latest = max(
             post_rounds,
-            key=lambda r: (_round_started_at(r) or dt.datetime.min.replace(tzinfo=dt.timezone.utc)),
+            key=lambda r: ((_round_started_at(r) or dt.datetime.min.replace(tzinfo=dt.timezone.utc)), int(r.get("round") or 0)),
         )
         if (latest.get("merged_verdict") or latest.get("verdict")) in PASSING:
             passing_slices.append(work_id)
@@ -2400,8 +2401,7 @@ def print_stats_table(stats: dict) -> None:
 
 
 def run_stats(args) -> int:
-    since = parse_since(args.since) if args.since else None
-    stats = collect_review_stats(Path(args.output_dir), since=since)
+    stats = collect_review_stats(Path(args.output_dir), since=args.since)
     if args.json:
         print(json.dumps(stats, indent=2))
     else:
