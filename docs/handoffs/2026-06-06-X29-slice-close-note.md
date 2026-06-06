@@ -20,8 +20,8 @@ Implementation of `docs/plans/2026-06-06-X29-timeline-generator.md` (14 TDD task
 
 ## Acceptance evidence (plan Task 14)
 
-- Timeline suite: 73/73 passed.
-- Full default-discovery suite from the worktree: 1070 passed, 109 failed + 23 errors — **byte-identical failing set to a clean clone of `main`** (independently verified): all pre-existing in tasktool worktree/tracker suites, none in `tools/timeline`, zero X29-introduced. X29's only non-`tools/timeline/` change is the pyproject `testpaths`/`pythonpath` addition, whose collection delta is exactly the 73 new tests.
+- Timeline suite: 77/77 passed (73 plan tests + 4 review-driven regression tests).
+- Full default-discovery suite from the worktree: 1074 passed, 109 failed + 23 errors — **byte-identical failing set to a clean clone of `main`**. Durable evidence: `docs/handoffs/2026-06-06-X29-acceptance-evidence/` (README with compared SHAs — worktree `267842e0d0b897ba2f97e454d550a05b742d3460` vs main `92eefc100e843a977321ce031d6178aa5e1d4762` — exact commands `python3 -m pytest -q --tb=no -rfE -p no:cacheprovider` on both sides, per-side `-rfE` summaries, and sorted failing-id lists whose `diff` is empty in both directions). All 132 failing/erroring ids are pre-existing in tasktool worktree/tracker suites, none in `tools/timeline`, zero X29-introduced. X29's only non-`tools/timeline/` change is the pyproject `testpaths`/`pythonpath` addition, whose collection delta (1206 vs 1129) is exactly the 77 `tools/timeline/tests` tests.
 - Rendered this repo (`/tmp/superstar-timeline.html`, exit 0) and multistore (`/tmp/multistore-timeline.html`, exit 0; 13 `phase-node`s ≥ 10, minute-precision `15:51` present, `x-node` markup present).
 - Backfill dry-run vs multistore: 17 file diffs, zero `started > closed`, zero unicode-escape churn, both repos verified unmutated.
 - Human browser eyeball of both HTML files: requested from the human partner, pending in parallel with this review.
