@@ -59,3 +59,70 @@ def read_archives(repo):
         except json.JSONDecodeError as e:
             warnings.append(f"{f.name}: unparseable JSON block: {e}")
     return project_docs, x_objects, warnings
+
+
+@dataclass
+class Transition:
+    ts: int          # unix commit timestamp
+    old: str | None
+    new: str
+
+
+@dataclass
+class KeyHistory:
+    transitions: list = field(default_factory=list)
+
+
+def _statuses(doc):
+    cur = {}
+    for p in doc.get("phases", []):
+        cur[p["id"]] = p.get("status", "?")
+        for s in p.get("slices", []):
+            cur[f"{p['id']}.{s['id']}"] = s.get("status", "?")
+    for c in doc.get("cross_cutting", []):
+        cur[c["id"]] = c.get("status", "?")
+    return cur
+
+
+def replay(repo):
+    """Walk every commit touching docs/tasklist.json oldest->newest and record
+    per-item status transitions with commit timestamps.
+
+    Deliberately status-only: date *fields* are read once from the final file
+    and stay authoritative for the date — replay supplies transition timing
+    (see the spec's "Git replay" section).
+
+    Import-artifact suppression: an item whose first observation is already
+    terminal (done/cancelled) arrived via a migration commit — that observation
+    carries no real timing and is dropped entirely.
+    """
+    out = git(repo, "log", "--reverse", "--format=%H %ct", "--", TRACKER)
+    commits = [line.split() for line in out.splitlines() if line]
+    prev, histories, warnings = {}, {}, []
+    for sha, ts in commits:
+        ts = int(ts)
+        proc = subprocess.run(
+            ["git", "-C", str(repo), "show", f"{sha}:{TRACKER}"],
+            capture_output=True, text=True)
+        if proc.returncode != 0:
+            continue  # file absent at this revision
+        try:
+            doc = json.loads(proc.stdout)
+        except json.JSONDecodeError:
+            warnings.append(f"replay: skipped unparseable revision {sha[:8]}")
+            continue
+        cur = _statuses(doc)
+        for key, status in cur.items():
+            old = prev.get(key)
+            if old == status:
+                continue
+            if old is None and status in ("done", "cancelled"):
+                continue  # import artifact
+            histories.setdefault(key, KeyHistory()).transitions.append(
+                Transition(ts, old, status))
+        prev = cur
+    return histories, warnings
+
+
+def is_shallow(repo):
+    return git(repo, "rev-parse", "--is-shallow-repository").strip() == "true"
