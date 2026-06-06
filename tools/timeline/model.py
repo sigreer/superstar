@@ -130,3 +130,35 @@ def _merge_date(item, name, ts, fill):
             setattr(item, name, DateValue(when, "minute", "replay"))
     elif current.precision == "day" and current.when.date() == when.date():
         setattr(item, name, DateValue(when, "minute", "replay"))
+
+
+OVERRIDE_DATE_KEYS = {"created", "started", "closed"}
+OVERRIDE_KEYS = OVERRIDE_DATE_KEYS | {"display_title", "exclude"}
+
+
+def apply_overrides(items, overrides):
+    """Apply docs/timeline-overrides.json. Returns warning strings.
+
+    Unknown keys inside an item entry are fatal (fail loud, never silently
+    ignore a typo'd correction). An entry whose item id matches nothing is a
+    warning — the item may belong to data not yet backfilled.
+    """
+    warnings = []
+    by_key = {i.key: i for i in items}
+    for key, entry in (overrides.get("items") or {}).items():
+        unknown = set(entry) - OVERRIDE_KEYS
+        if unknown:
+            raise SystemExit(
+                f"timeline: unknown override key(s) for {key}: {sorted(unknown)}")
+        item = by_key.get(key)
+        if item is None:
+            warnings.append(f"overrides: no item with id {key}")
+            continue
+        for name in OVERRIDE_DATE_KEYS & set(entry):
+            when, precision = parse_tracker_date(entry[name])
+            setattr(item, name, DateValue(when, precision, "override"))
+        if "display_title" in entry:
+            item.display_title = entry["display_title"]
+        if entry.get("exclude"):
+            item.excluded = True
+    return warnings
