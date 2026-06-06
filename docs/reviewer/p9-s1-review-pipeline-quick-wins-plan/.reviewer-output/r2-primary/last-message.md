@@ -1,0 +1,25 @@
+1. Findings
+
+F1 Severity: important — RESOLVED.  
+The plan now counts reviewer invocations for per-slice `rounds_total` via `len(round_entry.get("reviewers") or [None])` and adds the sweep-inclusive test at `docs/plans/2026-06-06-P9.S1-review-pipeline-quick-wins.md:705`.
+
+F2 Severity: important — RESOLVED.  
+Task 6 now explicitly updates `skills/subagent-driven-development/SKILL.md` post-slice and post-phase context guidance to prefer `tasktool brief` / `phase-status` over full `docs/tasklist.json` at `docs/plans/2026-06-06-P9.S1-review-pipeline-quick-wins.md:984`.
+
+F3 Severity: important — RESOLVED.  
+Task 3 now includes an end-to-end no-sidecar test asserting emitted JSON, reviewer entry, and `chain.json` record the requested model at `docs/plans/2026-06-06-P9.S1-review-pipeline-quick-wins.md:408`.
+
+2. Open questions / assumptions
+
+None blocking.
+
+3. Suggested document edits
+
+- Minor: `docs/plans/2026-06-06-P9.S1-review-pipeline-quick-wins.md:1058` says `git log --oneline` should show “five” `P9.S1:` commits, but Tasks 1-6 each commit, so this should say six.
+- Minor: `docs/plans/2026-06-06-P9.S1-review-pipeline-quick-wins.md:908` says subagent-driven-development is “verify only,” but Step 7 edits it. Reword that file bullet to “modify/verify” to avoid ambiguity.
+
+4. Verification gaps / commands that should be run
+
+The plan’s verification gates are adequate: targeted tests per task, full `python -m pytest skills/external-review/tests -q`, CLI help smoke checks, behavior smoke, and real-chain stats smoke are all covered.
+
+Overall verdict: ready with small edits
