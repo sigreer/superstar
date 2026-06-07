@@ -358,7 +358,7 @@
       "slices": [
         {
           "blocked_on": null,
-          "closed": null,
+          "closed": "2026-06-07",
           "created": "2026-06-06",
           "depends_on": [],
           "id": "S1",
@@ -381,7 +381,7 @@
           "review_stage": "passed",
           "reviewer_chain": "docs/reviewer/p9-s1-review-pipeline-quick-wins-P9-S1-post-slice",
           "started": "2026-06-06",
-          "status": "in_progress",
+          "status": "done",
           "tasks": [],
           "title": "Quick wins: kind-aware depth defaults, context trimming, resolution gate for all kinds, model tiering, stats --since + per-slice metric",
           "workflow_step": "implement",
