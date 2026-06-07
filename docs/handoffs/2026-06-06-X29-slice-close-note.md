@@ -13,6 +13,15 @@ Implementation of `docs/plans/2026-06-06-X29-timeline-generator.md` (14 TDD task
    - started-fill could produce `started > closed` (clamp uses "latest close among all lower-numbered phases", wrong once phases ran in parallel; raw mined dates can also postdate retroactive closes). Guard added: skip the fill when the candidate exceeds the object's own `closed`. 6 real bad entries across the two repos eliminated; 3 regression tests.
    - `json.dumps` lacked `ensure_ascii=False`, deviating from tasktool's canonical serializer and churning untouched `—`/`✅` lines in dry-run diffs. Fixed; regression test.
 
+### Acceptance-driven additions (human visual gate)
+
+Post-Task-14 changes driven by the human partner's browser eyeball check; each was spec-reviewed and quality-reviewed in-loop:
+
+- `267842e` — single-line slice cards with hover/click expansion.
+- `e5c0594` — older-item bug fixes: phase_span slice-close fallback, anchor-aware quiet gaps, no dangling "started —", cancelled-rule regression tests.
+- `c9d6cc0` — sequential layout pass + phase prominence.
+- `ff2d02e` — direction toggle with newest-at-top default.
+
 ## Known, deliberately deferred limitations (documented, not bugs introduced)
 
 - `_SLICE_HEAD_RE` only matches `## S<n> — title ✅ \`DONE date\``-style headings. Real multistore legacy archives also use h3 headings, alphanumeric slice IDs (`S2a`), and bullet-list slices, mostly date-less — those are not backfilled. Broadening was descoped as design work beyond a review fix; multistore backfill is dry-run-only in this repo and gated by the human eyeball checkpoint (plan Task 14 Step 5). Phase-level closes — the load-bearing datum — are recovered for 8/8 multistore legacy phases after deviation 5.
@@ -20,9 +29,9 @@ Implementation of `docs/plans/2026-06-06-X29-timeline-generator.md` (14 TDD task
 
 ## Acceptance evidence (plan Task 14)
 
-- Timeline suite: 77/77 passed (73 plan tests + 4 review-driven regression tests).
-- Full default-discovery suite from the worktree: 1074 passed, 109 failed + 23 errors — **byte-identical failing set to a clean clone of `main`**. Durable evidence: `docs/handoffs/2026-06-06-X29-acceptance-evidence/` (README with compared SHAs — worktree `267842e0d0b897ba2f97e454d550a05b742d3460` vs main `92eefc100e843a977321ce031d6178aa5e1d4762` — exact commands `python3 -m pytest -q --tb=no -rfE -p no:cacheprovider` on both sides, per-side `-rfE` summaries, and sorted failing-id lists whose `diff` is empty in both directions). All 132 failing/erroring ids are pre-existing in tasktool worktree/tracker suites, none in `tools/timeline`, zero X29-introduced. X29's only non-`tools/timeline/` change is the pyproject `testpaths`/`pythonpath` addition, whose collection delta (1206 vs 1129) is exactly the 77 `tools/timeline/tests` tests.
-- Rendered this repo (`/tmp/superstar-timeline.html`, exit 0) and multistore (`/tmp/multistore-timeline.html`, exit 0; 13 `phase-node`s ≥ 10, minute-precision `15:51` present, `x-node` markup present).
+- Timeline suite: 95/95 passed (73 plan tests + 22 review/acceptance-driven tests).
+- Full default-discovery suite: the plan's Step 1 criterion (`python3 -m pytest -q` all PASS) is **met outright** — **1224 passed, 0 failed, 0 errors** (exit code 0) in a clean shell at worktree HEAD `ff2d02ef7066cb6373e62c8ec8f9f9dc3be4123f`. The earlier baseline-exception framing ("109 failed + 23 errors, byte-identical to main") is **superseded**: those failures were an environment artifact — the `SUPERSTAR_SUBAGENT_ROLE` env var (exported by the subagent-role protocol in the shells that ran the evidence) trips the tasktool mutation guard at `tools/tasktool/commands.py:880-888` inside the test processes. With the var unset the suite is fully green; with it set, exactly the 132 documented ids fail. The byte-identical-to-main comparison remains valid (the artifact affected both sides equally; zero failures in `tools/timeline` either way). Durable evidence with the correction and the clean-run summary: `docs/handoffs/2026-06-06-X29-acceptance-evidence/`.
+- Rendered this repo (`/tmp/superstar-timeline.html`, exit 0) and multistore (`/tmp/multistore-timeline.html`, exit 0; minute-precision `15:51` present, `x-node` markup present). Multistore now renders with the post-acceptance sequential layout; renders were verified post-layout-change by the in-loop reviewers.
 - Backfill dry-run vs multistore: 17 file diffs, zero `started > closed`, zero unicode-escape churn, both repos verified unmutated.
 - Human browser eyeball of both HTML files: requested from the human partner, pending in parallel with this review.
 
