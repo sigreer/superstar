@@ -201,6 +201,45 @@ def test_subagent_driven_development_has_integrate_main_checkpoint() -> None:
     assert integ < close, "integrate-main checkpoint must precede the close gate"
 
 
+def _slice_end_section(text: str) -> str:
+    start = text.index("- **At the end of each slice**")
+    end = text.index("- **At the end of the phase**", start)
+    return text[start:end]
+
+
+def test_subagent_driven_development_merges_before_close_and_prunes_after() -> None:
+    text = skill_text("subagent-driven-development")
+    section = _slice_end_section(text)
+
+    review_ready = section.index("On `ready` / `ready with small edits`, proceed")
+    merge_back = section.index("merge the worktree branch back")
+    close = section.index("tasktool close <slice-id>")
+    prune = section.index("tasktool worktree prune <slice-id>")
+
+    assert review_ready < merge_back < close < prune
+    assert "[[finishing-a-development-branch]]" in section
+    assert "must not present the interactive Step 4 options menu" in section
+    assert "Option 1 merge mechanics" in section
+    assert "landed-branch gate" in section
+    assert "auto-commits" in section
+    assert "--force" in section
+    assert "normal closeout path" in section
+
+
+def test_subagent_driven_development_diagram_has_merge_close_prune_order() -> None:
+    text = skill_text("subagent-driven-development")
+    diagram_start = text.index("digraph process")
+    diagram_end = text.index("## Model Selection", diagram_start)
+    diagram = text[diagram_start:diagram_end]
+
+    assert '"Merge back to base branch"' in diagram
+    assert '"tasktool worktree prune <slice-id>"' in diagram
+    assert '"post-slice verdict ready?" -> "Merge back to base branch"' in diagram
+    assert '"Merge back to base branch" -> "tasktool close <slice-id>"' in diagram
+    assert '"tasktool close <slice-id>" -> "tasktool worktree prune <slice-id>"' in diagram
+    assert '"post-slice verdict ready?" -> "tasktool close <slice-id>"' not in diagram
+
+
 def test_tasklist_discipline_documents_surface_reserve_coordinate() -> None:
     text = skill_text("tasklist-discipline")
     # daily-commands surface
