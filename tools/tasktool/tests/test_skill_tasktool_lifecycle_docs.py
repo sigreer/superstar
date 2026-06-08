@@ -259,6 +259,19 @@ def test_tasklist_discipline_documents_surface_reserve_coordinate() -> None:
     assert "duplicate" in text.lower()
 
 
+def test_finishing_branch_documents_noninteractive_per_slice_mergeback() -> None:
+    text = skill_text("finishing-a-development-branch")
+
+    assert "Non-Interactive Per-Slice Merge-Back" in text
+    assert "skip Step 4" in text
+    assert "Option 1 merge mechanics" in text
+    assert "return to `subagent-driven-development`" in text
+    assert "Do not run Step 6 cleanup before `tasktool close <slice-id>`" in text
+    assert "tasktool worktree prune <slice-id>" in text
+    assert "--force" in text
+    assert "not the normal closeout path" in text
+
+
 def test_phase_planning_and_writing_plans_document_surface_tables() -> None:
     for skill in ["phase-planning", "writing-plans"]:
         text = skill_text(skill)

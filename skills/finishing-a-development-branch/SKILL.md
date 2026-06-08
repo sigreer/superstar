@@ -85,6 +85,12 @@ git merge-base HEAD main 2>/dev/null || git merge-base HEAD master 2>/dev/null
 
 Or ask: "This branch split from main - is that correct?"
 
+### Non-Interactive Per-Slice Merge-Back
+
+When `subagent-driven-development` reaches per-slice closeout for a tasktool-owned implementation worktree, it may call into this skill for the Option 1 merge mechanics without presenting the interactive menu. In that path, skip Step 4, run the Option 1 merge mechanics from Step 5 directly, verify on the merged base branch, and return to `subagent-driven-development` for `tasktool close <slice-id>` and post-close prune.
+
+Do not run Step 6 cleanup before `tasktool close <slice-id>`. `tasktool worktree prune <slice-id>` requires a terminal row, so prune belongs after close in the normal slice-end sequence.
+
 ### Step 4: Present Options
 
 **Normal repo and named-branch worktree — present exactly these 4 options:**
@@ -153,7 +159,7 @@ git stash pop  # only if you stashed above
 # Only after merge and verification succeed: cleanup worktree (Step 6)
 ```
 
-Then run Cleanup workspace (Step 6).
+Then run Cleanup workspace (Step 6), except when this option is being used as the non-interactive per-slice merge-back from `subagent-driven-development`. In that per-slice path, return to `subagent-driven-development`; it will run `tasktool close <slice-id>` first and then run Step 6 cleanup afterward.
 
 **Branch deletion depends on which cleanup path Step 6 used:**
 
@@ -249,7 +255,7 @@ WORKTREE_PATH=$(git rev-parse --show-toplevel)
 tasktool worktree prune <slice-id>
 ```
 
-`prune` enforces three guards (slice-done, branch-merged, clean-tree) and removes the worktree directory and branch. If `prune` refuses, address the reported cause (close the slice, complete the merge, clean the tree). For an irrecoverable scratch worktree, `tasktool worktree prune <slice-id> --force` overrides the prune guards only; it does not affect close, slice status, or review gates.
+`prune` enforces three guards (slice-done, branch-merged, clean-tree) and removes the worktree directory and branch. If `prune` refuses, address the reported cause (close the slice, complete the merge, clean the tree). For an irrecoverable scratch worktree, `tasktool worktree prune <slice-id> --force` overrides the prune guards only; it does not affect close, slice status, or review gates. `--force` is not the normal closeout path: it bypasses the landed/clean proof used by normal prune and can skip the landed-base evidence stamp.
 
 If you are currently inside the worktree being pruned, tasktool prints a two-step follow-up; run it from the authoritative checkout:
 
