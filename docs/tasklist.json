@@ -264,6 +264,44 @@
           "tasks": [],
           "title": "Add workflow_step field, transient review block, and read-only infer-step",
           "worktree_in_place": true
+        },
+        {
+          "blocked_on": null,
+          "closed": null,
+          "created": "2026-06-08",
+          "depends_on": [
+            "P6.S1"
+          ],
+          "id": "S2",
+          "notes": "Sketched in P6 design §2 (in-scope S2): auto-advance workflow_step on prepare/artifact add/start/close + one-shot migration backfill. See docs/specs/2026-05-23-P6-programmatic-workflow-enhancements-design.md. Not yet specced/planned in detail.",
+          "parallel_group": null,
+          "plan_path": null,
+          "planning_status": "proposed",
+          "refs": [],
+          "reviewer_chain": null,
+          "started": null,
+          "status": "ready",
+          "tasks": [],
+          "title": "Auto-advance workflow_step on transition commands (prepare/artifact add/start/close) + one-shot migration backfill of existing rows"
+        },
+        {
+          "blocked_on": null,
+          "closed": null,
+          "created": "2026-06-08",
+          "depends_on": [
+            "P6.S2"
+          ],
+          "id": "S3",
+          "notes": "Sketched in P6 design §2 (in-scope S3): session-rename hook reads slice workflow_step. See docs/specs/2026-05-23-P6-programmatic-workflow-enhancements-design.md. Not yet specced/planned in detail.",
+          "parallel_group": null,
+          "plan_path": null,
+          "planning_status": "proposed",
+          "refs": [],
+          "reviewer_chain": null,
+          "started": null,
+          "status": "ready",
+          "tasks": [],
+          "title": "Session-rename hook: write <agent>-<Pn.Sm>-<step> from slice workflow_step (Claude Code /rename equivalent + Codex)"
         }
       ],
       "spec_path": "docs/specs/2026-05-23-P6-programmatic-workflow-enhancements-design.md",
