@@ -98,3 +98,15 @@ def test_open_phase_block_reads_header_first_in_default_order():
     nodes = _tops(h, "phase-node", "data-td")
     cards = _tops(h, "slice-card", "data-td")
     assert nodes["P9"] < cards["P9.S1"]
+
+
+def test_date_pills_carry_both_direction_tops():
+    items = [
+        model._item("P1", "phase", None,
+                    phase("P1", status="done", started="2026-06-01", closed="2026-06-02")),
+        model._item("P1.S1", "slice", "P1", slice_("S1", status="done", closed="2026-06-01")),
+    ]
+    html = render.render_html("fixture", items, generated=GEN).html
+    asc = _tops(html, "date-pill", "data-ta")
+    desc = _tops(html, "date-pill", "data-td")
+    assert asc and desc and set(asc) == set(desc)   # every pill has both tops

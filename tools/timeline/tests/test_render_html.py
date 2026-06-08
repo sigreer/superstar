@@ -158,3 +158,37 @@ def test_cancelled_phase_with_done_slices_rendered_as_cancelled():
     assert "Variant separation" in h and "cancelled" in h
     assert "Done bit" in h
     assert "Cancelled bit" not in h
+
+
+import re
+
+
+def test_date_pills_and_dividers_render_with_quiet_run():
+    items = [
+        model._item("P1", "phase", None,
+                    phase("P1", status="done", started="2026-05-19", closed="2026-06-05")),
+        model._item("P1.S1", "slice", "P1",
+                    slice_("S1", status="done", closed="2026-05-19", title="First slice")),
+        model._item("P1.S2", "slice", "P1",
+                    slice_("S2", status="done", closed="2026-06-05", title="Later slice")),
+    ]
+    html = render.render_html("fixture", items, generated=GEN).html
+    assert 'class="date-pill' in html and 'class="day-divider' in html
+    # active days 19 May and 5 Jun get pills; the 20 May..4 Jun run collapses
+    assert re.search(r'class="date-pill[^>]*>19 May 2026<', html)
+    assert re.search(r'class="date-pill[^>]*>5 Jun 2026<', html)
+    assert "quiet day" in html
+
+
+def test_x_only_day_gets_pill_even_when_hidden():
+    items = [
+        model._item("P1", "phase", None,
+                    phase("P1", status="done", started="2026-05-19", closed="2026-05-19")),
+        model._item("P1.S1", "slice", "P1",
+                    slice_("S1", status="done", closed="2026-05-19")),
+        model._item("X1", "x", None,
+                    x("X1", status="done", closed="2026-05-25", title="Cross item")),
+    ]
+    html = render.render_html("fixture", items, generated=GEN, show_x=False).html
+    # X-only day 25 May is active -> a date pill, even though X cards are CSS-hidden
+    assert re.search(r'class="date-pill[^>]*>25 May 2026<', html)

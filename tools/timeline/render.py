@@ -160,7 +160,7 @@ class RenderResult:
 PAD_TOP = 40        # px of breathing room above the first element
 PAD_BOTTOM = 60
 TRACK_PAD = 6       # extra px between adjacent occupants of the same track
-_RANK = {"node": 0, "card": 1, "open": 1, "ring": 2}  # tie-break at equal y
+_RANK = {"date": -1, "node": 0, "card": 1, "open": 1, "ring": 2}  # tie-break at equal y
 
 
 class _El:
@@ -329,6 +329,41 @@ def render_html(project, items, *, generated, show_x=False):
                        (("L" if side == "left" else "R", 14), ("C", 7)),
                        item=i, side=side))
 
+    # Active days = every embedded point event's local date, including ALL X
+    # closes regardless of --show-x (X data is always embedded; visibility is a
+    # client-side CSS toggle). F1 invariant: an X-only day is active, so it always
+    # gets a pill and is never folded into a quiet run.
+    active_dates = set()
+    for start, end, close_only in spans.values():
+        if not close_only:
+            active_dates.add(start.date())
+        if end is not None:
+            active_dates.add(end.date())
+    for s in slices:
+        if s.parent in spans:
+            active_dates.add(_eff_end(s.closed).date())
+    for i in xs:
+        active_dates.add(_eff_end(i.closed).date())
+
+    day_entries = classify_days(active_dates)
+
+    # First-event instant per active day (anchors the marker); idle days use noon.
+    first_instant = {}
+    for e in els:
+        d = e.when.date()
+        if d not in first_instant or e.when < first_instant[d]:
+            first_instant[d] = e.when
+
+    date_marker = {}   # date -> _El (for quiet-segment bounds + rendering)
+    for entry in day_entries:
+        if entry[0] != "day":
+            continue
+        d = entry[1]
+        anchor = first_instant.get(d) or dt.datetime.combine(d, dt.time(12, 0))
+        m = _El(f"date-{d.isoformat()}", "date", anchor, (("C", 6),))
+        date_marker[d] = m
+        els.append(m)
+
     # Both reading orders are laid out up front; the in-page toggle swaps
     # positions via the data attributes. Default = newest at top ("desc").
     bottom_a = layout(els, scale, "asc")
@@ -361,12 +396,53 @@ def render_html(project, items, *, generated, show_x=False):
             f'data-ta="{ya:.0f}" data-ha="{ha:.0f}" '
             f'data-td="{yd:.0f}" data-hd="{hd:.0f}"></div>')
 
-    # Quiet-day rendering is added by Task 4 (date pills, dividers, collapsed
-    # quiet segments) using classify_days(). The hour-threshold gap rendering
-    # was retired with quiet_gaps/_gap_bounds; gaps do not render until then.
+    # Date pills + divider hairlines (one per "day" entry).
+    for entry in day_entries:
+        if entry[0] != "day":
+            continue
+        d = entry[1]
+        m = date_marker[d]
+        ta, td = tops(m)
+        label = d.strftime("%-d %b %Y")
+        parts.append(
+            f'<div class="day-divider" data-key="div-{d.isoformat()}" '
+            f'style="top:{td}px" data-ta="{ta}" data-td="{td}"></div>'
+            f'<div class="date-pill" data-key="pill-{d.isoformat()}" '
+            f'style="top:{td}px" data-ta="{ta}" data-td="{td}">{label}</div>')
 
-    # Point elements.
+    # Quiet runs: dotted segment spanning the idle stretch, positioned by mapping
+    # the run INTERVAL through the same TimeScale used for everything else (same
+    # mechanism that anchors idle-day pills via noon). Endpoints: run_start at
+    # 00:00 and the day after run_end at 00:00 (end-of-run exclusive) so the
+    # segment covers the full idle stretch. A scale-mapped interval has
+    # non-negative height by construction, so 3+ day runs always render.
+    maxy = max((scale.y(e.when) for e in els), default=0.0)
+    for entry in day_entries:
+        if entry[0] != "quiet":
+            continue
+        run_start, run_end, ndays = entry[1], entry[2], entry[3]
+        t0 = dt.datetime.combine(run_start, dt.time(0, 0))
+        t1 = dt.datetime.combine(run_end + dt.timedelta(days=1), dt.time(0, 0))
+        y0, y1 = scale.y(t0), scale.y(t1)
+        # asc: y grows with time, so the earlier endpoint is the top.
+        ga0, ga1 = min(y0, y1) + PAD_TOP, max(y0, y1) + PAD_TOP
+        # desc: same transform layout() applies (maxy - y), which flips order.
+        d0, d1 = maxy - y0, maxy - y1
+        gd0, gd1 = min(d0, d1) + PAD_TOP, max(d0, d1) + PAD_TOP
+        parts.append(
+            f'<div class="gap" data-key="quiet-{run_start.isoformat()}" '
+            f'style="top:{gd0:.0f}px;height:{gd1 - gd0:.0f}px" '
+            f'data-ta="{ga0:.0f}" data-ha="{ga1 - ga0:.0f}" '
+            f'data-td="{gd0:.0f}" data-hd="{gd1 - gd0:.0f}"></div>'
+            f'<div class="gap-label" data-key="quiet-{run_start.isoformat()}" '
+            f'style="top:{(gd0 + gd1) / 2:.0f}px" '
+            f'data-ta="{(ga0 + ga1) / 2:.0f}" data-td="{(gd0 + gd1) / 2:.0f}">'
+            f'{ndays} quiet day{"s" if ndays != 1 else ""}</div>')
+
+    # Point elements (date markers are rendered above, not here).
     for e in els:
+        if e.kind == "date":
+            continue
         ta, td = tops(e)
         if e.kind == "node":
             parts.append(_node_html(e.item, ta, td,
@@ -523,6 +599,11 @@ header .meta{{font-size:12px;color:#888}}
   transform:translateX(-50%)}}
 .gap-label{{position:absolute;left:50%;margin-left:14px;font-size:10px;
   color:#999;font-style:italic;transform:translateY(-50%)}}
+.day-divider{{position:absolute;left:0;right:0;height:1px;background:#ececef;
+  transform:translateY(-50%);z-index:0}}
+.date-pill{{position:absolute;left:50%;transform:translate(-50%,-50%);
+  background:#fff;border:1px solid #d9d2f5;color:#6d28d9;font-size:10px;
+  font-weight:700;padding:2px 8px;border-radius:11px;white-space:nowrap;z-index:4}}
 .slice-card{{position:absolute;max-width:38%;font-size:12px;cursor:pointer;
   border:1px solid;border-radius:6px;padding:6px 10px;
   transform:translateY(-50%);z-index:2;
