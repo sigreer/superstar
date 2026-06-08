@@ -259,6 +259,18 @@ def test_tasklist_discipline_documents_surface_reserve_coordinate() -> None:
     assert "duplicate" in text.lower()
 
 
+def test_tasklist_discipline_documents_shared_tracker_boundary() -> None:
+    text = skill_text("tasklist-discipline")
+
+    assert "Shared tracker versus sibling artifacts" in text
+    assert "`docs/tasklist.json` is the shared canonical tracker" in text
+    assert "Truthful sibling lifecycle rows are bookkeeping" in text
+    assert "Sibling artifacts remain hands-off" in text
+    assert "implementation files, specs, plans, handoffs, reviewer chains" in text
+    assert "A sibling's close is co-staged, so I must stop" in text
+    assert "tracker is whole-file bookkeeping" in text
+
+
 def test_finishing_branch_documents_noninteractive_per_slice_mergeback() -> None:
     text = skill_text("finishing-a-development-branch")
 
