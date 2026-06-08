@@ -212,7 +212,7 @@
       "closed": null,
       "created": "2026-06-06",
       "id": "X29",
-      "notes": "",
+      "notes": "Task 3 done @ b407411: added QUIET_RUN_DAYS+classify_days, removed quiet_gaps/_gap_bounds/GAP_THRESHOLD_HOURS + render_html gap block. Retired-API tests deleted: test_quiet_gaps_between_coverage / _split_by_interior_anchor / _anchor_near_edge_suppresses_short_remainder (test_render_lanes), test_gap_markup_never_spans_rendered_anchors (test_render_html), test_gap_segment_sits_between_rendered_content (test_render_layout). Suite 97 passed. Gap rendering off until Task 4.\nTask4 day-axis: pills/dividers/CSS/dual-direction implemented, 2 of 3 new tests green. BLOCKER: plan's quiet-bounds els-date-partition renders NO quiet segment when a single phase strand spans the run (node forced to top, ring to bottom => above/below date partition can't separate vertically). Real repo: 16 pills but 0 quiet days though classify_days finds 1 run (27May-1Jun). Plan's own verbatim test (single-phase 19May->5Jun) fails the 'quiet day' assert for this reason. Recommend mapping run interval through TimeScale instead of partitioning els by date. NEEDS_CONTEXT - not committed.\nTask4 DONE (commit 2d790f7). Quiet-bounds reworked per coordinator decision: scale-interval mapping (run_start 00:00 .. run_end+1day 00:00 through TimeScale; desc via maxy-y like layout) instead of the stale els-date-partition. All 3 focused tests pass incl. previously-failing quiet-run; full suite 100 passed; render smoke exit 0, 16 pills, 1 quiet day, quiet .gap carries all 4 data-* and data-td(733)!=data-ta(1217). Faces still carry inline dates (Task 5 untouched).",
       "refs": [
         "docs/specs/2026-06-06-X29-timeline-design.md",
         "docs/reviewer/x29-timeline-design-spec",
@@ -226,7 +226,8 @@
         "docs/reviewer/x29-timeline-day-axis-design-spec",
         "docs/plans/2026-06-08-X29-timeline-day-axis.md",
         "docs/handoffs/2026-06-08-X29-timeline-day-axis-prompt.md",
-        "docs/reviewer/x29-timeline-day-axis-plan"
+        "docs/reviewer/x29-timeline-day-axis-plan",
+        "b4074115"
       ],
       "started": "2026-06-06",
       "status": "in_progress",
@@ -377,12 +378,17 @@
             "docs/handoffs/2026-06-05-P8.S2-skill-closeout-sequence-prompt.md",
             "docs/reviewer/p8-s2-skill-closeout-sequence-plan"
           ],
+          "review_active": true,
+          "review_stage": "applying_fixes",
           "reviewer_chain": "docs/reviewer/p8-s2-skill-closeout-sequence-plan",
-          "started": null,
-          "status": "ready",
+          "started": "2026-06-08",
+          "status": "in_progress",
           "tasks": [],
           "title": "Skill updates: merge-back before close in slice-end sequence; clean (non-force) prune guidance; shared-tracker vs sibling-artifact boundary clarification",
-          "workflow_step": "implement"
+          "workflow_step": "implement",
+          "worktree_base_sha": "6f8c66c0bd517be30a46b530fb1c561ac258b98d",
+          "worktree_branch": "worktree-p8-s2-skill-updates-merge-back-before-close",
+          "worktree_path": ".worktrees/worktree-p8-s2-skill-updates-merge-back-before-close"
         }
       ],
       "spec_path": "docs/specs/2026-06-05-P8-closeout-integrity-design.md",
