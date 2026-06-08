@@ -221,7 +221,12 @@
         "docs/reviewer/x29-timeline-generator-plan",
         "docs/handoffs/2026-06-06-X29-slice-close-note.md",
         "docs/reviewer/x29-timeline-generator-X29-post-slice/",
-        "docs/handoffs/2026-06-06-X29-acceptance-evidence/"
+        "docs/handoffs/2026-06-06-X29-acceptance-evidence/",
+        "docs/specs/2026-06-08-X29-timeline-day-axis-design.md",
+        "docs/reviewer/x29-timeline-day-axis-design-spec",
+        "docs/plans/2026-06-08-X29-timeline-day-axis.md",
+        "docs/handoffs/2026-06-08-X29-timeline-day-axis-prompt.md",
+        "docs/reviewer/x29-timeline-day-axis-plan"
       ],
       "started": "2026-06-06",
       "status": "in_progress",
@@ -264,6 +269,44 @@
           "tasks": [],
           "title": "Add workflow_step field, transient review block, and read-only infer-step",
           "worktree_in_place": true
+        },
+        {
+          "blocked_on": null,
+          "closed": null,
+          "created": "2026-06-08",
+          "depends_on": [
+            "P6.S1"
+          ],
+          "id": "S2",
+          "notes": "Sketched in P6 design §2 (in-scope S2): auto-advance workflow_step on prepare/artifact add/start/close + one-shot migration backfill. See docs/specs/2026-05-23-P6-programmatic-workflow-enhancements-design.md. Not yet specced/planned in detail.",
+          "parallel_group": null,
+          "plan_path": null,
+          "planning_status": "proposed",
+          "refs": [],
+          "reviewer_chain": null,
+          "started": null,
+          "status": "ready",
+          "tasks": [],
+          "title": "Auto-advance workflow_step on transition commands (prepare/artifact add/start/close) + one-shot migration backfill of existing rows"
+        },
+        {
+          "blocked_on": null,
+          "closed": null,
+          "created": "2026-06-08",
+          "depends_on": [
+            "P6.S2"
+          ],
+          "id": "S3",
+          "notes": "Sketched in P6 design §2 (in-scope S3): session-rename hook reads slice workflow_step. See docs/specs/2026-05-23-P6-programmatic-workflow-enhancements-design.md. Not yet specced/planned in detail.",
+          "parallel_group": null,
+          "plan_path": null,
+          "planning_status": "proposed",
+          "refs": [],
+          "reviewer_chain": null,
+          "started": null,
+          "status": "ready",
+          "tasks": [],
+          "title": "Session-rename hook: write <agent>-<Pn.Sm>-<step> from slice workflow_step (Claude Code /rename equivalent + Codex)"
         }
       ],
       "spec_path": "docs/specs/2026-05-23-P6-programmatic-workflow-enhancements-design.md",
@@ -351,14 +394,14 @@
       "closed": null,
       "created": "2026-06-06",
       "id": "P9",
-      "notes": "",
+      "notes": "P9.S1 baseline for the rounds/slice <= 4.5 success criterion: 4.59 (slices=29, rounds=133), measured by the fixed per-slice metric (latest-round tiebreak, commit caea87e). Use 4.59, not the pre-fix 4.79.",
       "phase_reviewer_chain": "docs/reviewer/p9-review-pipeline-efficiency-design-spec",
       "plan_path": null,
       "planning_path": null,
       "slices": [
         {
           "blocked_on": null,
-          "closed": null,
+          "closed": "2026-06-07",
           "created": "2026-06-06",
           "depends_on": [],
           "id": "S1",
@@ -374,14 +417,20 @@
           "refs": [
             "docs/plans/2026-06-06-P9.S1-review-pipeline-quick-wins.md",
             "docs/handoffs/2026-06-06-P9.S1-review-pipeline-quick-wins-prompt.md",
-            "docs/reviewer/p9-s1-review-pipeline-quick-wins-plan"
+            "docs/reviewer/p9-s1-review-pipeline-quick-wins-plan",
+            "docs/reviewer/p9-s1-review-pipeline-quick-wins-P9-S1-post-slice"
           ],
-          "reviewer_chain": "docs/reviewer/p9-s1-review-pipeline-quick-wins-plan",
-          "started": null,
-          "status": "ready",
+          "review_active": true,
+          "review_stage": "passed",
+          "reviewer_chain": "docs/reviewer/p9-s1-review-pipeline-quick-wins-P9-S1-post-slice",
+          "started": "2026-06-06",
+          "status": "done",
           "tasks": [],
           "title": "Quick wins: kind-aware depth defaults, context trimming, resolution gate for all kinds, model tiering, stats --since + per-slice metric",
-          "workflow_step": "implement"
+          "workflow_step": "implement",
+          "worktree_base_sha": "92eefc100e843a977321ce031d6178aa5e1d4762",
+          "worktree_branch": "worktree-p9-s1-quick-wins-kind-aware-depth-defaults",
+          "worktree_path": ".worktrees/worktree-p9-s1-quick-wins-kind-aware-depth-defaults"
         },
         {
           "blocked_on": null,
@@ -395,7 +444,7 @@
             "skills/external-review/scripts/external-reviewer.py",
             "skills/external-review/SKILL.md"
           ],
-          "notes": "",
+          "notes": "P9.S1 Task 6 review flagged stale tracker-context guidance in skills/executing-plans/SKILL.md (~line 55) and skills/tasklist-discipline/SKILL.md (~line 205): both still instruct passing full docs/tasklist.json with no tasktool-brief preference or --work-id mention. Fold the uniform-guidance fix into S2's checklist work.",
           "parallel_group": null,
           "plan_path": null,
           "planning_status": "proposed",

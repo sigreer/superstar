@@ -56,14 +56,14 @@ The per-task internal reviews approving every task in a slice **does not** satis
 - **At the end of each slice** (all the slice's tasks closed, in-loop internal reviews passed):
   1. Run `git status --short`. If setup/migration artifacts, unrelated reviewer chains, legacy path moves, unrelated tasklist mutations, files from another slice, or other dirty files outside the slice scope are present, stop and resolve that boundary before review.
   2. **Integrate-current-main checkpoint.** Run `tasktool worktree status <slice-id> --integration`. If a sibling slice has landed on the base branch since this slice's `worktree_base_sha` — especially one that shares an integration surface with this slice — integrate the current base branch into the worktree **before** the post-slice review: run `tasktool worktree sync <slice-id> --merge` (or `--rebase`) when that command is available, otherwise merge the base branch with raw git (`git merge <base-branch>`). Resolve any registry / schema / seed / ordering conflicts with the centralized-registry merge playbook (`references/registry-merge-playbook.md`), regenerate derived artifacts (checksums, snapshots), and rerun verification. Only then proceed. Skipping this replays already-integrated churn and produces stale-base merges. If `worktree status --integration` reports `landed: unknown` for a sibling, treat it as possibly-landed and inspect before proceeding.
-  3. Invoke `[[external-review]]` with `--kind post-slice`, passing the plan as `--file` and the spec + `docs/tasklist.json` as `--context`.
+  3. Invoke `[[external-review]]` with `--kind post-slice`, passing the plan as `--file` and the spec + tracker context as `--context`. Prefer `tasktool brief <slice-id>` output (written to a scratch file) over the full `docs/tasklist.json` when the tasklist is large; the full file is acceptable only when it is small or the review genuinely needs cross-phase tracker state.
   4. Read the verdict. On `ready` / `ready with small edits`, proceed.
   5. On `merged_verdict: revise` (or `verdict_valid: false`), **dispatch a fix subagent** with the previous response file as input. The fix subagent MUST write `docs/reviewer/<chain>/r{N}-resolution.md` per the contract in `[[external-review]]` before signaling completion. Wait for completion. Re-submit. Iterate.
   6. Once the verdict gates pass, run `tasktool close <slice-id>` (the CLI re-checks the reviewer chain and refuses on `revise`). See `[[tasklist-discipline]]`.
 
 - **At the end of the phase** (the last slice in the phase closes):
   1. Run the same `git status --short` scope preflight.
-  2. Invoke `[[external-review]]` with `--kind post-phase`, passing the phase plan or archive note as `--file` and the spec + plan + `docs/tasklist.json` as `--context`.
+  2. Invoke `[[external-review]]` with `--kind post-phase`, passing the phase plan or archive note as `--file` and the spec + plan + tracker context as `--context`. Prefer `tasktool brief <phase-id>` / `tasktool phase-status <phase-id>` output over the full `docs/tasklist.json` when the tasklist is large; post-phase reviews may justifiably take the full file when archive/tracker drift is in scope.
   3. Same delegation rule — coordinator does not apply findings directly.
   4. On verdict acceptance, run `tasktool archive-phase <phase-id>` (the CLI re-checks the post-phase chain), then invoke `[[finishing-a-development-branch]]`.
 
@@ -328,7 +328,7 @@ Done!
 | "I'll read the file to figure out what's wrong before delegating"         | No. Dispatch an investigator subagent and wait for the summary.        |
 | "It's just a one-line change, no need to delegate"                        | Bar is *strictly cheaper than delegating*. When in doubt, delegate.    |
 | "I'll skip post-slice review on this one, it's a small slice"             | No. Slice boundary is a gate. Run `[[external-review]] --kind post-slice`.|
-| "I'll resubmit without the resolution file, the reviewer will figure it out" | No. Post-slice/post-phase round N+1 exits 3 without `r{N-1}-resolution.md` or `--allow-missing-resolution`. |
+| "I'll resubmit without the resolution file, the reviewer will figure it out" | No. Round N+1 of any kind exits 3 without `r{N-1}-resolution.md` or `--allow-missing-resolution`; post-slice/post-phase still delegate fixes to a subagent. |
 | "The plan's final close-out task ran, so I should ask before post-slice review" | No. The slice is not closed until `[[external-review]] --kind post-slice` passes and tasktool close succeeds afterward. |
 
 **Process reds (also never):**

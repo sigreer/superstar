@@ -676,6 +676,27 @@ def utc_now_iso() -> str:
     return dt.datetime.now(dt.timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
 
+def parse_since(value: str) -> dt.datetime:
+    """Parse --since as UTC; date-only values mean midnight UTC."""
+    parsed = dt.datetime.fromisoformat(value)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=dt.timezone.utc)
+    return parsed
+
+
+def _round_started_at(round_entry: dict) -> dt.datetime | None:
+    raw = round_entry.get("started_at")
+    if not raw:
+        return None
+    try:
+        parsed = dt.datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=dt.timezone.utc)
+    return parsed
+
+
 def migrate_manifest_inplace(manifest: dict) -> None:
     """Add `status` and `returncode` keys to legacy round/reviewer entries.
 
@@ -1368,9 +1389,10 @@ class ReviewerInvocationContext:
     sweep_index: int | None
     provider: str
     caller_provider: str
+    model: str | None = None
 
     def env(self) -> dict:
-        return {
+        out = {
             "AGENT_REVIEWER_REPO_ROOT": str(self.repo_root),
             "AGENT_REVIEWER_CHAIN_DIR": str(self.chain_dir),
             "AGENT_REVIEWER_REQUEST_FILE": str(self.request_file),
@@ -1383,6 +1405,9 @@ class ReviewerInvocationContext:
             "AGENT_REVIEWER_PROVIDER": self.provider,
             "AGENT_REVIEWER_CALLER": self.caller_provider,
         }
+        if self.model:
+            out["AGENT_REVIEWER_MODEL"] = self.model
+        return out
 
 
 def run_one_reviewer(
@@ -1506,6 +1531,9 @@ def run_one_reviewer(
         args, "provider_resolution",
         ProviderResolution("custom", "unknown", getattr(args, "reviewer_cmd", "reviewer-agent")),
     )
+    model_requested = model_for_invocation(
+        args.kind, role, cli_model=getattr(args, "model", None),
+    )
     invocation_context = ReviewerInvocationContext(
         repo_root=root,
         chain_dir=chain_dir,
@@ -1518,6 +1546,7 @@ def run_one_reviewer(
         sweep_index=sweep_index,
         provider=provider_resolution.provider,
         caller_provider=provider_resolution.caller_provider,
+        model=model_requested,
     )
     sandbox_info = {
         "repo_root": str(root),
@@ -1627,6 +1656,7 @@ def run_one_reviewer(
             response_dir=response_dir,
             provider=invocation_context.provider,
         )
+        model_recorded = usage_capture["model"] or model_requested
         if result.returncode != 0:
             verdict, valid = None, False
         else:
@@ -1643,7 +1673,7 @@ def run_one_reviewer(
             started_at=started_at,
             finished_at=finished_at,
             duration_ms=duration_ms,
-            model=usage_capture["model"],
+            model=model_recorded,
             estimated_usage=usage_capture["estimated_usage"],
             exact_usage=usage_capture["exact_usage"],
             usage_capture_status=usage_capture["usage_capture_status"],
@@ -1747,6 +1777,36 @@ DEPTH_DEFAULTS = {
     "exhaustive": {"policy": "both",        "count_first": 2, "count_final": 2},
 }
 
+# Kind-aware depth defaults (P9.S1): post gates get sweeps by default,
+# planning gates stay cheap. Explicit --review-depth always wins.
+KIND_DEPTH_DEFAULTS = {
+    "post-slice": "thorough",
+    "post-phase": "thorough",
+}
+
+
+def resolve_review_depth(explicit: str | None, kind: str) -> str:
+    if explicit is not None:
+        return explicit
+    return KIND_DEPTH_DEFAULTS.get(kind, "standard")
+
+
+def model_for_invocation(
+    kind: str,
+    role: str,
+    *,
+    cli_model: str | None = None,
+    env: dict | None = None,
+) -> str | None:
+    """P9.S1 model-tier matrix. No cross-tier fallback by design:
+    spec/plan primaries -> LIGHT; post gates and all sweeps -> STRONG."""
+    env = env if env is not None else os.environ
+    if cli_model:
+        return cli_model
+    if role != "primary" or kind in ("post-slice", "post-phase"):
+        return env.get("AGENT_REVIEWER_MODEL_STRONG") or None
+    return env.get("AGENT_REVIEWER_MODEL_LIGHT") or None
+
 
 def plan_sweeps(
     *,
@@ -1840,7 +1900,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     sp_review.add_argument(
         "--allow-missing-resolution",
         action="store_true",
-        help="Waive the resolution-required gate for post-slice/post-phase round 2+.",
+        help="Waive the resolution-required gate for round 2+ (any kind).",
     )
     sp_review.add_argument(
         "--mode",
@@ -1849,7 +1909,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Override the round-1-vs-N prompt mode. Default 'auto'.",
     )
     sp_review.add_argument("--review-depth", choices=["standard", "thorough", "exhaustive"],
-                        default="standard")
+                        default=None,
+                        help="Default: 'thorough' for post-slice/post-phase, 'standard' otherwise.")
+    sp_review.add_argument(
+        "--model",
+        default=None,
+        help="Override the reviewer model for every reviewer in this round "
+             "(bypasses the LIGHT/STRONG tier matrix).",
+    )
     sp_review.add_argument("--independent-reviewers", type=int, default=None)
     sp_review.add_argument("--sweep-policy",
                         choices=["first-round", "final-ready", "both", "never"], default=None)
@@ -1926,6 +1993,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     sp_stats = subparsers.add_parser("stats", help="Summarize review-chain usage and timing metrics")
     sp_stats.add_argument("--output-dir", default="docs/reviewer")
     sp_stats.add_argument("--json", action="store_true", help="Emit normalized JSON instead of a text table")
+    sp_stats.add_argument(
+        "--since",
+        default=None,
+        type=parse_since,
+        help="Only count rounds started on/after this UTC date/datetime (ISO format).",
+    )
 
     return parser.parse_args(argv)
 
@@ -2164,10 +2237,13 @@ def _provider_usage_records_for_stats(chain_dir: Path, round_entry: dict) -> lis
     return records
 
 
-def collect_review_stats(output_dir: Path) -> dict:
+def collect_review_stats(output_dir: Path, since: dt.datetime | None = None) -> dict:
     groups = {kind: _empty_stats_group() for kind in STATS_KINDS}
     providers: dict[str, dict] = {}
     chain_count = 0
+    excluded_legacy_rounds = 0
+    uncorrelated_chains: list[str] = []
+    slice_chains: dict[str, dict[str, list]] = {}
 
     for manifest_path in sorted(output_dir.glob("**/chain.json")):
         try:
@@ -2179,7 +2255,20 @@ def collect_review_stats(output_dir: Path) -> dict:
         chain_count += 1
         kind = manifest.get("kind") if manifest.get("kind") in STATS_KINDS else "other"
         group = groups[kind]
+
+        # Filter rounds by --since window.
+        in_window_rounds = []
         for round_entry in manifest.get("rounds", []) or []:
+            if since is not None:
+                started = _round_started_at(round_entry)
+                if started is None:
+                    excluded_legacy_rounds += 1
+                    continue
+                if started < since:
+                    continue
+            in_window_rounds.append(round_entry)
+
+        for round_entry in in_window_rounds:
             group["round_count"] += 1
             duration = round_entry.get("duration_ms")
             if isinstance(duration, (int, float)):
@@ -2216,6 +2305,14 @@ def collect_review_stats(output_dir: Path) -> dict:
                 if isinstance(invocation_duration, (int, float)):
                     provider_stats["total_duration_ms"] += int(invocation_duration)
 
+        # Per-slice correlation: spec/plan/post-slice chains only.
+        if kind in ("spec", "plan", "post-slice") and in_window_rounds:
+            work_id = manifest.get("work_id")
+            if not work_id:
+                uncorrelated_chains.append(manifest.get("chain") or manifest_path.parent.name)
+            else:
+                slice_chains.setdefault(work_id, {}).setdefault(kind, []).extend(in_window_rounds)
+
     for group in groups.values():
         if group["round_count"]:
             group["average_duration_ms"] = round(group["total_duration_ms"] / group["round_count"])
@@ -2230,11 +2327,44 @@ def collect_review_stats(output_dir: Path) -> dict:
             provider_stats["average_duration_ms"] = round(
                 provider_stats["total_duration_ms"] / provider_stats["round_count"]
             )
+
+    # Compute per-slice metrics.
+    PASSING = ("ready", "ready with small edits")
+    passing_slices = []
+    for work_id, kinds in slice_chains.items():
+        post_rounds = kinds.get("post-slice", [])
+        if not post_rounds:
+            continue
+        latest = max(
+            post_rounds,
+            key=lambda r: ((_round_started_at(r) or dt.datetime.min.replace(tzinfo=dt.timezone.utc)), int(r.get("round") or 0)),
+        )
+        if (latest.get("merged_verdict") or latest.get("verdict")) in PASSING:
+            passing_slices.append(work_id)
+    # Numerator counts reviewer INVOCATIONS, not manifest round entries:
+    # a thorough round stores its sweeps inside round_entry["reviewers"].
+    # Legacy/single-reviewer rounds have no "reviewers" key -> count 1.
+    rounds_total = sum(
+        len(round_entry.get("reviewers") or [None])
+        for work_id in passing_slices
+        for rounds in slice_chains[work_id].values()
+        for round_entry in rounds
+    )
+    per_slice = {
+        "slice_count": len(passing_slices),
+        "rounds_total": rounds_total,
+        "rounds_per_slice": (round(rounds_total / len(passing_slices), 2) if passing_slices else None),
+        "uncorrelated_chains": sorted(uncorrelated_chains),
+        "per_slice_complete": not uncorrelated_chains,
+    }
+
     return {
         "chain_count": chain_count,
         "round_count": sum(g["round_count"] for g in groups.values()),
+        "excluded_legacy_rounds": excluded_legacy_rounds,
         "groups": groups,
         "provider_comparison": providers,
+        "per_slice": per_slice,
     }
 
 
@@ -2257,10 +2387,21 @@ def print_stats_table(stats: dict) -> None:
                 f"{data['estimated_output_tokens']:>11} {data['estimated_total_tokens']:>10} "
                 f"{data['average_duration_ms']:>7}"
             )
+    ps = stats.get("per_slice") or {}
+    print()
+    print(f"per-slice: slices={ps.get('slice_count')} rounds={ps.get('rounds_total')} "
+          f"rounds/slice={ps.get('rounds_per_slice')} complete={ps.get('per_slice_complete')}")
+    if ps.get("uncorrelated_chains"):
+        print(f"  WARNING: {len(ps['uncorrelated_chains'])} uncorrelated chain(s) "
+              f"(missing work_id) — early-gate rounds may be undercounted; "
+              f"rounds/slice is not claimable from this window: "
+              f"{', '.join(ps['uncorrelated_chains'])}")
+    if stats.get("excluded_legacy_rounds"):
+        print(f"  note: {stats['excluded_legacy_rounds']} round(s) without timestamps excluded by --since")
 
 
 def run_stats(args) -> int:
-    stats = collect_review_stats(Path(args.output_dir))
+    stats = collect_review_stats(Path(args.output_dir), since=args.since)
     if args.json:
         print(json.dumps(stats, indent=2))
     else:
@@ -2443,6 +2584,7 @@ def main() -> int:
             file=sys.stderr,
         )
         return 2
+    args.review_depth = resolve_review_depth(args.review_depth, args.kind)
     root = repo_root()
     target = (root / args.file).resolve() if not Path(args.file).is_absolute() else Path(args.file).resolve()
     if not target.exists():
@@ -2530,8 +2672,7 @@ def main() -> int:
             manifest["work_id"] = args.work_id
 
     if (
-        args.kind in ("post-slice", "post-phase")
-        and manifest["rounds"]
+        manifest["rounds"]
         and not args.allow_missing_resolution
     ):
         prior = manifest["rounds"][-1]
@@ -2855,6 +2996,7 @@ def main() -> int:
         "base_ref": base_ref,
         "base_ref_source": base_source,
         "diff_included": base_source in ("auto", "explicit") and not args.no_diff and bool(diff_section),
+        "depth_resolved": args.review_depth,
     }
     manifest["rounds"].append(round_entry)
     write_manifest(manifest_path, manifest)

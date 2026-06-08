@@ -158,7 +158,7 @@ When `docs/tasklist.json` exists, a passing spec review is not complete until th
 
 ### 2. Plan review (after plan save, before execution handoff)
 
-After saving the plan, run `[[external-review]]` with `--kind plan` against the plan, passing the spec as `--context`. Iterate until the verdict is `ready` or `ready with small edits` before proceeding to the handoff step below. Do not ask the user before this review unless blocked.
+After saving the plan, run `[[external-review]]` with `--kind plan` against the plan, passing the spec as `--context` and `--work-id <slice-id>` when a tasktool row exists (required for per-slice stats correlation). Prefer `tasktool brief <slice-id>` output over the full `docs/tasklist.json` as tracker context. Iterate until the verdict is `ready` or `ready with small edits` before proceeding to the handoff step below. If a round returns `revise`, write `r{N}-resolution.md` before re-submitting — the CLI refuses the next round without it. Do not ask the user before this review unless blocked.
 
 After the plan review verdict is `ready` / `ready with small edits`, set the slice's workflow step before handing off:
 
