@@ -495,8 +495,6 @@ def _overlap_keys(spans):
 
 
 def _node_html(p, ta, td, off, color):
-    sd = p.started if p.started.when else p.created
-    clause = f'<span class="dim"> started {_fmt(sd)}</span>' if sd.when else ""
     key = _html.escape(p.key)
     pos = f'data-ta="{ta}" data-td="{td}"'
     return (f'<div class="phase-band" data-key="{key}" '
@@ -506,7 +504,7 @@ def _node_html(p, ta, td, off, color):
             f'{pos}></div>'
             f'<div class="phase-title" data-key="{key}" '
             f'style="top:{td}px;color:{color}" {pos}>'
-            f'{key} — {_html.escape(p.label())}{clause}</div>')
+            f'{key} — {_html.escape(p.label())}</div>')
 
 
 def _ring_html(p, ta, td, off):
@@ -519,7 +517,7 @@ def _ring_html(p, ta, td, off):
             f'{pos}></div>'
             f'<div class="ring-label" data-key="{key}" '
             f'style="top:{td}px;color:{ring}" {pos}>'
-            f'{key} — {_html.escape(p.label())} {label} · {_fmt(p.closed)}</div>')
+            f'{key} — {_html.escape(p.label())} {label}</div>')
 
 
 def _duration_text(started, closed):
@@ -557,8 +555,7 @@ def _card(item, ta, td, side, color, off, css):
             f'onclick="this.classList.toggle(\'open\')" '
             f'style="top:{td}px;border-color:{color}66;background:{color}14" '
             f'{pos}>'
-            f'<b>{key}</b> {_html.escape(item.label())}'
-            f'<span class="dim"> {_fmt(item.closed)}</span>{detail}</div>'
+            f'<b>{key}</b> {_html.escape(item.label())}{detail}</div>'
             f'<div class="{dot_css} {side}-dot" data-key="{key}" '
             f'style="top:{td}px;margin-left:{off:.0f}px;background:{color}" '
             f'{pos}></div>')

@@ -192,3 +192,29 @@ def test_x_only_day_gets_pill_even_when_hidden():
     html = render.render_html("fixture", items, generated=GEN, show_x=False).html
     # X-only day 25 May is active -> a date pill, even though X cards are CSS-hidden
     assert re.search(r'class="date-pill[^>]*>25 May 2026<', html)
+
+
+def test_card_face_has_no_date_but_detail_does():
+    items = [
+        model._item("P1", "phase", None,
+                    phase("P1", status="done", started="2026-05-19", closed="2026-05-19")),
+        model._item("P1.S1", "slice", "P1",
+                    slice_("S1", status="done", closed="2026-05-19", title="Foo slice")),
+    ]
+    html = render.render_html("fixture", items, generated=GEN).html
+    card = re.search(r'<div class="slice-card[^>]*data-key="P1\.S1".*?</div>\s*</div>',
+                     html, re.S).group(0)
+    face, _, detail = card.partition('<div class="detail"')
+    assert "19 May 2026" not in face        # date stripped from the visible face
+    assert "19 May 2026" in detail          # still in the click-to-expand popout
+    assert "closed" in detail               # datetime + duration retained
+
+
+def test_phase_node_and_ring_faces_have_no_inline_date():
+    items = [model._item("P1", "phase", None,
+                         phase("P1", status="done", started="2026-05-19", closed="2026-05-20"))]
+    html = render.render_html("fixture", items, generated=GEN).html
+    title = re.search(r'<div class="phase-title"[^>]*>(.*?)</div>', html, re.S).group(1)
+    assert "May" not in title               # node title face carries no date
+    ring = re.search(r'<div class="ring-label"[^>]*>(.*?)</div>', html, re.S).group(1)
+    assert "May" not in ring and "complete" in ring
