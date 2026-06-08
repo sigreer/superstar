@@ -8,3 +8,4 @@ triage/
 __pycache__/
 *.pyc
 review-stderr.log
+.superstar/
