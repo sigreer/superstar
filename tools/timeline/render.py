@@ -321,7 +321,7 @@ def render_html(project, items, *, generated, show_x=False):
                            (("R", 9),), phase=p.key, item=p))
 
     counters = {}
-    for s in sorted(slices, key=lambda i: i.closed.when):
+    for s in sorted(slices, key=lambda i: _eff_end(i.closed)):
         if s.parent not in spans:
             unplaced.append(s.key)
             continue
@@ -330,15 +330,15 @@ def render_html(project, items, *, generated, show_x=False):
             side = "left" if lane_of[s.parent] % 2 == 0 else "right"
         else:
             side = "left" if n % 2 == 0 else "right"
-        els.append(_El(s.key, "card", s.closed.when,
+        els.append(_El(s.key, "card", _eff_end(s.closed),
                        (("L" if side == "left" else "R", 14), ("C", 7)),
                        phase=s.parent, item=s, side=side))
 
     # X-items reserve layout space even while hidden, so toggling them on
     # never overlaps existing content.
-    for n, i in enumerate(sorted(xs, key=lambda i: i.closed.when)):
+    for n, i in enumerate(sorted(xs, key=lambda i: _eff_end(i.closed))):
         side = "left" if n % 2 == 0 else "right"
-        els.append(_El(i.key, "card", i.closed.when,
+        els.append(_El(i.key, "card", _eff_end(i.closed),
                        (("L" if side == "left" else "R", 14), ("C", 7)),
                        item=i, side=side))
 
@@ -477,9 +477,11 @@ def _ring_html(p, ta, td, off):
 
 
 def _duration_text(started, closed):
-    if started.when is None or closed.when is None:
+    start_eff = started.when            # starts stay at 00:00 for day precision
+    close_eff = _eff_end(closed)        # ends resolve to end-of-day
+    if start_eff is None or close_eff is None:
         return ""
-    delta = closed.when - started.when
+    delta = close_eff - start_eff
     total = int(delta.total_seconds())
     if total <= 0:
         return ""

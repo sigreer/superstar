@@ -83,3 +83,17 @@ def test_phase_span_falls_back_to_slice_closes():
     assert start == dt.datetime(2026, 5, 15)   # earliest slice close wins
     assert end == dt.datetime(2026, 5, 19, 23, 59, 59)  # day-precision close -> end-of-day
     assert close_only is False
+
+
+def test_duration_positive_for_same_day_minute_start_day_close():
+    started = model.DateValue(dt.datetime(2026, 5, 19, 23, 41, 0), "minute", "replay")
+    closed = model.DateValue(dt.datetime(2026, 5, 19, 0, 0, 0), "day", "field")
+    text = render._duration_text(started, closed)
+    assert text.strip() != ""   # day/minute mixed -> "· 1 day", never empty
+    assert "-" not in text       # never a negative/inverted duration
+
+
+def test_duration_minute_pair_unchanged():
+    started = model.DateValue(dt.datetime(2026, 5, 21, 17, 21, 0), "minute", "replay")
+    closed = model.DateValue(dt.datetime(2026, 5, 21, 18, 15, 0), "minute", "replay")
+    assert render._duration_text(started, closed) == " · 0h 54m"
