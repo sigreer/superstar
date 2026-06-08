@@ -94,18 +94,6 @@ def test_open_label_clear_of_cards():
             assert abs(label - top) >= 20
 
 
-def test_gap_segment_sits_between_rendered_content():
-    p1 = _phase("P1", status="done", closed="2026-05-01")   # close-only
-    p2 = _phase("P2", status="done", closed="2026-05-11")   # close-only
-    h = render.render_html("t", [p1, p2], generated=GEN).html
-    rings = _tops(h, "phase-ring")
-    m = re.search(r'<div class="gap" [^>]*data-ta="(-?\d+)" data-ha="(\d+)"', h)
-    assert m, "gap segment missing"
-    g_top, g_h = int(m.group(1)), int(m.group(2))
-    assert g_top > rings["P1"]
-    assert g_top + g_h < rings["P2"]
-
-
 def test_phase_prominence_markup():
     p = _phase("P1", status="done", started="2026-06-01", closed="2026-06-02",
                title="Big unit of work")

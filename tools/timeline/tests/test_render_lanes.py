@@ -29,28 +29,6 @@ def test_lane_frees_after_phase_closes():
     assert n == 2 and lanes["P3"] == lanes["P1"]
 
 
-def test_quiet_gaps_between_coverage():
-    spans = [("P1", D(1), D(3)), ("P2", D(3, 12), D(5)), ("P3", D(9), D(10))]
-    gaps = render.quiet_gaps([(s, e) for _, s, e in spans])
-    # P1->P2 gap is 12h: below the 24h threshold, not reported.
-    assert gaps == [(D(5), D(9))]
-
-
-def test_quiet_gaps_split_by_interior_anchor():
-    # A rendered event inside a coverage hole must never sit inside a
-    # reported gap: the anchor splits the gap.
-    cover = [(D(1), D(3)), (D(9), D(10))]
-    gaps = render.quiet_gaps(cover, anchors=[D(6)])
-    assert gaps == [(D(3), D(6)), (D(6), D(9))]
-
-
-def test_quiet_gaps_anchor_near_edge_suppresses_short_remainder():
-    # Anchor 12h after coverage ends: the sub-gap before it is below the
-    # threshold and disappears; only the long remainder is reported.
-    gaps = render.quiet_gaps([(D(1), D(3)), (D(9), D(10))], anchors=[D(3, 12)])
-    assert gaps == [(D(3, 12), D(9))]
-
-
 def test_day_precision_close_is_end_of_day_not_inverted():
     closed = model.DateValue(dt.datetime(2026, 5, 19, 0, 0, 0), "day", "field")
     assert render._eff_end(closed) == dt.datetime(2026, 5, 19, 23, 59, 59)
@@ -67,3 +45,33 @@ def test_two_same_day_phases_get_distinct_lanes():
     lane_of, count = render.assign_lanes([(k, s, e) for k, (s, e, _) in spans.items()])
     assert count == 2 and lane_of["P3"] != lane_of["P4"]
     assert "P3" in render._overlap_keys(spans) and "P4" in render._overlap_keys(spans)
+
+
+from datetime import date
+
+
+def test_classify_days_active_short_idle_and_quiet_run():
+    active = {date(2026, 5, 19), date(2026, 5, 21), date(2026, 6, 5)}
+    out = render.classify_days(active)
+    # 19th active; 20th is a 1-day idle -> own day marker; 21st active;
+    # 22 May..4 Jun is a 14-day idle run (>=3) -> single quiet; 5 Jun active.
+    assert [e[0] for e in out] == ["day", "day", "day", "quiet", "day"]
+    assert out[0] == ("day", date(2026, 5, 19), True)
+    assert out[1] == ("day", date(2026, 5, 20), False)   # short idle pill
+    assert out[2] == ("day", date(2026, 5, 21), True)
+    assert out[3][0] == "quiet" and out[3][3] == 14       # 14 quiet days
+    assert out[4] == ("day", date(2026, 6, 5), True)
+
+
+def test_classify_days_two_day_idle_not_collapsed():
+    active = {date(2026, 5, 19), date(2026, 5, 22)}       # 20,21 idle = 2 days < 3
+    out = render.classify_days(active)
+    assert [e[0] for e in out] == ["day", "day", "day", "day"]
+    assert out[1][2] is False and out[2][2] is False      # both idle pills
+
+
+def test_classify_days_three_day_idle_collapses():
+    active = {date(2026, 5, 19), date(2026, 5, 23)}       # 20,21,22 idle = 3 days
+    out = render.classify_days(active)
+    assert [e[0] for e in out] == ["day", "quiet", "day"]
+    assert out[1][3] == 3

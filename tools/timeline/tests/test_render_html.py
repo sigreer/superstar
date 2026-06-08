@@ -131,21 +131,6 @@ def test_unknown_start_omits_started_clause():
     assert "started —" not in h
 
 
-def test_gap_markup_never_spans_rendered_anchors():
-    # Two close-only phases ten days apart with an X completion in between:
-    # the X anchor splits the quiet gap, so two gap labels render, not one
-    # ten-day gap drawn across the X card.
-    p1 = model._item("P1", "phase", None,
-                     phase("P1", status="done", closed="2026-05-01"))
-    p2 = model._item("P2", "phase", None,
-                     phase("P2", status="done", closed="2026-05-11"))
-    x1 = model._item("X1", "x", None,
-                     x("X1", status="done", closed="2026-05-06"))
-    h = render.render_html("fixture", [p1, p2, x1], generated=GEN).html
-    assert h.count("gap-label") >= 2          # split into two gaps
-    assert "10 quiet days" not in h           # never one gap across the anchor
-
-
 def test_cancelled_phase_without_done_slices_absent_from_html():
     p = model._item("P16", "phase", None,
                     phase("P16", status="cancelled", closed="2026-05-24",

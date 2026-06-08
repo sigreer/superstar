@@ -12,7 +12,7 @@ SLATE = "#8395a7"
 PX_PER_HOUR = 3.0
 MIN_GAP_PX = 34     # bursts expand to at least this much per adjacent pair
 MAX_GAP_PX = 140    # quiet stretches compress to at most this much
-GAP_THRESHOLD_HOURS = 24
+QUIET_RUN_DAYS = 3      # a run of >= this many idle days collapses to one segment
 
 
 def _done_slices(phase_key, items):
@@ -118,31 +118,34 @@ def assign_lanes(spans):
     return assignment, len(lane_ends)
 
 
-def quiet_gaps(intervals, threshold_hours=GAP_THRESHOLD_HOURS, anchors=()):
-    """Merge phase coverage intervals; return gaps longer than the threshold.
-
-    intervals: list of (start, end) datetimes (end None = open: covers to max).
-    anchors: datetimes of every rendered point event (slice closes, X closes,
-    phase boundaries). Each anchor counts as zero-length coverage, so a
-    reported gap can never contain a rendered item — an anchor inside a hole
-    splits it.
-    -> list of (gap_start, gap_end)
+def classify_days(active_dates):
+    """Walk the inclusive calendar range over the active-day set and classify
+    each day. Returns an ordered list of:
+      ("day", date, is_active)                  -- a date marker (pill + divider)
+      ("quiet", run_start, run_end, n_days)     -- a collapsed run of >= QUIET_RUN_DAYS idle days
+    Idle runs only occur strictly between active days (the range is framed by the
+    first and last active day), so there is never a leading/trailing idle run.
     """
-    intervals = list(intervals) + [(a, a) for a in anchors]
-    if not intervals:
+    if not active_dates:
         return []
-    inf = dt.datetime.max
-    merged = []
-    for start, end in sorted((s, e or inf) for s, e in intervals):
-        if merged and start <= merged[-1][1]:
-            merged[-1][1] = max(merged[-1][1], end)
+    days = sorted(active_dates)
+    lo, hi, active = days[0], days[-1], set(days)
+    out, run = [], []
+    one = dt.timedelta(days=1)
+    d = lo
+    while d <= hi:
+        if d in active:
+            if run:
+                if len(run) >= QUIET_RUN_DAYS:
+                    out.append(("quiet", run[0], run[-1], len(run)))
+                else:
+                    out.extend(("day", r, False) for r in run)
+                run = []
+            out.append(("day", d, True))
         else:
-            merged.append([start, end])
-    gaps = []
-    for (s0, e0), (s1, e1) in zip(merged, merged[1:]):
-        if (s1 - e0).total_seconds() / 3600.0 > threshold_hours:
-            gaps.append((e0, s1))
-    return gaps
+            run.append(d)
+        d += one
+    return out
 
 
 from dataclasses import dataclass as _dataclass
@@ -225,22 +228,6 @@ def layout(els, scale, direction="asc"):
         for t, h in e.tracks:
             bottom[t] = y + h
     return max((e.ys[direction] + e.half() for e in els), default=0.0)
-
-
-def _gap_bounds(els, direction, g0, g1):
-    """Pixel bounds for a quiet gap, hugging the actual rendered content on
-    each side (never a dotted segment beside dead space). -> (top, bottom)
-    or None when the nudged layout left no room."""
-    newer_first = direction == "desc"
-    above = [e for e in els if (e.when >= g1 if newer_first else e.when <= g0)]
-    below = [e for e in els if (e.when <= g0 if newer_first else e.when >= g1)]
-    if not above or not below:
-        return None
-    top = max(e.ys[direction] + e.half() for e in above)
-    bot = min(e.ys[direction] - e.half() for e in below)
-    if bot - top < 30:
-        return None
-    return top + 6, bot - 6
 
 
 def _color(phase_key):
@@ -374,26 +361,9 @@ def render_html(project, items, *, generated, show_x=False):
             f'data-ta="{ya:.0f}" data-ha="{ha:.0f}" '
             f'data-td="{yd:.0f}" data-hd="{hd:.0f}"></div>')
 
-    # Quiet gaps: time gaps from coverage+anchors, pixel bounds hugging the
-    # final (nudged) positions of the content either side.
-    gaps = quiet_gaps([(s, e) for s, e, _ in spans.values()], anchors=anchors)
-    for gi, (gap_start, gap_end) in enumerate(gaps):
-        ba = _gap_bounds(els, "asc", gap_start, gap_end)
-        bd = _gap_bounds(els, "desc", gap_start, gap_end)
-        if not ba or not bd:
-            continue
-        ga0, ga1 = (b + PAD_TOP for b in ba)
-        gd0, gd1 = (b + PAD_TOP for b in bd)
-        days = max(1, round((gap_end - gap_start).total_seconds() / 86400))
-        parts.append(
-            f'<div class="gap" data-key="gap{gi}" '
-            f'style="top:{gd0:.0f}px;height:{gd1 - gd0:.0f}px" '
-            f'data-ta="{ga0:.0f}" data-ha="{ga1 - ga0:.0f}" '
-            f'data-td="{gd0:.0f}" data-hd="{gd1 - gd0:.0f}"></div>'
-            f'<div class="gap-label" data-key="gap{gi}" '
-            f'style="top:{(gd0 + gd1) / 2:.0f}px" '
-            f'data-ta="{(ga0 + ga1) / 2:.0f}" data-td="{(gd0 + gd1) / 2:.0f}">'
-            f'{days} quiet day{"s" if days != 1 else ""}</div>')
+    # Quiet-day rendering is added by Task 4 (date pills, dividers, collapsed
+    # quiet segments) using classify_days(). The hour-threshold gap rendering
+    # was retired with quiet_gaps/_gap_bounds; gaps do not render until then.
 
     # Point elements.
     for e in els:
