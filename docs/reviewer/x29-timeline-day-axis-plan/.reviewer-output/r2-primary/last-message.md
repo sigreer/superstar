@@ -1,0 +1,24 @@
+1. Findings
+
+F1. RESOLVED — Severity: blocking  
+Task 4 now branches quiet-run bounds by direction. In `desc`, newer content is treated as visually above and older content as below; in `asc`, the reverse is used. See `docs/plans/2026-06-08-X29-timeline-day-axis.md:477-506`.
+
+F2. RESOLVED — Severity: important  
+The plan no longer references the nonexistent `tools/timeline/tests/test_render.py`. Test targets and commands now point at the actual split modules, with an explicit test-layout note at `docs/plans/2026-06-08-X29-timeline-day-axis.md:17` and concrete task commands throughout.
+
+F3. RESOLVED — Severity: important  
+The proposed imports now match the existing suite convention: `from timeline import model, render` and `from timeline.tests.helpers import phase, slice_, x`. See `docs/plans/2026-06-08-X29-timeline-day-axis.md:17`, `:61-62`, `:155-156`, and the Task 4/5 snippets.
+
+2. Open questions / assumptions
+
+I assume the plan/spec really will be committed on `main` before handoff, as stated at `docs/plans/2026-06-08-X29-timeline-day-axis.md:31`. The plan itself now makes that dependency explicit.
+
+3. Suggested document edits
+
+None required.
+
+4. Verification gaps / commands that should be run
+
+The plan’s verification gates are concrete and sufficient for pre-implementation handoff: focused module tests, full `tools/timeline/tests`, full `python3 -m pytest -q`, repo render smoke, multistore render smoke, and human visual acceptance.
+
+Overall verdict: ready
