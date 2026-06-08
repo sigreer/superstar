@@ -60,14 +60,16 @@ def test_phase_span_prefers_started_then_slice_then_created():
     s = _slice("P2", "S1", status="done", started="2026-06-02", closed="2026-06-04")
     start, end, close_only = render.phase_span(p, [p, s])
     assert start == dt.datetime(2026, 6, 2)   # earliest slice start
-    assert end == dt.datetime(2026, 6, 5)
+    assert end == dt.datetime(2026, 6, 5, 23, 59, 59)  # day-precision close -> end-of-day
     assert close_only is False
 
 
 def test_close_only_phase():
     p = _phase("P1", status="done", closed="2026-04-29")
     start, end, close_only = render.phase_span(p, [p])
-    assert start is None and end == dt.datetime(2026, 4, 29) and close_only is True
+    assert (start is None
+            and end == dt.datetime(2026, 4, 29, 23, 59, 59)  # day-precision close -> end-of-day
+            and close_only is True)
 
 
 def test_phase_span_falls_back_to_slice_closes():
@@ -79,5 +81,5 @@ def test_phase_span_falls_back_to_slice_closes():
                 closed="2026-05-19T11:22")
     start, end, close_only = render.phase_span(p, [p, s1, s2])
     assert start == dt.datetime(2026, 5, 15)   # earliest slice close wins
-    assert end == dt.datetime(2026, 5, 19)
+    assert end == dt.datetime(2026, 5, 19, 23, 59, 59)  # day-precision close -> end-of-day
     assert close_only is False

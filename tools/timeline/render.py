@@ -59,7 +59,7 @@ def phase_span(phase, items):
         start = min(slice_dates) if slice_dates else None
     if start is None:
         start = phase.created.when
-    end = phase.closed.when
+    end = _eff_end(phase.closed)
     return start, end, start is None
 
 
@@ -258,6 +258,22 @@ def _fmt(dv):
     return dv.when.strftime("%-d %b %Y")
 
 
+def _eff_end(dv):
+    """Interval-effective instant for a date value used as an END/close boundary.
+
+    Day-precision dates resolve to 00:00, which is correct for a start but pins a
+    close to the *start* of its day — before same-day minute activity, inverting
+    legacy intervals. As an end boundary a day-precision value resolves to
+    end-of-day (23:59:59) instead. Minute precision and None pass through. This is
+    an internal sort/interval/duration value only; never surface it in a label.
+    """
+    if dv is None or dv.when is None:
+        return None
+    if dv.precision == "day":
+        return dv.when.replace(hour=23, minute=59, second=59)
+    return dv.when
+
+
 def render_html(project, items, *, generated, show_x=False):
     vis = visible_items(items)
     phases = [i for i in vis if i.kind == "phase"]
@@ -277,8 +293,8 @@ def render_html(project, items, *, generated, show_x=False):
     for start, end, _ in spans.values():
         anchors.append(start)
         anchors.append(end or generated)
-    anchors += [s.closed.when for s in slices if s.parent in spans]
-    anchors += [i.closed.when for i in xs]
+    anchors += [_eff_end(s.closed) for s in slices if s.parent in spans]
+    anchors += [_eff_end(i.closed) for i in xs]
     if not anchors:
         anchors = [generated]
     scale = TimeScale(anchors)
