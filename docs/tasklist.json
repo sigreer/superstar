@@ -413,17 +413,23 @@
           ],
           "notes": "",
           "parallel_group": null,
-          "plan_path": null,
+          "plan_path": "docs/plans/2026-06-09-P9.S3-combined-spec-plan-gate.md",
           "planning_status": "proposed",
           "refs": [
             "docs/specs/2026-06-09-P9.S3-combined-spec-plan-gate-design.md",
-            "docs/reviewer/p9-s3-combined-spec-plan-gate-design-spec"
+            "docs/reviewer/p9-s3-combined-spec-plan-gate-design-spec",
+            "docs/plans/2026-06-09-P9.S3-combined-spec-plan-gate.md",
+            "docs/handoffs/2026-06-09-P9.S3-combined-spec-plan-gate-prompt.md",
+            "docs/reviewer/p9-s3-combined-spec-plan-gate-plan"
           ],
-          "reviewer_chain": "docs/reviewer/p9-s3-combined-spec-plan-gate-design-spec",
+          "review_active": true,
+          "review_stage": "passed",
+          "reviewer_chain": "docs/reviewer/p9-s3-combined-spec-plan-gate-plan",
           "started": null,
           "status": "ready",
           "tasks": [],
-          "title": "Combined spec+plan gate for small slices"
+          "title": "Combined spec+plan gate for small slices",
+          "workflow_step": "plan"
         }
       ],
       "spec_path": "docs/specs/2026-06-06-P9-review-pipeline-efficiency-design.md",
