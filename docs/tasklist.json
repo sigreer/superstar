@@ -386,14 +386,12 @@
             "docs/handoffs/2026-06-09-P9.S2-preflight-gate-self-review-prompt.md",
             "docs/reviewer/p9-s2-preflight-gate-self-review-plan"
           ],
-          "review_active": true,
-          "review_stage": "passed",
           "reviewer_chain": "docs/reviewer/p9-s2-preflight-gate-self-review-plan",
           "started": null,
           "status": "ready",
           "tasks": [],
           "title": "Deterministic preflight gate + strengthened self-review checklists",
-          "workflow_step": "plan"
+          "workflow_step": "implement"
         },
         {
           "blocked_on": null,
