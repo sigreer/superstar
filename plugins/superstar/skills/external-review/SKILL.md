@@ -41,6 +41,8 @@ By default the bridge chooses the opposite reviewer provider from the caller:
 
 Provider selection is controlled by `--reviewer-provider auto|codex|claude|custom` or `AGENT_REVIEWER_PROVIDER`. Caller detection is controlled by `--caller-provider auto|claude|codex|unknown` or `AGENT_REVIEWER_CALLER`. When caller detection is `auto`, explicit caller env wins first; known harness env vars are checked next; then the bridge inspects the local process ancestry for unambiguous `claude` or `codex` executables. If both provider and caller are `auto` and the caller cannot be detected, the bridge fails closed and asks for an explicit provider or command.
 
+**Model tiering (optional).** Set `AGENT_REVIEWER_MODEL_LIGHT` and/or `AGENT_REVIEWER_MODEL_STRONG` to tier reviewer models by gate: spec/plan/design/implementation/other primaries use LIGHT; post-slice/post-phase primaries and all sweeps use STRONG. There is no cross-tier fallback — an unset tier simply omits the model override for those invocations. `--model <name>` forces one model for every reviewer in the round. The chosen model is exported as `AGENT_REVIEWER_MODEL` to the reviewer command and recorded in `chain.json`.
+
 The reviewer command is still overrideable via `AGENT_REVIEWER_CMD` or `--reviewer-cmd`. Any explicit reviewer command is treated as `custom` and bypasses provider auto-selection. Custom wrappers are responsible for their own sandboxing.
 
 The default command remains `reviewer-agent`. The safe wrapper contract is:
@@ -99,7 +101,7 @@ external-reviewer review \
     --file <path/to/target.md> \
     --work-id <P2.S3 | P2>   # required for post-slice / post-phase
     [--context <path>]... \
-    [--review-depth thorough] \
+    [--review-depth standard|thorough|exhaustive]  # default: by kind \
     [--reviewer-provider auto|codex|claude|custom] \
     [--caller-provider auto|claude|codex|unknown] \
     [--incremental-budget-chars 400000] \
@@ -127,7 +129,7 @@ When the configured reviewer command exits non-zero, the round is recorded as a 
 
 - The persisted response file is a short stub (≤ 8 KB total): header, status, and the sentinel-stripped tail of the reviewer's stderr capped at 4 KB. No stdout is written.
 - `chain.json` records `status: "failed"`, `returncode: <rc>`, `verdict: null`, `verdict_valid: false` on both the round entry and the per-reviewer entry.
-- For `post-slice` / `post-phase`, the next round's resolution-required gate is **bypassed** with a stderr notice. A process failure has no findings to resolve; the next round is a re-attempt of the same review, not a fix-and-re-review.
+- For any kind, the next round's resolution-required gate is **bypassed** with a stderr notice. A process failure has no findings to resolve; the next round is a re-attempt of the same review, not a fix-and-re-review. For `post-slice` / `post-phase`, a fix subagent is still used when the retry itself returns findings.
 - The next round's preamble walks backward past `status: "failed"` (and legacy `status: "unknown"`) rounds and embeds the merged-findings from the most recent `status: "ok"` round, prefixed with a `Note: rounds N..K were process failures...; skipped.` line. If no successful prior round exists, only the chain summary table is embedded.
 
 **Sentinel-wrapped prompts.** Every prompt is wrapped in `<!-- superstar-prompt:start -->` / `<!-- superstar-prompt:end -->` markers. If a reviewer echoes the prompt on stdout or stderr, the markers let the script strip the echo before persisting to disk, eliminating the recursive prompt-bloat class.
@@ -194,7 +196,7 @@ Manual-approved (`status: "manual-approved"`) and human-bridged (`status: "human
 |---|---|
 | `external-reviewer manual-approve ...` | Record an operator-approved closure on the chain. |
 | `external-reviewer ingest-response ...` | Write an externally-obtained reviewer response into the chain. |
-| `external-reviewer stats [--json]` | Summarize review-chain timing and usage estimates from `docs/reviewer/**/chain.json`. Provider comparison counts reviewer invocations, including sweeps. |
+| `external-reviewer stats [--json] [--since <ISO date>]` | Summarize review-chain timing and usage estimates from `docs/reviewer/**/chain.json`. Provider comparison counts reviewer invocations, including sweeps. `--since` filters to rounds after the given date (rounds without timestamps are excluded and counted). The table includes a rounds-per-slice line; chains without `--work-id` are flagged as `per_slice_complete: false`. |
 | `external-reviewer show-limit` | Print the current `~/.config/superstar/reviewer-state.json` content. |
 | `external-reviewer clear-limit [--reviewer-cmd X]` | Clear the limit entry (for a single reviewer or all). Idempotent. |
 
@@ -228,9 +230,11 @@ Verdict values: `ready`, `ready with small edits`, `revise` (or `null` if unpars
 
 `--review-depth` controls whether independent sweep reviewers run alongside the primary chain reviewer at high-risk checkpoints.
 
-- `standard` (CLI default; cheapest). One primary reviewer. Round 2+ incremental. No sweeps.
-- `thorough` (**recommended for `post-slice` and `post-phase`**). One sweep on round 1; one fresh sweep when the primary first returns `ready` / `ready with small edits`.
+- `standard`. One primary reviewer. Round 2+ incremental. No sweeps. **Default for `spec`, `plan`, `design`, `implementation`, `other`.**
+- `thorough`. One sweep on round 1; one fresh sweep when the primary first returns `ready` / `ready with small edits`. **Default for `post-slice` and `post-phase`.**
 - `exhaustive`. Two sweeps at each checkpoint. Use for risky phases.
+
+Omit `--review-depth` to get the kind defaults above (recorded as `depth_resolved` in `chain.json`). Pass the flag explicitly only to escalate (e.g. `thorough` on a risky plan) or de-escalate deliberately.
 
 Sweep reviewers do not see the primary reviewer's findings on their first pass (anti-anchoring). Findings are merged into `r{N}-merged-findings.md`, and `merged_verdict` is computed over reviewers whose `status` is `"ok"` (failed sweeps are excluded — see the truth table above): `revise` if any ok reviewer is `revise` or has `verdict_valid: false`; `ready with small edits` if any ok reviewer is `ready with small edits` and the rest are `ready`; `ready` only if every ok reviewer is `ready`. If the primary reviewer fails, the round is recorded as a process failure (`merged_verdict: null`) regardless of sweeps.
 
@@ -240,7 +244,7 @@ Each primary/sweep reviewer receives its own `AGENT_REVIEWER_RESPONSE_DIR` and `
 
 ## Resolution artifact
 
-When a post-slice or post-phase round returns `merged_verdict: revise`, the fix subagent MUST write `docs/reviewer/<chain>/r{N}-resolution.md` before the next round is submitted. The script's gate refuses round N+1 without it (exit code 3) unless `--allow-missing-resolution` is passed.
+When any round returns `merged_verdict: revise` (all kinds — spec and plan included as of P9.S1), the fixer MUST write `docs/reviewer/<chain>/r{N}-resolution.md` before the next round is submitted. For spec/plan reviews during planning the coordinator writes it directly; for post-slice/post-phase a fix subagent writes it. The script's gate refuses round N+1 without it (exit code 3) unless `--allow-missing-resolution` is passed.
 
 Required parseable shape:
 
@@ -287,6 +291,10 @@ Comparable estimates use `ceil(chars / 4)` for both prompt and response text. Pr
 | `post-phase`  | The phase archive note or plan                   | Spec; plan; `docs/tasklist.json`                           |
 
 If the project has no `docs/tasklist.json` (and no equivalent top-level tracker), substitute whatever the project uses. Always pass *some* tracker as context so the reviewer sees how the artefact fits the broader plan.
+
+**Trim the tracker context.** Do not pass the full `docs/tasklist.json` when it is large or mostly unrelated to the work item — pass `tasktool brief <work-id>` output written to a scratch file instead. Rule of thumb: any context file whose bulk is unrelated to the target wastes reviewer tokens and attention.
+
+**Stamp `--work-id` on every slice-level review.** `--work-id <slice-id>` is required for `post-slice`/`post-phase` and MUST also be passed for slice-level `spec` and `plan` reviews when a tasktool row exists. Stats correlate a slice's chains by `work_id`; chains without it make the rounds-per-slice metric incomplete (`per_slice_complete: false`).
 
 ## Hard rule — delegation during execution
 

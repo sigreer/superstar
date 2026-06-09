@@ -29,7 +29,11 @@ case "$provider" in
     cat > "$AGENT_REVIEWER_RESPONSE_DIR/reviewer-metadata.json" <<EOF
 {"provider":"codex","codex_events_file":"codex-events.jsonl"}
 EOF
-    codex exec \
+    model_args=()
+    if [[ -n "${AGENT_REVIEWER_MODEL:-}" ]]; then
+      model_args=(-m "$AGENT_REVIEWER_MODEL")
+    fi
+    codex exec "${model_args[@]}" \
       --json \
       --sandbox workspace-write \
       --ephemeral \
@@ -49,7 +53,11 @@ EOF
     cat > "$AGENT_REVIEWER_RESPONSE_DIR/reviewer-metadata.json" <<EOF
 {"provider":"claude","claude_output_file":"claude-output.json"}
 EOF
-    claude --print \
+    model_args=()
+    if [[ -n "${AGENT_REVIEWER_MODEL:-}" ]]; then
+      model_args=(--model "$AGENT_REVIEWER_MODEL")
+    fi
+    claude --print "${model_args[@]}" \
       --output-format json \
       --permission-mode plan \
       --add-dir "$AGENT_REVIEWER_REPO_ROOT" \

@@ -102,6 +102,12 @@ def _build_parser() -> argparse.ArgumentParser:
     p_set.add_argument("--skip-review-gate", action="store_true")
     p_set.add_argument("--allow-ready-close", action="store_true")
     p_set.add_argument("--reason")
+    p_set.add_argument(
+        "--allow-unlanded",
+        action="store_true",
+        help="Allow --status done although the recorded worktree branch has "
+        "not landed; requires --reason (recorded as an audit note)",
+    )
 
     p_infer = sub.add_parser("infer-step")
     group = p_infer.add_mutually_exclusive_group(required=True)
@@ -144,6 +150,10 @@ def _build_parser() -> argparse.ArgumentParser:
     prune_excl.add_argument("--keep-branch", action="store_true")
     prune_excl.add_argument("--force", action="store_true")
     prune_excl.add_argument("--finalize", action="store_true")
+    p_wt_prune.add_argument(
+        "--no-commit", action="store_true",
+        help="Skip the scoped auto-commit of the tracker after prune",
+    )
 
     p_wt_repair = wt_sub.add_parser("repair")
     p_wt_repair.add_argument("id")
@@ -161,6 +171,16 @@ def _build_parser() -> argparse.ArgumentParser:
     p_close.add_argument("--allow-ready-close", action="store_true")
     p_close.add_argument("--reason")
     p_close.add_argument("--no-archive", action="store_true")
+    p_close.add_argument(
+        "--allow-unlanded", action="store_true",
+        help="Close even though the recorded worktree branch has not landed "
+             "on the base branch; requires --reason (recorded as an audit note)",
+    )
+    p_close.add_argument(
+        "--no-commit", action="store_true",
+        help="Skip the scoped auto-commit of lifecycle-authored files "
+             "(tracker stays staged, as before P8.S1)",
+    )
 
     p_cancel = sub.add_parser("cancel")
     p_cancel.add_argument("id")
@@ -414,7 +434,9 @@ def main(argv: list[str]) -> int:
                 review_active=review_active_bool,
                 review_stage=args.review_stage,
                 reviewer_chain=args.reviewer_chain, skip_review_gate=args.skip_review_gate,
-                allow_ready_close=args.allow_ready_close, reason=args.reason,
+                allow_ready_close=args.allow_ready_close,
+                allow_unlanded=args.allow_unlanded,
+                reason=args.reason,
             )
         elif args.cmd == "infer-step":
             return commands.cmd_infer_step(
@@ -471,6 +493,7 @@ def main(argv: list[str]) -> int:
                     keep_branch=args.keep_branch,
                     force=args.force,
                     finalize=args.finalize,
+                    no_commit=args.no_commit,
                 )
             elif args.wt_cmd == "repair":
                 commands.cmd_worktree_repair(repo_root=root, id=args.id)
@@ -482,6 +505,8 @@ def main(argv: list[str]) -> int:
                 reviewer_chain=args.reviewer_chain, skip_review_gate=args.skip_review_gate,
                 allow_ready_close=args.allow_ready_close, reason=args.reason,
                 no_archive=args.no_archive,
+                allow_unlanded=args.allow_unlanded,
+                no_commit=args.no_commit,
             )
         elif args.cmd == "cancel":
             commands.cmd_cancel(
