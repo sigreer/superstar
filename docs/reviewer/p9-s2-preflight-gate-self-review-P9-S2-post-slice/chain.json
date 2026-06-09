@@ -115,10 +115,120 @@
       "base_ref_source": null,
       "diff_included": false,
       "depth_resolved": "thorough"
+    },
+    {
+      "round": 2,
+      "reviewers": [
+        {
+          "role": "primary",
+          "sweep_group": null,
+          "parent_round": 2,
+          "request": "r2-2026-06-09T0514-primary-request.md",
+          "response": "r2-2026-06-09T0514-primary-response.md",
+          "verdict": "ready",
+          "verdict_valid": true,
+          "returncode": 0,
+          "status": "ok",
+          "provider": "codex",
+          "caller_provider": "claude",
+          "model": null,
+          "sandbox": {
+            "repo_root": "/home/simon/Dev/sigreer/skills/superstar/.worktrees/worktree-p9-s2-deterministic-preflight-gate",
+            "scratch_dir": "/tmp/superstar-reviewer-p9-s2-preflight-gate-self-review-P9-S2-post-slice-r2-primary-jcjaex28",
+            "response_dir": "docs/reviewer/p9-s2-preflight-gate-self-review-P9-S2-post-slice/.reviewer-output/r2-primary",
+            "mode": "workspace-write-with-read-access"
+          },
+          "started_at": "2026-06-09T04:14:09.146Z",
+          "finished_at": "2026-06-09T04:16:00.823Z",
+          "duration_ms": 111677,
+          "estimated_usage": {
+            "formula": "ceil(chars / 4)",
+            "prompt_chars": 179927,
+            "response_chars": 2516,
+            "estimated_input_tokens": 44982,
+            "estimated_output_tokens": 629,
+            "estimated_total_tokens": 45611
+          },
+          "exact_usage": null,
+          "usage_capture_status": "estimated_only",
+          "usage_capture_error": null
+        },
+        {
+          "role": "sweep",
+          "sweep_group": 1,
+          "parent_round": 2,
+          "request": "r2-2026-06-09T0514-sweep1-request.md",
+          "response": "r2-2026-06-09T0514-sweep1-response.md",
+          "verdict": "ready",
+          "verdict_valid": true,
+          "returncode": 0,
+          "status": "ok",
+          "provider": "codex",
+          "caller_provider": "claude",
+          "model": null,
+          "sandbox": {
+            "repo_root": "/home/simon/Dev/sigreer/skills/superstar/.worktrees/worktree-p9-s2-deterministic-preflight-gate",
+            "scratch_dir": "/tmp/superstar-reviewer-p9-s2-preflight-gate-self-review-P9-S2-post-slice-r2-sweep1-ireudryl",
+            "response_dir": "docs/reviewer/p9-s2-preflight-gate-self-review-P9-S2-post-slice/.reviewer-output/r2-sweep1",
+            "mode": "workspace-write-with-read-access"
+          },
+          "started_at": "2026-06-09T04:16:00.826Z",
+          "finished_at": "2026-06-09T04:18:46.644Z",
+          "duration_ms": 165818,
+          "estimated_usage": {
+            "formula": "ceil(chars / 4)",
+            "prompt_chars": 41900,
+            "response_chars": 2149,
+            "estimated_input_tokens": 10475,
+            "estimated_output_tokens": 538,
+            "estimated_total_tokens": 11013
+          },
+          "exact_usage": null,
+          "usage_capture_status": "estimated_only",
+          "usage_capture_error": null
+        }
+      ],
+      "status": "ok",
+      "returncode": 0,
+      "started_at": "2026-06-09T04:14:09.146Z",
+      "finished_at": "2026-06-09T04:16:00.823Z",
+      "duration_ms": 111677,
+      "provider": "codex",
+      "caller_provider": "claude",
+      "model": null,
+      "estimated_usage": {
+        "formula": "ceil(chars / 4)",
+        "prompt_chars": 179927,
+        "response_chars": 2516,
+        "estimated_input_tokens": 44982,
+        "estimated_output_tokens": 629,
+        "estimated_total_tokens": 45611
+      },
+      "exact_usage": null,
+      "usage_capture_status": "estimated_only",
+      "usage_capture_error": null,
+      "merged_verdict": "ready",
+      "merged_findings": "r2-merged-findings.md",
+      "request": "r2-2026-06-09T0514-primary-request.md",
+      "response": "r2-2026-06-09T0514-primary-response.md",
+      "resolution": "r1-resolution.md",
+      "resolution_parse_status": "ok",
+      "resolution_waiver": false,
+      "head_sha_at_request": "db42d67bebe44743bd0259d4bfcff34a2d9f0456",
+      "head_sha_after_round": "db42d67bebe44743bd0259d4bfcff34a2d9f0456",
+      "worktree_dirty_at_request": false,
+      "verdict": "ready",
+      "verdict_valid": true,
+      "findings_count": 2,
+      "blocking_findings_count": 0,
+      "base_ref": "d1d478b79ae89be5c4d08b9477c9a5e4506b9a64",
+      "base_ref_source": "auto",
+      "diff_included": true,
+      "depth_resolved": "thorough"
     }
   ],
   "sweep_checkpoints": {
     "first-round": "completed",
-    "final-ready": "pending"
+    "final-ready": "completed"
   }
 }
