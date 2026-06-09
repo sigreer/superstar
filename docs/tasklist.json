@@ -365,7 +365,7 @@
         },
         {
           "blocked_on": null,
-          "closed": null,
+          "closed": "2026-06-09",
           "created": "2026-06-06",
           "depends_on": [
             "P9.S1"
@@ -387,10 +387,10 @@
             "docs/reviewer/p9-s2-preflight-gate-self-review-plan"
           ],
           "review_active": true,
-          "review_stage": "applying_fixes",
-          "reviewer_chain": "docs/reviewer/p9-s2-preflight-gate-self-review-plan",
+          "review_stage": "passed",
+          "reviewer_chain": "docs/reviewer/p9-s2-preflight-gate-self-review-P9-S2-post-slice",
           "started": "2026-06-09",
-          "status": "in_progress",
+          "status": "done",
           "tasks": [],
           "title": "Deterministic preflight gate + strengthened self-review checklists",
           "workflow_step": "implement",
