@@ -2144,6 +2144,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Skip the round-1 deterministic preflight checks.",
     )
     sp_review.add_argument(
+        "--combined-gate",
+        default=None,
+        metavar="SPEC_PATH",
+        help="Plan-only. Attach this (un-reviewed) spec to the plan review so "
+             "one review covers both. Persisted on the chain; reused on later "
+             "rounds. Exits 2 if used with a non-plan kind or a missing path.",
+    )
+    sp_review.add_argument(
         "--mode",
         choices=["auto", "broad", "incremental"],
         default="auto",
@@ -2883,12 +2891,34 @@ def main() -> int:
             file=sys.stderr,
         )
         return 2
+    # --combined-gate is plan-only; validate before any chain work so misuse
+    # never creates a chain folder.
+    if args.combined_gate is not None and args.kind != "plan":
+        print(
+            "ERROR: --combined-gate is only valid with --kind plan.",
+            file=sys.stderr,
+        )
+        return 2
     args.review_depth = resolve_review_depth(args.review_depth, args.kind)
     root = repo_root()
     target = (root / args.file).resolve() if not Path(args.file).is_absolute() else Path(args.file).resolve()
     if not target.exists():
         print(f"ERROR: target file not found: {target}", file=sys.stderr)
         return 2
+
+    combined_gate_explicit: Path | None = None
+    if args.combined_gate is not None:
+        combined_gate_explicit = (
+            (root / args.combined_gate).resolve()
+            if not Path(args.combined_gate).is_absolute()
+            else Path(args.combined_gate).resolve()
+        )
+        if not combined_gate_explicit.exists():
+            print(
+                f"ERROR: --combined-gate spec not found: {combined_gate_explicit}",
+                file=sys.stderr,
+            )
+            return 2
 
     context: list[Path] = []
     for raw in args.context:
