@@ -142,6 +142,17 @@ After writing the complete plan, look at the spec with fresh eyes and check the 
 
 **5. Scheduling check:** For slice plans, confirm the tasktool row is ratified and that the dependencies named in the plan match `tasktool schedule <phase-id>`. If the plan changed the dependency graph, update tasktool before external plan review so the reviewer sees the real scheduling contract.
 
+**6. Revise-driver checklist + preflight:** Before the plan review, confirm:
+   - Every task's verification step names a concrete command and expected
+     output (no "verify it works").
+   - Referenced files, functions, and flags exist in the repo (or are created
+     by an earlier task in this plan).
+   - The tracker row's work-id, status, and dependencies match what the plan
+     states.
+
+Then run `external-reviewer preflight --kind plan --file <plan-path> --context <spec-path>`
+and fix any failures before invoking the plan review.
+
 If you find issues, fix them inline. No need to re-review — just fix and move on. If you find a spec requirement with no task, add the task.
 
 ## External review checkpoints

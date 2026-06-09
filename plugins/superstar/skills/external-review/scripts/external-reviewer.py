@@ -1840,6 +1840,242 @@ def plan_sweeps(
     return SweepPlan(sweep_count=0, checkpoint=None)
 
 
+# --- P9.S2 deterministic preflight ----------------------------------------
+
+@dataclass
+class PreflightFinding:
+    check: str          # "target" | "placeholder" | "dangling-link" |
+                        # "dangling-path" | "missing-section" | "context"
+    severity: str       # "failure" | "warning"
+    message: str
+    line: int | None = None
+    path: str | None = None
+
+
+@dataclass
+class PreflightResult:
+    findings: list[PreflightFinding]
+
+    @property
+    def failures(self) -> list:
+        return [f for f in self.findings if f.severity == "failure"]
+
+    @property
+    def warnings(self) -> list:
+        return [f for f in self.findings if f.severity == "warning"]
+
+    @property
+    def ok(self) -> bool:
+        return not self.failures
+
+
+_FENCE_LINE_RE = re.compile(r"^\s*(`{3,}|~{3,})")
+_INLINE_CODE_RE = re.compile(r"(`+)(.+?)\1")
+
+
+def _blank_like(line: str) -> str:
+    """Replace every non-newline char with a space (keeps offsets stable)."""
+    return re.sub(r"[^\n]", " ", line)
+
+
+def _mask_fenced(text: str) -> str:
+    """Blank out fenced code blocks (and their fence lines), preserving line
+    count and length so reported line numbers stay accurate."""
+    out = []
+    in_fence = False
+    marker = None
+    for line in text.splitlines(keepends=True):
+        m = _FENCE_LINE_RE.match(line)
+        if not in_fence:
+            if m:
+                in_fence = True
+                marker = m.group(1)
+                out.append(_blank_like(line))
+            else:
+                out.append(line)
+        else:
+            close = m and m.group(1)[0] == marker[0] and len(m.group(1)) >= len(marker)
+            out.append(_blank_like(line))
+            if close:
+                in_fence = False
+                marker = None
+    return "".join(out)
+
+
+def _mask_inline_code(text: str) -> str:
+    """Blank inline-code spans (after fenced blocks are already masked)."""
+    return _INLINE_CODE_RE.sub(lambda m: " " * len(m.group(0)), text)
+
+
+def _inline_code_spans(text: str):
+    """Yield (line_no, content) for inline-code spans outside fenced blocks."""
+    fmasked = _mask_fenced(text)
+    for m in _INLINE_CODE_RE.finditer(fmasked):
+        line_no = fmasked.count("\n", 0, m.start()) + 1
+        yield line_no, m.group(2)
+
+
+_PLACEHOLDER_TOKENS = [
+    (re.compile(r"\bTBD\b", re.IGNORECASE), "TBD"),
+    (re.compile(r"\bTODO\b", re.IGNORECASE), "TODO"),
+    (re.compile(r"\bFIXME\b", re.IGNORECASE), "FIXME"),
+    (re.compile(r"\bXXX\b", re.IGNORECASE), "XXX"),
+    (re.compile(r"\?{3,}"), "???"),
+    (re.compile(r"\blorem ipsum\b", re.IGNORECASE), "lorem ipsum"),
+]
+
+
+def _scan_placeholders(text: str, findings: list) -> None:
+    masked = _mask_inline_code(_mask_fenced(text))
+    for i, line in enumerate(masked.splitlines(), start=1):
+        for rx, label in _PLACEHOLDER_TOKENS:
+            if rx.search(line):
+                findings.append(PreflightFinding(
+                    "placeholder", "failure",
+                    f"placeholder token {label!r} in prose", line=i))
+
+
+_KNOWN_DIRS = ("docs", "skills", "tools", "hooks", "scripts", "tests", "src")
+_GLOB_CHARS = set("<>*{}$…")
+_URL_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9+.\-]*://|^mailto:")
+_MD_LINK_RE = re.compile(r"\[[^\]]*\]\(([^)\s]+)\)")
+_LINE_SUFFIX_RE = re.compile(r":\d+(-\d+)?$")
+
+
+def _looks_repo_relative(s: str) -> bool:
+    if "/" not in s or _URL_RE.search(s):
+        return False
+    first = s.split("/", 1)[0]
+    last = s.rsplit("/", 1)[-1]
+    has_ext = "." in last and not last.endswith(".")
+    return has_ext or first in _KNOWN_DIRS
+
+
+def _exempt_path(s: str) -> bool:
+    if any(c in _GLOB_CHARS for c in s):
+        return True
+    norm = s.lstrip("./")
+    return norm == "docs/reviewer" or norm.startswith("docs/reviewer/")
+
+
+def _path_exists(s: str, repo_root: Path) -> bool:
+    p = Path(s)
+    if not p.is_absolute():
+        p = repo_root / s
+    return p.exists()
+
+
+def _scan_md_links(text: str, repo_root: Path, findings: list) -> None:
+    fmasked = _mask_fenced(text)  # links survive; fenced content gone
+    for m in _MD_LINK_RE.finditer(fmasked):
+        target = m.group(1).split("#", 1)[0].strip()
+        if not target or not _looks_repo_relative(target) or _exempt_path(target):
+            continue
+        if not _path_exists(target, repo_root):
+            line_no = fmasked.count("\n", 0, m.start()) + 1
+            findings.append(PreflightFinding(
+                "dangling-link", "failure",
+                f"markdown link target does not exist: {target}",
+                line=line_no, path=target))
+
+
+def _scan_backtick_paths(text: str, repo_root: Path, findings: list) -> None:
+    for line_no, content in _inline_code_spans(text):
+        s = content.strip()
+        if not s or any(ch.isspace() for ch in s):
+            continue  # paths have no spaces; skip commands/snippets
+        if not _looks_repo_relative(s) or _exempt_path(s):
+            continue
+        candidate = _LINE_SUFFIX_RE.sub("", s)
+        if not _path_exists(candidate, repo_root):
+            findings.append(PreflightFinding(
+                "dangling-path", "warning",
+                f"backtick-quoted path does not exist: {s}",
+                line=line_no, path=s))
+
+
+def _headings(text: str) -> list:
+    fmasked = _mask_fenced(text)
+    return [ln.lstrip("#").strip()
+            for ln in fmasked.splitlines() if ln.lstrip().startswith("#")]
+
+
+def _has_heading_kw(headings: list, *kws: str) -> bool:
+    low = [h.lower() for h in headings]
+    return any(any(k in h for k in kws) for h in low)
+
+
+def _has_checkbox(text: str) -> bool:
+    return re.search(r"(?m)^\s*[-*]\s*\[[ xX]\]", _mask_fenced(text)) is not None
+
+
+def _check_sections(kind: str, text: str, findings: list) -> None:
+    headings = _headings(text)
+    if kind == "plan":
+        if not (_has_heading_kw(headings, "task") or _has_checkbox(text)):
+            findings.append(PreflightFinding(
+                "missing-section", "failure",
+                "plan has no task section (no 'task' heading or checkbox list)"))
+        if not _has_heading_kw(headings, "verif", "accept", "gate"):
+            findings.append(PreflightFinding(
+                "missing-section", "failure",
+                "plan has no verification/acceptance/gates section"))
+    elif kind == "spec":
+        if not _has_heading_kw(headings, "accept", "criteria"):
+            findings.append(PreflightFinding(
+                "missing-section", "failure",
+                "spec has no acceptance-criteria section"))
+    elif kind in ("post-slice", "post-phase"):
+        if not _has_heading_kw(headings, "verif", "evidence", "accept"):
+            findings.append(PreflightFinding(
+                "missing-section", "failure",
+                f"{kind} target has no evidence/verification section"))
+
+
+def run_preflight_checks(kind: str, target: Path, context: list, repo_root: Path) -> PreflightResult:
+    """Deterministic pre-review checks. No LLM calls, no chain I/O."""
+    findings: list[PreflightFinding] = []
+    target = Path(target)
+    try:
+        raw = target.read_bytes()
+    except (FileNotFoundError, IsADirectoryError):
+        findings.append(PreflightFinding("target", "failure", f"target not found: {target}"))
+        return PreflightResult(findings)
+    if not raw.strip():
+        findings.append(PreflightFinding("target", "failure", f"target is empty: {target}"))
+        return PreflightResult(findings)
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        findings.append(PreflightFinding("target", "failure", f"target is not valid UTF-8: {target}"))
+        return PreflightResult(findings)
+
+    _scan_placeholders(text, findings)
+    _scan_md_links(text, repo_root, findings)
+    _scan_backtick_paths(text, repo_root, findings)
+    _check_sections(kind, text, findings)
+
+    for c in context:
+        cp = Path(c)
+        if not cp.is_absolute():
+            cp = repo_root / cp
+        if not cp.exists():
+            findings.append(PreflightFinding(
+                "context", "failure", f"context file not found: {c}", path=str(c)))
+            continue
+        size = cp.stat().st_size
+        if size > 16 * 1024:
+            findings.append(PreflightFinding(
+                "context", "warning",
+                f"context file is large ({size} bytes > 16KB): {c}; "
+                f"prefer `tasktool brief` output", path=str(c)))
+
+    return PreflightResult(findings)
+
+
+# --- end P9.S2 deterministic preflight ------------------------------------
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Send a document to the configured reviewer.")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -1901,6 +2137,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--allow-missing-resolution",
         action="store_true",
         help="Waive the resolution-required gate for round 2+ (any kind).",
+    )
+    sp_review.add_argument(
+        "--no-preflight",
+        action="store_true",
+        help="Skip the round-1 deterministic preflight checks.",
     )
     sp_review.add_argument(
         "--mode",
@@ -1998,6 +2239,25 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=None,
         type=parse_since,
         help="Only count rounds started on/after this UTC date/datetime (ISO format).",
+    )
+
+    sp_preflight = subparsers.add_parser(
+        "preflight",
+        help="Run deterministic pre-review checks (no LLM calls).",
+    )
+    sp_preflight.add_argument("--file", required=True, help="Target document to check.")
+    sp_preflight.add_argument(
+        "--kind", required=True,
+        choices=["spec", "plan", "design", "implementation", "post-slice", "post-phase", "other"],
+        help="Review type, selects the required-section checks.",
+    )
+    sp_preflight.add_argument(
+        "--context", action="append", default=[],
+        help="Context file to check for existence/size. May repeat.",
+    )
+    sp_preflight.add_argument(
+        "--emit", choices=["text", "json"], default="text",
+        help="Output format.",
     )
 
     return parser.parse_args(argv)
@@ -2409,6 +2669,43 @@ def run_stats(args) -> int:
     return 0
 
 
+def _finding_line(f, prefix: str) -> str:
+    loc = f" (line {f.line})" if f.line else ""
+    return f"{prefix} [{f.check}]{loc}: {f.message}"
+
+
+def _print_preflight_text(result, stream=sys.stdout) -> None:
+    if not result.findings:
+        print("preflight passed: no findings.", file=stream)
+        return
+    for f in result.failures:
+        print(_finding_line(f, "FAILURE"), file=stream)
+    for f in result.warnings:
+        print(_finding_line(f, "warning"), file=stream)
+    print(
+        f"\npreflight: {len(result.failures)} failure(s), "
+        f"{len(result.warnings)} warning(s).",
+        file=stream,
+    )
+
+
+def run_preflight(args) -> int:
+    root = repo_root()
+    target = Path(args.file)
+    target = target if target.is_absolute() else root / target
+    context = [Path(c) for c in args.context]
+    result = run_preflight_checks(args.kind, target, context, root)
+    if args.emit == "json":
+        print(json.dumps({
+            "ok": result.ok,
+            "failures": [vars(f) for f in result.failures],
+            "warnings": [vars(f) for f in result.warnings],
+        }, indent=2))
+    else:
+        _print_preflight_text(result)
+    return 0 if result.ok else 4
+
+
 def current_head_sha(root: Path) -> str | None:
     try:
         out = subprocess.run(
@@ -2575,6 +2872,8 @@ def main() -> int:
         return run_clear_limit(args)
     if args.command == "stats":
         return run_stats(args)
+    if args.command == "preflight":
+        return run_preflight(args)
 
     # From here on: args.command == "review"
     if args.kind in ("post-slice", "post-phase") and not args.work_id:
@@ -2713,6 +3012,20 @@ def main() -> int:
                 return 3
 
     round_num = next_round_number(chain_dir)
+
+    if round_num == 1 and not args.no_preflight:
+        preflight = run_preflight_checks(args.kind, target, context, root)
+        if not preflight.ok:
+            print(
+                "ERROR: round-1 preflight failed; refusing to spawn the reviewer. "
+                "Fix the findings below or pass --no-preflight.",
+                file=sys.stderr,
+            )
+            _print_preflight_text(preflight, stream=sys.stderr)
+            return 4
+        for w in preflight.warnings:
+            print(_finding_line(w, "preflight warning"), file=sys.stderr)
+
     timestamp = dt.datetime.now().strftime("%Y-%m-%dT%H%M")
 
     # Best-effort: mutate the slice review block at round start.
