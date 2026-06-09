@@ -16,3 +16,6 @@ hooks/session-start text eol=lf
 *.png binary
 *.jpg binary
 *.gif binary
+
+# Reviewer chain artifacts are generated; do not whitespace-police them
+docs/reviewer/** -whitespace

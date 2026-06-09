@@ -114,6 +114,81 @@
       "base_ref": null,
       "base_ref_source": null,
       "diff_included": false
+    },
+    {
+      "round": 2,
+      "reviewers": [
+        {
+          "role": "primary",
+          "sweep_group": null,
+          "parent_round": 2,
+          "request": "r2-2026-06-08T2233-request.md",
+          "response": "r2-2026-06-08T2233-response.md",
+          "verdict": "revise",
+          "verdict_valid": true,
+          "returncode": 0,
+          "status": "ok",
+          "provider": "codex",
+          "caller_provider": "claude",
+          "model": null,
+          "sandbox": {
+            "repo_root": "/home/simon/Dev/sigreer/skills/superstar/.worktrees/worktree-p8-s2-skill-updates-merge-back-before-close",
+            "scratch_dir": "/tmp/superstar-reviewer-p8-s2-skill-closeout-sequence-P8-S2-post-slice-r2-primary-gatysi_6",
+            "response_dir": "docs/reviewer/p8-s2-skill-closeout-sequence-P8-S2-post-slice/.reviewer-output/r2-primary",
+            "mode": "workspace-write-with-read-access"
+          },
+          "started_at": "2026-06-08T21:33:01.208Z",
+          "finished_at": "2026-06-08T21:37:09.033Z",
+          "duration_ms": 247825,
+          "estimated_usage": {
+            "formula": "ceil(chars / 4)",
+            "prompt_chars": 177570,
+            "response_chars": 2329,
+            "estimated_input_tokens": 44393,
+            "estimated_output_tokens": 583,
+            "estimated_total_tokens": 44976
+          },
+          "exact_usage": null,
+          "usage_capture_status": "estimated_only",
+          "usage_capture_error": null
+        }
+      ],
+      "status": "ok",
+      "returncode": 0,
+      "started_at": "2026-06-08T21:33:01.208Z",
+      "finished_at": "2026-06-08T21:37:09.033Z",
+      "duration_ms": 247825,
+      "provider": "codex",
+      "caller_provider": "claude",
+      "model": null,
+      "estimated_usage": {
+        "formula": "ceil(chars / 4)",
+        "prompt_chars": 177570,
+        "response_chars": 2329,
+        "estimated_input_tokens": 44393,
+        "estimated_output_tokens": 583,
+        "estimated_total_tokens": 44976
+      },
+      "exact_usage": null,
+      "usage_capture_status": "estimated_only",
+      "usage_capture_error": null,
+      "merged_verdict": "revise",
+      "merged_findings": null,
+      "request": "r2-2026-06-08T2233-request.md",
+      "response": "r2-2026-06-08T2233-response.md",
+      "resolution": "r1-resolution.md",
+      "resolution_parse_status": "unparseable",
+      "resolution_waiver": false,
+      "head_sha_at_request": "964da38de0414f86185130fce340584d48f1c31e",
+      "head_sha_after_round": "964da38de0414f86185130fce340584d48f1c31e",
+      "worktree_dirty_at_request": false,
+      "verdict": "revise",
+      "verdict_valid": true,
+      "findings_count": null,
+      "blocking_findings_count": null,
+      "base_ref": "d981a83683bcb6060ae0ac7958af08ffc598513b",
+      "base_ref_source": "auto",
+      "diff_included": true
     }
   ],
   "sweep_checkpoints": {
