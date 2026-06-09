@@ -188,11 +188,15 @@ class _El:
 def layout(els, scale, direction="asc"):
     """Assign collision-free y centres for one reading direction.
 
-    Sequential order beats strict time-proportionality: per phase, the start
-    node is forced strictly above every other element of that phase and the
-    close ring strictly below, then a monotone sweep nudges elements down
-    until every track keeps a minimum vertical separation. Returns the
-    content bottom (max y + half).
+    Sequential order beats strict time-proportionality: per phase, the two
+    anchors (start node, close ring) are forced to opposite ends of the phase
+    block, and which one sits on top follows the reading order. In ``asc``
+    (oldest-first, top->bottom = old->new) the start node is forced strictly
+    above every other element of the phase and the close ring strictly below.
+    In ``desc`` (newest-first) the reading order inverts, so the close ring is
+    forced to the top and the start node to the bottom. A monotone sweep then
+    nudges elements down until every track keeps a minimum vertical
+    separation. Returns the content bottom (max y + half).
     """
     maxy = max((scale.y(e.when) for e in els), default=0.0)
     for e in els:
@@ -207,16 +211,21 @@ def layout(els, scale, direction="asc"):
         node = next((e for e in group if e.kind == "node"), None)
         ring = next((e for e in group if e.kind == "ring"), None)
         rest = [e for e in group if e.kind not in ("node", "ring")]
-        if node:
+        # asc reads top->bottom oldest->newest: start node on top, close ring
+        # below. desc (newest-first) inverts the reading order: close ring on
+        # top, start node below. Force the top anchor strictly above the
+        # phase's other elements and the bottom anchor strictly below.
+        top_el, bottom_el = (node, ring) if direction == "asc" else (ring, node)
+        if top_el:
             others = [e.ys[direction] for e in rest] \
-                + ([ring.ys[direction]] if ring else [])
-            if others and node.ys[direction] >= min(others):
-                node.ys[direction] = min(others) - 1
-        if ring:
+                + ([bottom_el.ys[direction]] if bottom_el else [])
+            if others and top_el.ys[direction] >= min(others):
+                top_el.ys[direction] = min(others) - 1
+        if bottom_el:
             others = [e.ys[direction] for e in rest] \
-                + ([node.ys[direction]] if node else [])
-            if others and ring.ys[direction] <= max(others):
-                ring.ys[direction] = max(others) + 1
+                + ([top_el.ys[direction]] if top_el else [])
+            if others and bottom_el.ys[direction] <= max(others):
+                bottom_el.ys[direction] = max(others) + 1
 
     bottom = {}
     for e in sorted(els, key=lambda e: (e.ys[direction], _RANK[e.kind], e.key)):

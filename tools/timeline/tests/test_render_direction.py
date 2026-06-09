@@ -49,19 +49,26 @@ def test_default_reading_order_is_newest_at_top():
     assert m and int(m.group(1)) == td["P2"]
 
 
-def test_phase_node_precedes_children_in_default_order_too():
-    # The header-before-contents rule holds in BOTH reading orders: in
-    # newest-at-top mode each phase block still opens with its node/title.
+def test_phase_anchors_bracket_children_following_reading_order():
+    # The start node and close ring bracket each phase's child cards, and
+    # which anchor is on top follows the reading order. asc (oldest-first):
+    # start node above the cards, close ring below. desc (newest-first): the
+    # reading order inverts, so the close ring is above the cards and the
+    # start node below (see test_start_node_and_close_ring_swap_ends_*).
     items = _two_phases()
     h = render.render_html("t", items, generated=GEN).html
-    for attr in ("data-ta", "data-td"):
-        nodes = _tops(h, "phase-node", attr)
-        cards = _tops(h, "slice-card", attr)
-        rings = _tops(h, "phase-ring", attr)
-        for pk in ("P1", "P2"):
-            kid = cards[f"{pk}.S1"]
-            assert nodes[pk] < kid, attr
-            assert rings[pk] > kid, attr
+    # asc: node above card above ring.
+    na, ca, ra = (_tops(h, c, "data-ta") for c in
+                  ("phase-node", "slice-card", "phase-ring"))
+    for pk in ("P1", "P2"):
+        kid = ca[f"{pk}.S1"]
+        assert na[pk] < kid < ra[pk]
+    # desc: ring above card above node (anchors swapped).
+    nd, cd, rd = (_tops(h, c, "data-td") for c in
+                  ("phase-node", "slice-card", "phase-ring"))
+    for pk in ("P1", "P2"):
+        kid = cd[f"{pk}.S1"]
+        assert rd[pk] < kid < nd[pk]
 
 
 def test_direction_toggle_markup_and_script():
@@ -79,7 +86,9 @@ def test_range_elements_carry_both_heights():
     m = re.search(r'<div class="strand" data-key="P1"[^>]*data-ta="(-?\d+)" '
                   r'data-ha="(\d+)" data-td="(-?\d+)" data-hd="(\d+)"', h)
     assert m, "strand must carry per-direction top and height"
-    # The strand covers node..ring in both directions.
+    # The strand spans the full node..ring extent in both directions. Which
+    # anchor is the top end swaps with reading order, so compare against
+    # min/max rather than assuming node==top, ring==bottom.
     for top_attr, h_attr in (("data-ta", "data-ha"), ("data-td", "data-hd")):
         nodes = _tops(h, "phase-node", top_attr)
         rings = _tops(h, "phase-ring", top_attr)
@@ -87,17 +96,56 @@ def test_range_elements_carry_both_heights():
                        + top_attr + r'="(-?\d+)"[^>]*'
                        + h_attr + r'="(\d+)"', h)
         top, height = int(sm.group(1)), int(sm.group(2))
-        assert top == nodes["P1"]
-        assert top + height == rings["P1"]
+        assert top == min(nodes["P1"], rings["P1"])
+        assert top + height == max(nodes["P1"], rings["P1"])
 
 
-def test_open_phase_block_reads_header_first_in_default_order():
+def test_open_phase_anchor_follows_reading_order():
+    # An open phase has a start node and an "in progress" (open) label at the
+    # generation instant but no close ring. The start/end anchors still bracket
+    # the children following reading order: asc (oldest-first) puts the start
+    # node on top and the open label at the bottom; desc (newest-first) inverts
+    # it so the open label reads at the top and the start node at the bottom.
     p = _phase("P9", status="ready", started="2026-06-05")
     s = _slice("P9", "S1", status="done", closed="2026-06-05")
     h = render.render_html("t", [p, s], generated=GEN).html
-    nodes = _tops(h, "phase-node", "data-td")
-    cards = _tops(h, "slice-card", "data-td")
-    assert nodes["P9"] < cards["P9.S1"]
+    na, ca, oa = (_tops(h, c, "data-ta") for c in
+                  ("phase-node", "slice-card", "open-label"))
+    assert na["P9"] < ca["P9.S1"] < oa["P9"]
+    nd, cd, od = (_tops(h, c, "data-td") for c in
+                  ("phase-node", "slice-card", "open-label"))
+    assert od["P9"] < cd["P9.S1"] < nd["P9"]
+
+
+def test_start_node_and_close_ring_swap_ends_with_direction():
+    # The phase start (node, 🏎️) and close (ring, 🏁) anchor opposite ends of
+    # the phase block, and which end is *top* must follow the reading order:
+    #   asc  (oldest-first, top->bottom = old->new): start node above ring.
+    #   desc (newest-first): reading order inverts, so the close ring is the
+    #        topmost reading point and the start node the bottommost.
+    # The force-ordering pass must invert with direction (X29 visual defect:
+    # in newest-first the emojis appeared "the wrong way round" because the
+    # start node stayed pinned to the top).
+    items = _two_phases()
+    h = render.render_html("t", items, generated=GEN).html
+    nodes_a = _tops(h, "phase-node", "data-ta")
+    rings_a = _tops(h, "phase-ring", "data-ta")
+    nodes_d = _tops(h, "phase-node", "data-td")
+    rings_d = _tops(h, "phase-ring", "data-td")
+    for pk in ("P1", "P2"):
+        assert nodes_a[pk] < rings_a[pk], f"asc: start node above close ring ({pk})"
+        assert rings_d[pk] < nodes_d[pk], f"desc: close ring above start node ({pk})"
+    # The strand still spans the full phase extent (min..max) in both
+    # directions regardless of which anchor is on top.
+    for top_attr, h_attr in (("data-ta", "data-ha"), ("data-td", "data-hd")):
+        nodes = _tops(h, "phase-node", top_attr)
+        rings = _tops(h, "phase-ring", top_attr)
+        sm = re.search(r'<div class="strand" data-key="P1"[^>]*'
+                       + top_attr + r'="(-?\d+)"[^>]*'
+                       + h_attr + r'="(\d+)"', h)
+        top, height = int(sm.group(1)), int(sm.group(2))
+        assert top == min(nodes["P1"], rings["P1"])
+        assert top + height == max(nodes["P1"], rings["P1"])
 
 
 def test_date_pills_carry_both_direction_tops():
