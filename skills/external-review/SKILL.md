@@ -199,6 +199,7 @@ Manual-approved (`status: "manual-approved"`) and human-bridged (`status: "human
 | `external-reviewer stats [--json] [--since <ISO date>]` | Summarize review-chain timing and usage estimates from `docs/reviewer/**/chain.json`. Provider comparison counts reviewer invocations, including sweeps. `--since` filters to rounds after the given date (rounds without timestamps are excluded and counted). The table includes a rounds-per-slice line; chains without `--work-id` are flagged as `per_slice_complete: false`. |
 | `external-reviewer show-limit` | Print the current `~/.config/superstar/reviewer-state.json` content. |
 | `external-reviewer clear-limit [--reviewer-cmd X]` | Clear the limit entry (for a single reviewer or all). Idempotent. |
+| `external-reviewer preflight ...` | Deterministic pre-review checks (no LLM). Exit 4 on failure. |
 
 ## Reading the response
 
@@ -225,6 +226,30 @@ Verdict values: `ready`, `ready with small edits`, `revise` (or `null` if unpars
 - `--mode` defaults to `auto` (broad on round 1, incremental on round N+).
 - `--mode broad` forces round-1-style on a later round (rare; only when fixes changed broad architecture).
 - `--mode incremental` on round 1 is rejected.
+
+## Preflight (deterministic, no LLM)
+
+`external-reviewer preflight --kind <kind> --file <target> [--context <path>]... [--emit json]`
+runs offline checks that catch the mechanical findings that otherwise burn a
+paid reviewer round:
+
+- placeholder tokens (`TBD`, `TODO`, `FIXME`, `XXX`, `???`, `lorem ipsum`) in
+  prose (failure) — tokens inside fenced or inline code are exempt;
+- dangling markdown-link targets (failure) and dangling backtick-quoted repo
+  paths (warning);
+- missing kind-required sections (`spec` → acceptance criteria; `plan` → a task
+  list and a verification/acceptance section; `post-slice`/`post-phase` → an
+  evidence/verification section);
+- missing context files (failure) and oversized (>16 KB) context files
+  (warning, hinting to pass `tasktool brief` output).
+
+Exit 0 = no failures (warnings allowed); exit 4 = failures present. `--emit json`
+prints `{"ok", "failures", "warnings"}`.
+
+**Round-1 auto-gate.** `review` runs these checks in-process before submitting a
+round-1 review and refuses (exit 4, no reviewer spawned) on failure. Incremental
+rounds (N+1) skip it. Pass `--no-preflight` to skip the gate. A missing
+`--file`/`--context` still fails earlier with exit 2 (unchanged).
 
 ## Review depth
 
@@ -347,7 +372,7 @@ Round number is auto-incremented. Commit the entire chain folder alongside the w
 | 0 | Reviewer succeeded. | Apply feedback. |
 | 2 | Target / context file not found, or required `--work-id` missing. | Fix the path or pass `--work-id`. |
 | 3 | Resolution-required gate violated. | Author the resolution doc and re-run, or pass `--allow-missing-resolution`. |
-| 4 | `chain.json` schema_version newer than supported. | Upgrade `external-reviewer.py`. |
+| 4 | Preflight checks failed, OR `chain.json` schema_version newer than supported. | Read the preflight findings and fix them, or upgrade `external-reviewer.py`. |
 | 5 | Ambiguous legacy-chain match. | Migrate manually. |
 | 6 | `--work-id` mismatch with chain's stored work_id. | Use the correct `--work-id` or a fresh chain folder. |
 | 8 | Reviewer rate-limited. | Read the JSON payload; pick a recovery path from the menu in "Rate-limit handling". |

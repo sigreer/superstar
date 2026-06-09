@@ -52,7 +52,7 @@ The slice's `workflow_step` should be `implement` when execution begins and only
 When the last task in a slice is verified — **before flipping slice status** — run the external-review gate:
 
 - Announce: "I'm using the external-review skill to gate slice close."
-- **REQUIRED SUB-SKILL:** `superstar:external-review` with `--kind post-slice`, passing the plan as `--file` and the spec + `docs/tasklist.json` as `--context`.
+- **REQUIRED SUB-SKILL:** `superstar:external-review` with `--kind post-slice`, passing the plan as `--file`, `--work-id <slice-id>`, and the spec + tracker context as `--context`. Prefer `tasktool brief <slice-id>` output over the full `docs/tasklist.json` when the tasklist is large.
 - On `revise`: address findings, re-submit. Loop until verdict ∈ {ready, ready with small edits}.
 - Only then run `tasktool close <slice-id>` (the CLI re-checks the reviewer chain) — see `[[tasklist-discipline]]`.
 

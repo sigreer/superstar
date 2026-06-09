@@ -120,6 +120,17 @@ After writing the spec document, look at it with fresh eyes:
 2. **Internal consistency:** Do any sections contradict each other? Does the architecture match the feature descriptions?
 3. **Scope check:** Is this focused enough for a single implementation plan, or does it need decomposition?
 4. **Ambiguity check:** Could any requirement be interpreted two different ways? If so, pick one and make it explicit.
+5. **Revise-driver checklist** (the findings reviewers raise most often):
+   - Vague verification/acceptance criteria a reviewer cannot evaluate from the
+     document alone (e.g. "verify it works" with no command).
+   - Claims not grounded in the repo — referenced functions, flags, or files
+     that do not exist.
+   - Tasklist drift: work-id, status, or dependency mismatch vs
+     `docs/tasklist.json`.
+
+Then run `external-reviewer preflight --kind spec --file <spec-path>` (with the
+same `--context` you will pass to the spec review) and fix any failures before
+invoking external review.
 
 Fix any issues inline. No need to re-review — just fix and move on.
 

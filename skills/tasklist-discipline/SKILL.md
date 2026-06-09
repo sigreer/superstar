@@ -205,6 +205,6 @@ The external-reviewer script writes a small transient block (`review_active`, `r
 
 - `[[writing-plans]]` — embeds slice IDs in plan filenames; calls `tasktool show <id>` for context.
 - `[[brainstorming]]` — allocates IDs via `tasktool create` before writing the spec.
-- `[[external-review]]` — passes `docs/tasklist.json` (or `tasktool render` output) as `--context`.
+- `[[external-review]]` — passes tracker context as `--context`; prefer `tasktool brief <work-id>` output over the full `docs/tasklist.json` when the tasklist is large, and stamp `--work-id` on slice-level reviews.
 - `[[subagent-driven-development]]` — calls `tasktool close <slice-id>` at slice end and `tasktool archive-phase` at phase end.
 - `[[project-setup]]` — runs `tasktool init` and `install.sh --hook`.
