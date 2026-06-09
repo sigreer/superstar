@@ -375,6 +375,7 @@
             "skills/external-review/scripts/external-reviewer.py",
             "skills/external-review/SKILL.md"
           ],
+          "landed_base_sha": "3c1480ffd2892b8bdc55c5a8f8af686767d30ec8",
           "notes": "P9.S1 Task 6 review flagged stale tracker-context guidance in skills/executing-plans/SKILL.md (~line 55) and skills/tasklist-discipline/SKILL.md (~line 205): both still instruct passing full docs/tasklist.json with no tasktool-brief preference or --work-id mention. Fold the uniform-guidance fix into S2's checklist work.",
           "parallel_group": null,
           "plan_path": "docs/plans/2026-06-09-P9.S2-preflight-gate-self-review.md",
@@ -395,8 +396,7 @@
           "title": "Deterministic preflight gate + strengthened self-review checklists",
           "workflow_step": "implement",
           "worktree_base_sha": "fa9a8f5fe13d945568470a3ea221bc394c61667a",
-          "worktree_branch": "worktree-p9-s2-deterministic-preflight-gate",
-          "worktree_path": ".worktrees/worktree-p9-s2-deterministic-preflight-gate"
+          "worktree_pruned_at": "2026-06-09"
         },
         {
           "blocked_on": null,
