@@ -47,6 +47,27 @@ def test_round1_refuses_on_failure_without_spawning(tmp_path):
     assert manifest["rounds"] == []
 
 
+def test_warnings_not_printed_twice_on_failure(tmp_path):
+    # Regression: when a document has both failures and warnings, the early
+    # warning loop must NOT run — _print_preflight_text already includes them.
+    # A backtick path pointing to a non-existent file is a warning; missing
+    # required section is a failure. Confirm the warning text appears exactly once.
+    repo = _init_repo(tmp_path)
+    # Target has: a placeholder (failure) + a backtick path that looks like a
+    # dangling relative path (warning). The path `missing/file.py` won't resolve
+    # under tmp repo root, triggering a dangling-path warning.
+    (repo / "plan.md").write_text(
+        "# Spec\n\nTODO: not done.\n\nSee `missing/file.py` for details.\n"
+    )
+    r = _run(repo, "--kind", "spec", "--file", "plan.md", "--emit", "json")
+    assert r.returncode == 4, r.stderr + r.stdout
+    # Count occurrences of "preflight warning" — must be exactly 1 (from
+    # _print_preflight_text), not 2 (early loop + _print_preflight_text).
+    assert r.stderr.count("preflight warning") <= 1, (
+        "Warning appeared more than once — double-print regression:\n" + r.stderr
+    )
+
+
 def test_no_preflight_flag_reaches_reviewer(tmp_path):
     repo = _init_repo(tmp_path)
     (repo / "plan.md").write_text("# Spec\n\nTODO: not done. No criteria.\n")

@@ -1,0 +1,124 @@
+{
+  "schema_version": 1,
+  "chain": "p9-s2-preflight-gate-self-review-P9-S2-post-slice",
+  "kind": "post-slice",
+  "target": "docs/plans/2026-06-09-P9.S2-preflight-gate-self-review.md",
+  "work_id": "P9.S2",
+  "legacy_migrated": false,
+  "rounds": [
+    {
+      "round": 1,
+      "reviewers": [
+        {
+          "role": "primary",
+          "sweep_group": null,
+          "parent_round": 1,
+          "request": "r1-2026-06-09T0456-primary-request.md",
+          "response": "r1-2026-06-09T0456-primary-response.md",
+          "verdict": "revise",
+          "verdict_valid": true,
+          "returncode": 0,
+          "status": "ok",
+          "provider": "codex",
+          "caller_provider": "claude",
+          "model": null,
+          "sandbox": {
+            "repo_root": "/home/simon/Dev/sigreer/skills/superstar/.worktrees/worktree-p9-s2-deterministic-preflight-gate",
+            "scratch_dir": "/tmp/superstar-reviewer-p9-s2-preflight-gate-self-review-P9-S2-post-slice-r1-primary-wq2902zv",
+            "response_dir": "docs/reviewer/p9-s2-preflight-gate-self-review-P9-S2-post-slice/.reviewer-output/r1-primary",
+            "mode": "workspace-write-with-read-access"
+          },
+          "started_at": "2026-06-09T03:56:14.480Z",
+          "finished_at": "2026-06-09T03:59:07.284Z",
+          "duration_ms": 172804,
+          "estimated_usage": {
+            "formula": "ceil(chars / 4)",
+            "prompt_chars": 41778,
+            "response_chars": 3222,
+            "estimated_input_tokens": 10445,
+            "estimated_output_tokens": 806,
+            "estimated_total_tokens": 11251
+          },
+          "exact_usage": null,
+          "usage_capture_status": "estimated_only",
+          "usage_capture_error": null
+        },
+        {
+          "role": "sweep",
+          "sweep_group": 1,
+          "parent_round": 1,
+          "request": "r1-2026-06-09T0456-sweep1-request.md",
+          "response": "r1-2026-06-09T0456-sweep1-response.md",
+          "verdict": "revise",
+          "verdict_valid": true,
+          "returncode": 0,
+          "status": "ok",
+          "provider": "codex",
+          "caller_provider": "claude",
+          "model": null,
+          "sandbox": {
+            "repo_root": "/home/simon/Dev/sigreer/skills/superstar/.worktrees/worktree-p9-s2-deterministic-preflight-gate",
+            "scratch_dir": "/tmp/superstar-reviewer-p9-s2-preflight-gate-self-review-P9-S2-post-slice-r1-sweep1-xzj_9zd9",
+            "response_dir": "docs/reviewer/p9-s2-preflight-gate-self-review-P9-S2-post-slice/.reviewer-output/r1-sweep1",
+            "mode": "workspace-write-with-read-access"
+          },
+          "started_at": "2026-06-09T03:59:07.287Z",
+          "finished_at": "2026-06-09T04:02:19.621Z",
+          "duration_ms": 192334,
+          "estimated_usage": {
+            "formula": "ceil(chars / 4)",
+            "prompt_chars": 41778,
+            "response_chars": 3497,
+            "estimated_input_tokens": 10445,
+            "estimated_output_tokens": 875,
+            "estimated_total_tokens": 11320
+          },
+          "exact_usage": null,
+          "usage_capture_status": "estimated_only",
+          "usage_capture_error": null
+        }
+      ],
+      "status": "ok",
+      "returncode": 0,
+      "started_at": "2026-06-09T03:56:14.480Z",
+      "finished_at": "2026-06-09T03:59:07.284Z",
+      "duration_ms": 172804,
+      "provider": "codex",
+      "caller_provider": "claude",
+      "model": null,
+      "estimated_usage": {
+        "formula": "ceil(chars / 4)",
+        "prompt_chars": 41778,
+        "response_chars": 3222,
+        "estimated_input_tokens": 10445,
+        "estimated_output_tokens": 806,
+        "estimated_total_tokens": 11251
+      },
+      "exact_usage": null,
+      "usage_capture_status": "estimated_only",
+      "usage_capture_error": null,
+      "merged_verdict": "revise",
+      "merged_findings": "r1-merged-findings.md",
+      "request": "r1-2026-06-09T0456-primary-request.md",
+      "response": "r1-2026-06-09T0456-primary-response.md",
+      "resolution": null,
+      "resolution_parse_status": null,
+      "resolution_waiver": false,
+      "head_sha_at_request": "d1d478b79ae89be5c4d08b9477c9a5e4506b9a64",
+      "head_sha_after_round": "d1d478b79ae89be5c4d08b9477c9a5e4506b9a64",
+      "worktree_dirty_at_request": true,
+      "verdict": "revise",
+      "verdict_valid": true,
+      "findings_count": 2,
+      "blocking_findings_count": 1,
+      "base_ref": null,
+      "base_ref_source": null,
+      "diff_included": false,
+      "depth_resolved": "thorough"
+    }
+  ],
+  "sweep_checkpoints": {
+    "first-round": "completed",
+    "final-ready": "pending"
+  }
+}

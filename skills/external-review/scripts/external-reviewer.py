@@ -3015,8 +3015,6 @@ def main() -> int:
 
     if round_num == 1 and not args.no_preflight:
         preflight = run_preflight_checks(args.kind, target, context, root)
-        for w in preflight.warnings:
-            print(_finding_line(w, "preflight warning"), file=sys.stderr)
         if not preflight.ok:
             print(
                 "ERROR: round-1 preflight failed; refusing to spawn the reviewer. "
@@ -3025,6 +3023,8 @@ def main() -> int:
             )
             _print_preflight_text(preflight, stream=sys.stderr)
             return 4
+        for w in preflight.warnings:
+            print(_finding_line(w, "preflight warning"), file=sys.stderr)
 
     timestamp = dt.datetime.now().strftime("%Y-%m-%dT%H%M")
 
