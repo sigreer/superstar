@@ -189,10 +189,119 @@
       "base_ref": "d981a83683bcb6060ae0ac7958af08ffc598513b",
       "base_ref_source": "auto",
       "diff_included": true
+    },
+    {
+      "round": 3,
+      "reviewers": [
+        {
+          "role": "primary",
+          "sweep_group": null,
+          "parent_round": 3,
+          "request": "r3-2026-06-09T0223-primary-request.md",
+          "response": "r3-2026-06-09T0223-primary-response.md",
+          "verdict": "ready",
+          "verdict_valid": true,
+          "returncode": 0,
+          "status": "ok",
+          "provider": "codex",
+          "caller_provider": "claude",
+          "model": null,
+          "sandbox": {
+            "repo_root": "/home/simon/Dev/sigreer/skills/superstar/.worktrees/worktree-p8-s2-skill-updates-merge-back-before-close",
+            "scratch_dir": "/tmp/superstar-reviewer-p8-s2-skill-closeout-sequence-P8-S2-post-slice-r3-primary-utfa949a",
+            "response_dir": "docs/reviewer/p8-s2-skill-closeout-sequence-P8-S2-post-slice/.reviewer-output/r3-primary",
+            "mode": "workspace-write-with-read-access"
+          },
+          "started_at": "2026-06-09T01:23:21.496Z",
+          "finished_at": "2026-06-09T01:26:56.979Z",
+          "duration_ms": 215483,
+          "estimated_usage": {
+            "formula": "ceil(chars / 4)",
+            "prompt_chars": 174433,
+            "response_chars": 2102,
+            "estimated_input_tokens": 43609,
+            "estimated_output_tokens": 526,
+            "estimated_total_tokens": 44135
+          },
+          "exact_usage": null,
+          "usage_capture_status": "estimated_only",
+          "usage_capture_error": null
+        },
+        {
+          "role": "sweep",
+          "sweep_group": 1,
+          "parent_round": 3,
+          "request": "r3-2026-06-09T0223-sweep1-request.md",
+          "response": "r3-2026-06-09T0223-sweep1-response.md",
+          "verdict": "ready",
+          "verdict_valid": true,
+          "returncode": 0,
+          "status": "ok",
+          "provider": "codex",
+          "caller_provider": "claude",
+          "model": null,
+          "sandbox": {
+            "repo_root": "/home/simon/Dev/sigreer/skills/superstar/.worktrees/worktree-p8-s2-skill-updates-merge-back-before-close",
+            "scratch_dir": "/tmp/superstar-reviewer-p8-s2-skill-closeout-sequence-P8-S2-post-slice-r3-sweep1-2e3vn1kz",
+            "response_dir": "docs/reviewer/p8-s2-skill-closeout-sequence-P8-S2-post-slice/.reviewer-output/r3-sweep1",
+            "mode": "workspace-write-with-read-access"
+          },
+          "started_at": "2026-06-09T01:26:56.982Z",
+          "finished_at": "2026-06-09T01:31:30.703Z",
+          "duration_ms": 273721,
+          "estimated_usage": {
+            "formula": "ceil(chars / 4)",
+            "prompt_chars": 47230,
+            "response_chars": 2838,
+            "estimated_input_tokens": 11808,
+            "estimated_output_tokens": 710,
+            "estimated_total_tokens": 12518
+          },
+          "exact_usage": null,
+          "usage_capture_status": "estimated_only",
+          "usage_capture_error": null
+        }
+      ],
+      "status": "ok",
+      "returncode": 0,
+      "started_at": "2026-06-09T01:23:21.496Z",
+      "finished_at": "2026-06-09T01:26:56.979Z",
+      "duration_ms": 215483,
+      "provider": "codex",
+      "caller_provider": "claude",
+      "model": null,
+      "estimated_usage": {
+        "formula": "ceil(chars / 4)",
+        "prompt_chars": 174433,
+        "response_chars": 2102,
+        "estimated_input_tokens": 43609,
+        "estimated_output_tokens": 526,
+        "estimated_total_tokens": 44135
+      },
+      "exact_usage": null,
+      "usage_capture_status": "estimated_only",
+      "usage_capture_error": null,
+      "merged_verdict": "ready",
+      "merged_findings": "r3-merged-findings.md",
+      "request": "r3-2026-06-09T0223-primary-request.md",
+      "response": "r3-2026-06-09T0223-primary-response.md",
+      "resolution": "r2-resolution.md",
+      "resolution_parse_status": "ok",
+      "resolution_waiver": false,
+      "head_sha_at_request": "79f87595d845a86c1beae386e863c666c501d94e",
+      "head_sha_after_round": "79f87595d845a86c1beae386e863c666c501d94e",
+      "worktree_dirty_at_request": false,
+      "verdict": "ready",
+      "verdict_valid": true,
+      "findings_count": null,
+      "blocking_findings_count": null,
+      "base_ref": "964da38de0414f86185130fce340584d48f1c31e",
+      "base_ref_source": "auto",
+      "diff_included": true
     }
   ],
   "sweep_checkpoints": {
     "first-round": "completed",
-    "final-ready": "pending"
+    "final-ready": "completed"
   }
 }
