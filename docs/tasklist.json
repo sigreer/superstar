@@ -415,8 +415,11 @@
           "parallel_group": null,
           "plan_path": null,
           "planning_status": "proposed",
-          "refs": [],
-          "reviewer_chain": null,
+          "refs": [
+            "docs/specs/2026-06-09-P9.S3-combined-spec-plan-gate-design.md",
+            "docs/reviewer/p9-s3-combined-spec-plan-gate-design-spec"
+          ],
+          "reviewer_chain": "docs/reviewer/p9-s3-combined-spec-plan-gate-design-spec",
           "started": null,
           "status": "ready",
           "tasks": [],

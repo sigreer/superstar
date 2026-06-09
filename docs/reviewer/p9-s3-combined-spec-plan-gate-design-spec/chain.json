@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "chain": "p9-s3-combined-spec-plan-gate-design-spec",
+  "kind": "spec",
+  "target": "docs/specs/2026-06-09-P9.S3-combined-spec-plan-gate-design.md",
+  "work_id": "P9.S3",
+  "legacy_migrated": false,
+  "rounds": [
+    {
+      "round": 1,
+      "reviewers": [
+        {
+          "role": "primary",
+          "sweep_group": null,
+          "parent_round": 1,
+          "request": "r1-2026-06-09T2203-request.md",
+          "response": "r1-2026-06-09T2203-response.md",
+          "verdict": "ready with small edits",
+          "verdict_valid": true,
+          "returncode": 0,
+          "status": "ok",
+          "provider": "codex",
+          "caller_provider": "claude",
+          "model": null,
+          "sandbox": {
+            "repo_root": "/home/simon/Dev/sigreer/skills/superstar",
+            "scratch_dir": "/tmp/superstar-reviewer-p9-s3-combined-spec-plan-gate-design-spec-r1-primary-tl3sxmga",
+            "response_dir": "docs/reviewer/p9-s3-combined-spec-plan-gate-design-spec/.reviewer-output/r1-primary",
+            "mode": "workspace-write-with-read-access"
+          },
+          "started_at": "2026-06-09T21:03:49.686Z",
+          "finished_at": "2026-06-09T21:05:11.043Z",
+          "duration_ms": 81357,
+          "estimated_usage": {
+            "formula": "ceil(chars / 4)",
+            "prompt_chars": 29958,
+            "response_chars": 3480,
+            "estimated_input_tokens": 7490,
+            "estimated_output_tokens": 870,
+            "estimated_total_tokens": 8360
+          },
+          "exact_usage": null,
+          "usage_capture_status": "estimated_only",
+          "usage_capture_error": null
+        }
+      ],
+      "status": "ok",
+      "returncode": 0,
+      "started_at": "2026-06-09T21:03:49.686Z",
+      "finished_at": "2026-06-09T21:05:11.043Z",
+      "duration_ms": 81357,
+      "provider": "codex",
+      "caller_provider": "claude",
+      "model": null,
+      "estimated_usage": {
+        "formula": "ceil(chars / 4)",
+        "prompt_chars": 29958,
+        "response_chars": 3480,
+        "estimated_input_tokens": 7490,
+        "estimated_output_tokens": 870,
+        "estimated_total_tokens": 8360
+      },
+      "exact_usage": null,
+      "usage_capture_status": "estimated_only",
+      "usage_capture_error": null,
+      "merged_verdict": "ready with small edits",
+      "merged_findings": null,
+      "request": "r1-2026-06-09T2203-request.md",
+      "response": "r1-2026-06-09T2203-response.md",
+      "resolution": null,
+      "resolution_parse_status": null,
+      "resolution_waiver": false,
+      "head_sha_at_request": "db0682269869fe854e3c1449fe32c7fa5b581baf",
+      "head_sha_after_round": "db0682269869fe854e3c1449fe32c7fa5b581baf",
+      "worktree_dirty_at_request": true,
+      "verdict": "ready with small edits",
+      "verdict_valid": true,
+      "findings_count": 2,
+      "blocking_findings_count": 0,
+      "base_ref": null,
+      "base_ref_source": null,
+      "diff_included": false,
+      "depth_resolved": "standard"
+    }
+  ],
+  "sweep_checkpoints": {
+    "first-round": "pending",
+    "final-ready": "pending"
+  }
+}
