@@ -106,7 +106,7 @@ def test_model_recorded_end_to_end_without_sidecar(tmp_path):
     import json as _json
     repo = _init_repo(tmp_path)
     r = _run(repo, "--kind", "spec", "--file", "plan.md", "--emit", "json",
-             env={"AGENT_REVIEWER_MODEL_LIGHT": "small-model"})
+             "--no-preflight", env={"AGENT_REVIEWER_MODEL_LIGHT": "small-model"})
     assert r.returncode == 0, r.stderr
     payload = _json.loads(r.stdout)
     assert payload["model"] == "small-model"

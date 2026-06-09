@@ -107,17 +107,18 @@ def test_round_2_primary_receives_previous_response_and_resolution(tmp_path):
     env = os.environ.copy()
     env["AGENT_REVIEWER_CMD"] = f"{stub} {{previous_response}} {{resolution_file}}"
 
-    def _run():
+    def _run(extra_args=()):
         return subprocess.run(
             [
                 sys.executable, str(SCRIPTS / "external-reviewer.py"), "review",
                 "--kind", "post-slice", "--work-id", "P1.S1",
                 "--file", "plan.md", "--emit", "json",
+                *extra_args,
             ],
             cwd=repo, env=env, capture_output=True, text=True, timeout=60,
         )
 
-    r1 = _run()
+    r1 = _run(("--no-preflight",))
     assert r1.returncode == 0, r1.stderr
     chain = repo / "docs" / "reviewer" / "plan-P1-S1-post-slice"
     (chain / "r1-resolution.md").write_text("## Resolution\n\nstatus: applied\n")
@@ -158,19 +159,20 @@ def test_round_2_sweep_receives_empty_previous_and_resolution(tmp_path):
         f"{stub} {{prompt_file}} {{previous_response}} {{resolution_file}}"
     )
 
-    def _run():
+    def _run(extra_args=()):
         return subprocess.run(
             [
                 sys.executable, str(SCRIPTS / "external-reviewer.py"), "review",
                 "--kind", "post-slice", "--work-id", "P1.S1",
                 "--file", "plan.md", "--review-depth", "thorough",
                 "--sweep-policy", "final-ready", "--emit", "json",
+                *extra_args,
             ],
             cwd=repo, env=env, capture_output=True, text=True, timeout=60,
         )
 
     # Round 1 with sweep-policy=final-ready: ready → no sweep, primary only.
-    r1 = _run()
+    r1 = _run(("--no-preflight",))
     assert r1.returncode == 0, r1.stderr
     # Write a resolution so round 2 has both prior response AND resolution to surface.
     chain = repo / "docs" / "reviewer" / "plan-P1-S1-post-slice"

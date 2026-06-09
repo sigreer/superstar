@@ -50,7 +50,8 @@ def test_failed_reviewer_with_echoed_verdict_is_not_trusted(tmp_path):
     env["AGENT_REVIEWER_CMD"] = str(reviewer)
     result = subprocess.run(
         [sys.executable, str(SCRIPTS / "external-reviewer.py"),
-         "review", "--kind", "plan", "--file", "plan.md", "--emit", "json"],
+         "review", "--kind", "plan", "--file", "plan.md", "--emit", "json",
+         "--no-preflight"],
         cwd=repo, env=env, capture_output=True, text=True, timeout=30,
     )
     # Process should exit with the reviewer's non-zero code, not 0.

@@ -32,21 +32,21 @@ def _init(tmp_path):
     return repo
 
 
-def _run(repo, reviewer_src):
+def _run(repo, reviewer_src, *extra_args):
     reviewer = repo / "fake.sh"; reviewer.write_text(reviewer_src); reviewer.chmod(0o755)
     env = os.environ.copy()
     env["AGENT_REVIEWER_CMD"] = str(reviewer)
     return subprocess.run(
         [sys.executable, str(SCRIPTS / "external-reviewer.py"),
          "review", "--kind", "post-slice", "--file", "plan.md",
-         "--work-id", "P1.S1", "--emit", "json"],
+         "--work-id", "P1.S1", "--emit", "json", *extra_args],
         cwd=repo, env=env, capture_output=True, text=True, timeout=30,
     )
 
 
 def test_failed_prior_round_bypasses_resolution_gate(tmp_path):
     repo = _init(tmp_path)
-    r1 = _run(repo, FAKE_OK)
+    r1 = _run(repo, FAKE_OK, "--no-preflight")
     assert r1.returncode == 0, r1.stderr
     # Satisfy the gate for r2 so r2 actually invokes the (failing) reviewer
     # and records a status:"failed" round. Without this, r2 would be blocked
@@ -63,7 +63,7 @@ def test_failed_prior_round_bypasses_resolution_gate(tmp_path):
 
 def test_unknown_prior_round_does_not_bypass_gate(tmp_path):
     repo = _init(tmp_path)
-    _run(repo, FAKE_OK)
+    _run(repo, FAKE_OK, "--no-preflight")
     chain_path = repo / "docs/reviewer/plan-P1-S1-post-slice/chain.json"
     manifest = json.loads(chain_path.read_text())
     manifest["rounds"][0]["status"] = "unknown"

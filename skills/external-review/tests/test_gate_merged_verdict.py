@@ -41,7 +41,8 @@ def test_gate_fires_when_merged_verdict_is_revise_even_if_primary_ready(tmp_path
     r1 = subprocess.run(
         [sys.executable, str(SCRIPTS / "external-reviewer.py"),
          "review", "--kind", "post-slice", "--work-id", "P1.S1",
-         "--file", "plan.md", "--review-depth", "thorough", "--emit", "json"],
+         "--file", "plan.md", "--review-depth", "thorough", "--emit", "json",
+         "--no-preflight"],
         cwd=repo, env=env, capture_output=True, text=True, timeout=60,
     )
     assert r1.returncode == 0, r1.stderr
@@ -72,7 +73,8 @@ def test_gate_waivable_with_allow_missing_resolution(tmp_path):
     r1 = subprocess.run(
         [sys.executable, str(SCRIPTS / "external-reviewer.py"),
          "review", "--kind", "post-slice", "--work-id", "P1.S1",
-         "--file", "plan.md", "--review-depth", "thorough", "--emit", "json"],
+         "--file", "plan.md", "--review-depth", "thorough", "--emit", "json",
+         "--no-preflight"],
         cwd=repo, env=env, capture_output=True, text=True, timeout=60,
     )
     assert r1.returncode == 0
@@ -100,7 +102,8 @@ def test_top_level_verdict_reflects_merged_when_sweeps_present(tmp_path):
     r1 = subprocess.run(
         [sys.executable, str(SCRIPTS / "external-reviewer.py"),
          "review", "--kind", "post-slice", "--work-id", "P1.S1",
-         "--file", "plan.md", "--review-depth", "thorough", "--emit", "json"],
+         "--file", "plan.md", "--review-depth", "thorough", "--emit", "json",
+         "--no-preflight"],
         cwd=repo, env=env, capture_output=True, text=True, timeout=60,
     )
     assert r1.returncode == 0
@@ -125,7 +128,7 @@ def test_top_level_verdict_is_primary_when_no_sweeps(tmp_path):
     r1 = subprocess.run(
         [sys.executable, str(SCRIPTS / "external-reviewer.py"),
          "review", "--kind", "post-slice", "--work-id", "P1.S1",
-         "--file", "plan.md", "--emit", "json"],
+         "--file", "plan.md", "--emit", "json", "--no-preflight"],
         cwd=repo, env=env, capture_output=True, text=True, timeout=60,
     )
     assert r1.returncode == 0, r1.stderr

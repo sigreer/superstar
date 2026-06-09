@@ -31,7 +31,7 @@ def _run(repo: Path, *extra):
 
 def test_work_id_persisted_in_manifest_and_json(tmp_path):
     repo = _init_repo(tmp_path)
-    r = _run(repo, "--work-id", "S1")
+    r = _run(repo, "--work-id", "S1", "--no-preflight")
     assert r.returncode == 0, r.stderr
     payload = json.loads(r.stdout)
     assert payload["work_id"] == "S1"
@@ -43,7 +43,7 @@ def test_work_id_persisted_in_manifest_and_json(tmp_path):
 
 def test_work_id_mismatch_refuses_reuse(tmp_path):
     repo = _init_repo(tmp_path)
-    r1 = _run(repo, "--work-id", "S1")
+    r1 = _run(repo, "--work-id", "S1", "--no-preflight")
     assert r1.returncode == 0, r1.stderr
     # Same target, same kind, different work-id → distinct folder, so this should
     # NOT clash. We need to assert that if someone synthesises a folder for one
@@ -108,7 +108,7 @@ def test_existing_chain_folder_with_chain_json_not_reused_as_legacy(tmp_path):
     (s1_dir / "r1-2026-01-01T0000-request.md").write_text("")
     (s1_dir / "r1-2026-01-01T0000-response.md").write_text("Overall verdict: ready\n")
 
-    r = _run(repo, "--work-id", "S2")
+    r = _run(repo, "--work-id", "S2", "--no-preflight")
     assert r.returncode == 0, r.stderr
     payload = json.loads(r.stdout)
     # New folder must be created — must NOT have reused the S1 folder.

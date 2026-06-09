@@ -53,6 +53,7 @@ def test_round_2_primary_ready_triggers_final_ready_sweep(tmp_path):
     r1 = _run(
         repo, "--kind", "post-slice", "--work-id", "P1.S1",
         "--file", "plan.md", "--review-depth", "thorough", "--emit", "json",
+        "--no-preflight",
     )
     assert r1.returncode == 0, r1.stderr
     p1 = json.loads(r1.stdout)
@@ -90,6 +91,7 @@ def test_round_1_primary_ready_no_sweep(tmp_path):
         repo, "--kind", "post-slice", "--work-id", "P1.S1",
         "--file", "plan.md", "--review-depth", "thorough",
         "--sweep-policy", "final-ready", "--emit", "json",
+        "--no-preflight",
     )
     assert r1.returncode == 0, r1.stderr
     p1 = json.loads(r1.stdout)
@@ -104,6 +106,7 @@ def test_final_ready_checkpoint_prevents_re_fire(tmp_path):
     _run(
         repo, "--kind", "post-slice", "--work-id", "P1.S1",
         "--file", "plan.md", "--review-depth", "thorough", "--emit", "json",
+        "--no-preflight",
     )
 
     chain = repo / "docs" / "reviewer" / "plan-P1-S1-post-slice"

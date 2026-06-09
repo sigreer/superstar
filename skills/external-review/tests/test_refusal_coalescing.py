@@ -49,12 +49,14 @@ def _invoke(repo, env, args):
 
 def test_two_refusals_coalesce_into_one_round(tmp_path):
     repo, env = _setup(tmp_path)
-    p1 = _invoke(repo, env, ["review", "--kind", "plan", "--file", "plan.md", "--emit", "json"])
+    p1 = _invoke(repo, env, ["review", "--kind", "plan", "--file", "plan.md", "--emit", "json",
+                              "--no-preflight"])
     assert p1.returncode == er.EXIT_CODE_RATE_LIMITED
     chain_dir = next((repo / "docs/reviewer").iterdir())
     manifest = json.loads((chain_dir / "chain.json").read_text())
     assert len(manifest["rounds"]) == 1
-    p2 = _invoke(repo, env, ["review", "--kind", "plan", "--file", "plan.md", "--emit", "json"])
+    p2 = _invoke(repo, env, ["review", "--kind", "plan", "--file", "plan.md", "--emit", "json",
+                              "--no-preflight"])
     assert p2.returncode == er.EXIT_CODE_RATE_LIMITED
     manifest = json.loads((chain_dir / "chain.json").read_text())
     assert len(manifest["rounds"]) == 1
@@ -69,7 +71,8 @@ def test_two_refusals_coalesce_into_one_round(tmp_path):
 def test_refused_at_caps_at_20(tmp_path):
     repo, env = _setup(tmp_path)
     for _ in range(25):
-        _invoke(repo, env, ["review", "--kind", "plan", "--file", "plan.md", "--emit", "json"])
+        _invoke(repo, env, ["review", "--kind", "plan", "--file", "plan.md", "--emit", "json",
+                             "--no-preflight"])
     chain_dir = next((repo / "docs/reviewer").iterdir())
     manifest = json.loads((chain_dir / "chain.json").read_text())
     head = manifest["rounds"][-1]

@@ -48,7 +48,8 @@ def test_head_sha_captured_before_and_after_reviewer(tmp_path):
     env["AGENT_REVIEWER_CMD"] = str(reviewer)
     result = subprocess.run(
         [sys.executable, str(SCRIPTS / "external-reviewer.py"),
-         "review", "--kind", "plan", "--file", "plan.md", "--emit", "json"],
+         "review", "--kind", "plan", "--file", "plan.md", "--emit", "json",
+         "--no-preflight"],
         cwd=repo, env=env, capture_output=True, text=True, timeout=30,
     )
     assert result.returncode == 0, result.stderr

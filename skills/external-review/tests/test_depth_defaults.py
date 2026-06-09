@@ -68,7 +68,7 @@ def _run(repo, *args):
 
 def test_round_entry_records_depth_resolved(tmp_path):
     repo = _init_repo(tmp_path)
-    r = _run(repo, "--kind", "spec", "--file", "plan.md", "--emit", "json")
+    r = _run(repo, "--kind", "spec", "--file", "plan.md", "--emit", "json", "--no-preflight")
     assert r.returncode == 0, r.stderr
     chains = list((repo / "docs" / "reviewer").glob("*/chain.json"))
     assert len(chains) == 1

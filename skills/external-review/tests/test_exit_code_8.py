@@ -78,7 +78,8 @@ def test_failed_reviewer_with_rate_limit_stderr_triggers_state_write(tmp_path, m
 
     proc = subprocess.run(
         [sys.executable, str(SCRIPTS / "external-reviewer.py"),
-         "review", "--kind", "plan", "--file", "plan.md", "--emit", "json"],
+         "review", "--kind", "plan", "--file", "plan.md", "--emit", "json",
+         "--no-preflight"],
         cwd=repo, env=env, capture_output=True, text=True, timeout=30,
     )
     assert proc.returncode == er.EXIT_CODE_RATE_LIMITED, proc.stderr

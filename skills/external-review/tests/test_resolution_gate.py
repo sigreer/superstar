@@ -33,7 +33,7 @@ def _run(repo, *args, env=None):
 def test_post_slice_round_2_blocked_without_resolution(tmp_path):
     repo = _init_repo(tmp_path)
     r1 = _run(repo, "--kind", "post-slice", "--work-id", "P1.S1",
-              "--file", "plan.md", "--emit", "json")
+              "--file", "plan.md", "--emit", "json", "--no-preflight")
     assert r1.returncode == 0, r1.stderr
 
     r2 = _run(repo, "--kind", "post-slice", "--work-id", "P1.S1",
@@ -45,7 +45,7 @@ def test_post_slice_round_2_blocked_without_resolution(tmp_path):
 def test_post_slice_round_2_proceeds_with_waiver(tmp_path):
     repo = _init_repo(tmp_path)
     r1 = _run(repo, "--kind", "post-slice", "--work-id", "P1.S1",
-              "--file", "plan.md", "--emit", "json")
+              "--file", "plan.md", "--emit", "json", "--no-preflight")
     assert r1.returncode == 0
 
     r2 = _run(repo, "--kind", "post-slice", "--work-id", "P1.S1",

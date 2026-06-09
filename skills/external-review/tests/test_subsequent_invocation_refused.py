@@ -53,7 +53,8 @@ def test_active_limit_refuses_spawn(tmp_path, monkeypatch):
 
     proc = subprocess.run(
         [sys.executable, str(SCRIPTS / "external-reviewer.py"),
-         "review", "--kind", "plan", "--file", "plan.md", "--emit", "json"],
+         "review", "--kind", "plan", "--file", "plan.md", "--emit", "json",
+         "--no-preflight"],
         cwd=repo, env=env, capture_output=True, text=True, timeout=15,
     )
     assert proc.returncode == er.EXIT_CODE_RATE_LIMITED, proc.stderr
@@ -85,7 +86,8 @@ def test_expired_limit_clears_and_proceeds(tmp_path):
 
     proc = subprocess.run(
         [sys.executable, str(SCRIPTS / "external-reviewer.py"),
-         "review", "--kind", "plan", "--file", "plan.md", "--emit", "json"],
+         "review", "--kind", "plan", "--file", "plan.md", "--emit", "json",
+         "--no-preflight"],
         cwd=repo, env=env, capture_output=True, text=True, timeout=15,
     )
     assert proc.returncode == 0, proc.stderr

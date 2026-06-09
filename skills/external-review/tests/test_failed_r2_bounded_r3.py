@@ -58,7 +58,7 @@ def _run(repo, reviewer_src, *extra_args):
 
 def test_failed_r2_yields_bounded_and_clean_r3_request(tmp_path):
     repo = _init(tmp_path)
-    r1 = _run(repo, FAKE_R1_LARGE)
+    r1 = _run(repo, FAKE_R1_LARGE, "--no-preflight")
     assert r1.returncode == 0, r1.stderr
     chain_dir = repo / "docs/reviewer/plan-P1-S1-post-slice"
     # Satisfy resolution gate so r2 actually invokes the (failing) reviewer.
@@ -82,7 +82,7 @@ def test_failed_r2_yields_bounded_and_clean_r3_request(tmp_path):
 
 def test_r3_request_size_bounded(tmp_path):
     repo = _init(tmp_path)
-    r1 = _run(repo, FAKE_R1_LARGE)
+    r1 = _run(repo, FAKE_R1_LARGE, "--no-preflight")
     assert r1.returncode == 0, r1.stderr
     chain_dir = repo / "docs/reviewer/plan-P1-S1-post-slice"
     (chain_dir / "r1-resolution.md").write_text("ok\n")

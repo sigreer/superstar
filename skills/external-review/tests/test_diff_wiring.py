@@ -92,7 +92,8 @@ def _setup_chain_round_one(tmp_path):
     subprocess.run(["git", "-C", str(repo), "commit", "-q", "-m", "init"], check=True)
     reviewer = repo / "rev.sh"
     reviewer.write_text(FAKE_REVIEWER); reviewer.chmod(0o755)
-    r = _run(repo, ["review", "--kind", "plan", "--file", "plan.md", "--emit", "json"],
+    r = _run(repo, ["review", "--kind", "plan", "--file", "plan.md", "--emit", "json",
+                    "--no-preflight"],
              env_extra={"AGENT_REVIEWER_CMD": str(reviewer)})
     assert r.returncode == 0, r.stderr
     return repo, reviewer

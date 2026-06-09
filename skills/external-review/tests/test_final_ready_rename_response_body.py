@@ -55,6 +55,7 @@ def test_final_ready_rename_rewrites_response_request_header(tmp_path):
     r1 = _run(
         repo, "--kind", "post-slice", "--work-id", "P1.S1",
         "--file", "plan.md", "--review-depth", "thorough", "--emit", "json",
+        "--no-preflight",
     )
     assert r1.returncode == 0, r1.stderr
 

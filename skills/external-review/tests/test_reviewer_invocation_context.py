@@ -48,6 +48,7 @@ def test_reviewer_receives_sandbox_context_env(tmp_path):
             "--work-id", "P1.S1",
             "--file", "plan.md",
             "--emit", "json",
+            "--no-preflight",
         ],
         cwd=repo,
         env=env,
@@ -94,6 +95,7 @@ def test_bare_reviewer_defaults_to_stdin_transport(tmp_path):
             "--kind", "spec",
             "--file", "plan.md",
             "--emit", "json",
+            "--no-preflight",
         ],
         cwd=repo,
         env=env,
@@ -120,7 +122,8 @@ def test_reviewer_scratch_is_removed_by_default(tmp_path):
     env["AGENT_REVIEWER_CMD"] = str(reviewer)
     env["AGENT_REVIEWER_STATE_FILE"] = str(tmp_path / "state.json")
     result = subprocess.run(
-        [sys.executable, str(SCRIPTS / "external-reviewer.py"), "review", "--kind", "spec", "--file", "plan.md", "--emit", "json"],
+        [sys.executable, str(SCRIPTS / "external-reviewer.py"), "review", "--kind", "spec", "--file", "plan.md", "--emit", "json",
+         "--no-preflight"],
         cwd=repo, env=env, capture_output=True, text=True, timeout=60,
     )
     assert result.returncode == 0, result.stderr
@@ -144,7 +147,8 @@ def test_reviewer_scratch_directory_is_private_0700(tmp_path):
     env["AGENT_REVIEWER_CMD"] = str(reviewer)
     env["AGENT_REVIEWER_STATE_FILE"] = str(tmp_path / "state.json")
     result = subprocess.run(
-        [sys.executable, str(SCRIPTS / "external-reviewer.py"), "review", "--kind", "spec", "--file", "plan.md", "--emit", "json"],
+        [sys.executable, str(SCRIPTS / "external-reviewer.py"), "review", "--kind", "spec", "--file", "plan.md", "--emit", "json",
+         "--no-preflight"],
         cwd=repo, env=env, capture_output=True, text=True, timeout=60,
     )
     assert result.returncode == 0, result.stderr
@@ -173,6 +177,7 @@ def test_keep_reviewer_scratch_preserves_directory(tmp_path):
             "review", "--kind", "spec", "--file", "plan.md",
             "--keep-reviewer-scratch",
             "--emit", "json",
+            "--no-preflight",
         ],
         cwd=repo, env=env, capture_output=True, text=True, timeout=60,
     )

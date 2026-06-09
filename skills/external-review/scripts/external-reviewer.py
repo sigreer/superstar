@@ -2139,6 +2139,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Waive the resolution-required gate for round 2+ (any kind).",
     )
     sp_review.add_argument(
+        "--no-preflight",
+        action="store_true",
+        help="Skip the round-1 deterministic preflight checks.",
+    )
+    sp_review.add_argument(
         "--mode",
         choices=["auto", "broad", "incremental"],
         default="auto",
@@ -2664,16 +2669,19 @@ def run_stats(args) -> int:
     return 0
 
 
+def _finding_line(f, prefix: str) -> str:
+    loc = f" (line {f.line})" if f.line else ""
+    return f"{prefix} [{f.check}]{loc}: {f.message}"
+
+
 def _print_preflight_text(result, stream=sys.stdout) -> None:
     if not result.findings:
         print("preflight passed: no findings.", file=stream)
         return
     for f in result.failures:
-        loc = f" (line {f.line})" if f.line else ""
-        print(f"FAILURE [{f.check}]{loc}: {f.message}", file=stream)
+        print(_finding_line(f, "FAILURE"), file=stream)
     for f in result.warnings:
-        loc = f" (line {f.line})" if f.line else ""
-        print(f"warning [{f.check}]{loc}: {f.message}", file=stream)
+        print(_finding_line(f, "warning"), file=stream)
     print(
         f"\npreflight: {len(result.failures)} failure(s), "
         f"{len(result.warnings)} warning(s).",
@@ -3004,6 +3012,20 @@ def main() -> int:
                 return 3
 
     round_num = next_round_number(chain_dir)
+
+    if round_num == 1 and not args.no_preflight:
+        preflight = run_preflight_checks(args.kind, target, context, root)
+        for w in preflight.warnings:
+            print(_finding_line(w, "preflight warning"), file=sys.stderr)
+        if not preflight.ok:
+            print(
+                "ERROR: round-1 preflight failed; refusing to spawn the reviewer. "
+                "Fix the findings below or pass --no-preflight.",
+                file=sys.stderr,
+            )
+            _print_preflight_text(preflight, stream=sys.stderr)
+            return 4
+
     timestamp = dt.datetime.now().strftime("%Y-%m-%dT%H%M")
 
     # Best-effort: mutate the slice review block at round start.

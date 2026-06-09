@@ -203,7 +203,7 @@ def test_reviewer_cmd_flag_hoists_to_env(tmp_path):
     proc = subprocess.run(
         [sys.executable, str(SCRIPTS_DIR / "external-reviewer.py"),
          "review", "--kind", "plan", "--file", "plan.md",
-         "--reviewer-cmd", str(fake), "--emit", "json"],
+         "--reviewer-cmd", str(fake), "--emit", "json", "--no-preflight"],
         cwd=repo, env=env, capture_output=True, text=True, timeout=30,
     )
     assert proc.returncode == er.EXIT_CODE_RATE_LIMITED, proc.stderr

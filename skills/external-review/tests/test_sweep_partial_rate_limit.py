@@ -53,7 +53,8 @@ def test_sweep_rate_limited_primary_ok_round_still_succeeds(tmp_path):
     proc = subprocess.run(
         [sys.executable, str(SCRIPTS / "external-reviewer.py"),
          "review", "--kind", "plan", "--file", "plan.md",
-         "--independent-reviewers", "1", "--sweep-policy", "first-round", "--emit", "json"],
+         "--independent-reviewers", "1", "--sweep-policy", "first-round", "--emit", "json",
+         "--no-preflight"],
         cwd=repo, env=env, capture_output=True, text=True, timeout=30,
     )
     assert proc.returncode == 0, proc.stderr

@@ -38,7 +38,8 @@ def _run(repo, reviewer):
     env["AGENT_REVIEWER_CMD"] = str(reviewer)
     return subprocess.run(
         [sys.executable, str(SCRIPTS / "external-reviewer.py"),
-         "review", "--kind", "plan", "--file", "plan.md", "--emit", "json"],
+         "review", "--kind", "plan", "--file", "plan.md", "--emit", "json",
+         "--no-preflight"],
         cwd=repo, env=env, capture_output=True, text=True, timeout=30,
     )
 

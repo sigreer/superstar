@@ -34,7 +34,8 @@ def test_main_writes_manifest_entry(tmp_path, monkeypatch):
     env["AGENT_REVIEWER_CMD"] = str(reviewer)
     result = subprocess.run(
         [sys.executable, str(SCRIPTS / "external-reviewer.py"),
-         "review", "--kind", "plan", "--file", "plan.md", "--emit", "json"],
+         "review", "--kind", "plan", "--file", "plan.md", "--emit", "json",
+         "--no-preflight"],
         cwd=repo, env=env, capture_output=True, text=True, timeout=30,
     )
     assert result.returncode == 0, result.stderr

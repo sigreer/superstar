@@ -64,6 +64,7 @@ def _run_review(script: Path, repo: Path, fake: Path, state: Path) -> subprocess
             "plan.md",
             "--emit",
             "json",
+            "--no-preflight",
         ],
         cwd=repo,
         env=env,

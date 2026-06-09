@@ -32,6 +32,7 @@ def test_manifest_records_provider_and_sandbox(tmp_path):
             sys.executable, str(SCRIPTS / "external-reviewer.py"),
             "review", "--kind", "post-slice", "--work-id", "P1.S1",
             "--file", "plan.md", "--emit", "json",
+            "--no-preflight",
         ],
         cwd=repo, env=env, capture_output=True, text=True, timeout=60,
     )
@@ -55,6 +56,7 @@ def test_response_artifact_mentions_provider_and_sandbox(tmp_path):
         [
             sys.executable, str(SCRIPTS / "external-reviewer.py"),
             "review", "--kind", "spec", "--file", "plan.md", "--emit", "json",
+            "--no-preflight",
         ],
         cwd=repo, env=env, capture_output=True, text=True, timeout=60,
     )

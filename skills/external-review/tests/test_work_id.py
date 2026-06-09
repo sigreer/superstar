@@ -46,7 +46,8 @@ def test_spec_without_work_id_ok(tmp_path):
     env = os.environ.copy(); env["AGENT_REVIEWER_CMD"] = str(repo / "stub.sh")
     r = subprocess.run(
         [sys.executable, str(SCRIPTS / "external-reviewer.py"),
-         "review", "--kind", "spec", "--file", "plan.md", "--emit", "json"],
+         "review", "--kind", "spec", "--file", "plan.md", "--emit", "json",
+         "--no-preflight"],
         cwd=repo, env=env, capture_output=True, text=True,
     )
     assert r.returncode == 0, r.stderr
