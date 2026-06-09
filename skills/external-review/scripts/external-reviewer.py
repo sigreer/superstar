@@ -123,6 +123,11 @@ deferred gates without justification, and regressions outside the phase scope.""
 and tailor findings to the supplied target and context.""",
 }
 
+COMBINED_GATE_GUIDANCE = (
+    "This plan's spec did not receive a standalone review. Also review the "
+    "attached spec for completeness, internal consistency, and groundedness; "
+    "tag spec-level findings distinctly."
+)
 
 PROMPT_SENTINEL_START = "<!-- superstar-prompt:start -->"
 PROMPT_SENTINEL_END = "<!-- superstar-prompt:end -->"
@@ -965,12 +970,16 @@ def make_prompt(
     mode: str = "broad",
     incremental_preamble: str | None = None,
     incremental_budget_chars: int | None = None,
+    extra_guidance: str | None = None,
 ) -> str:
     context_display = "\n".join(f"- {rel_or_abs(p, root)}" for p in context) or "- none"
+    mode_guidance = MODE_GUIDANCE[kind]
+    if extra_guidance:
+        mode_guidance = mode_guidance + "\n\n" + extra_guidance
     body = REVIEW_PROMPT.format(
         repo_root=root,
         kind=kind,
-        mode_guidance=MODE_GUIDANCE[kind],
+        mode_guidance=mode_guidance,
         target_file=rel_or_abs(target, root),
         context_files=context_display,
     )
@@ -3160,11 +3169,15 @@ def main() -> int:
             diff_section=diff_section,
         )
 
+    combined_guidance = (
+        COMBINED_GATE_GUIDANCE if combined_gate_effective is not None else None
+    )
     prompt_text = make_prompt(
         root=root, target=target, kind=args.kind,
         context=context, max_lines=args.max_lines,
         mode=mode, incremental_preamble=incremental_preamble,
         incremental_budget_chars=args.incremental_budget_chars,
+        extra_guidance=combined_guidance,
     )
 
     head_sha_at_request = current_head_sha(root)
@@ -3272,6 +3285,7 @@ def main() -> int:
                     context=context, max_lines=args.max_lines,
                     mode="broad", incremental_preamble=None,
                     incremental_budget_chars=args.incremental_budget_chars,
+                    extra_guidance=combined_guidance,
                 )
             sweeps.append(run_one_reviewer(
                 role="sweep", sweep_index=k,

@@ -146,3 +146,64 @@ def test_combined_gate_dedupes_spec_in_context(tmp_path):
     request = next(_chain_dir(repo).glob("r1-*-request.md")).read_text()
     # spec.md's unique content is previewed exactly once (deduped).
     assert request.count("Acceptance criteria") == 1
+
+
+import importlib.util
+
+_spec = importlib.util.spec_from_file_location("external_reviewer", SCRIPT)
+er = importlib.util.module_from_spec(_spec); _spec.loader.exec_module(er)
+
+
+def test_make_prompt_default_is_unchanged(tmp_path):
+    # extra_guidance=None must not alter the assembled plan prompt.
+    repo = _init_repo(tmp_path)
+    root = repo
+    target = repo / "plan.md"
+    base = er.make_prompt(root=root, target=target, kind="plan",
+                          context=[], max_lines=600)
+    explicit_none = er.make_prompt(root=root, target=target, kind="plan",
+                                   context=[], max_lines=600, extra_guidance=None)
+    assert base == explicit_none
+
+
+def test_make_prompt_appends_extra_guidance(tmp_path):
+    repo = _init_repo(tmp_path)
+    p = er.make_prompt(root=repo, target=repo / "plan.md", kind="plan",
+                       context=[], max_lines=600,
+                       extra_guidance=er.COMBINED_GATE_GUIDANCE)
+    assert "did not receive a standalone review" in p
+    assert "tag spec-level findings distinctly" in p
+
+
+def test_combined_review_prompt_contains_guidance(tmp_path):
+    repo = _init_repo(tmp_path)
+    r = _run(repo, "--kind", "plan", "--file", "plan.md",
+             "--work-id", "P1.S1", "--combined-gate", "spec.md")
+    assert r.returncode == 0, r.stderr
+    request = next(_chain_dir(repo).glob("r1-*-request.md")).read_text()
+    assert "did not receive a standalone review" in request
+
+
+def test_standalone_review_prompt_has_no_guidance(tmp_path):
+    repo = _init_repo(tmp_path)
+    r = _run(repo, "--kind", "plan", "--file", "plan.md", "--work-id", "P1.S1")
+    assert r.returncode == 0, r.stderr
+    request = next(_chain_dir(repo).glob("r1-*-request.md")).read_text()
+    assert "did not receive a standalone review" not in request
+
+
+def test_round2_reattaches_guidance_without_flag(tmp_path):
+    # Spec AC8: a round-2 fixture proving guidance + spec re-attachment when the
+    # flag is omitted on the re-submit (the chain reuses the persisted spec).
+    repo = _init_repo(tmp_path)
+    r1 = _run(repo, "--kind", "plan", "--file", "plan.md",
+              "--work-id", "P1.S1", "--combined-gate", "spec.md")
+    assert r1.returncode == 0, r1.stderr
+    r2 = _run(repo, "--kind", "plan", "--file", "plan.md",
+              "--work-id", "P1.S1", "--allow-missing-resolution")
+    assert r2.returncode == 0, r2.stderr
+    request = sorted(_chain_dir(repo).glob("r2-*-request.md"))[-1].read_text()
+    # Guidance re-applied on round 2 even though --combined-gate was omitted...
+    assert "did not receive a standalone review" in request
+    # ...and the spec is still attached (listed among the prompt's context files).
+    assert "spec.md" in request
