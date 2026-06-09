@@ -2978,6 +2978,9 @@ def main() -> int:
         # F3 (r3 fix): Eager-write so run_one_reviewer rate-limit paths can read
         # chain.json on the first round (before the normal post-reviewer write).
         write_manifest(manifest_path, manifest)
+        if combined_gate_explicit is not None:
+            manifest["combined_gate_spec"] = rel_or_abs(combined_gate_explicit, root)
+            write_manifest(manifest_path, manifest)
     else:
         # Existing manifest: refuse a work-id mismatch (someone trying to reuse a
         # chain folder for a different slice/phase). Stored work_id is the source
@@ -2999,6 +3002,52 @@ def main() -> int:
         # If the stored value is None and a CLI value was provided, backfill it.
         if stored_work_id is None and args.work_id is not None:
             manifest["work_id"] = args.work_id
+
+        # Combined-gate chain identity: a combined chain stays combined for its
+        # whole life (the spec remains un-reviewed). Mirror the work_id rule.
+        stored_combined = manifest.get("combined_gate_spec")
+        explicit_rel = (
+            rel_or_abs(combined_gate_explicit, root)
+            if combined_gate_explicit is not None else None
+        )
+        if explicit_rel is not None:
+            if stored_combined is None:
+                print(
+                    "ERROR: --combined-gate was not set when this chain was "
+                    "created; a chain cannot become combined mid-stream.",
+                    file=sys.stderr,
+                )
+                return 6
+            if stored_combined != explicit_rel:
+                print(
+                    f"ERROR: --combined-gate {explicit_rel!r} does not match the "
+                    f"chain's stored combined_gate_spec {stored_combined!r}. "
+                    "A combined chain cannot switch which spec it covers.",
+                    file=sys.stderr,
+                )
+                return 6
+
+    # Effective combined spec = explicit (round 1) or persisted (later rounds).
+    stored_combined = manifest.get("combined_gate_spec")
+    combined_gate_effective: Path | None = None
+    if combined_gate_explicit is not None:
+        combined_gate_effective = combined_gate_explicit
+    elif stored_combined is not None:
+        combined_gate_effective = (
+            (root / stored_combined).resolve()
+            if not Path(stored_combined).is_absolute()
+            else Path(stored_combined).resolve()
+        )
+        if not combined_gate_effective.exists():
+            print(
+                f"ERROR: chain's combined_gate_spec not found: "
+                f"{combined_gate_effective}",
+                file=sys.stderr,
+            )
+            return 2
+    if combined_gate_effective is not None:
+        if combined_gate_effective not in context:
+            context.append(combined_gate_effective)
 
     if (
         manifest["rounds"]
@@ -3340,6 +3389,11 @@ def main() -> int:
         "base_ref_source": base_source,
         "diff_included": base_source in ("auto", "explicit") and not args.no_diff and bool(diff_section),
         "depth_resolved": args.review_depth,
+        **(
+            {"combined_gate": True,
+             "combined_gate_spec": rel_or_abs(combined_gate_effective, root)}
+            if combined_gate_effective is not None else {}
+        ),
     }
     manifest["rounds"].append(round_entry)
     write_manifest(manifest_path, manifest)
