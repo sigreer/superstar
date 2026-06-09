@@ -347,22 +347,30 @@ def render_html(project, items, *, generated, show_x=False):
 
     day_entries = classify_days(active_dates)
 
-    # First-event instant per active day (anchors the marker); idle days use noon.
-    first_instant = {}
-    for e in els:
-        d = e.when.date()
-        if d not in first_instant or e.when < first_instant[d]:
-            first_instant[d] = e.when
-
-    date_marker = {}   # date -> _El (for quiet-segment bounds + rendering)
+    # Every rendered day-marker anchors at the SAME time-of-day (noon) so that
+    # consecutive rendered days are a uniform 24h apart on the scale and clamp to
+    # an identical per-day gap, regardless of how many short idle days separate
+    # active days. (Anchoring active days at their first real event instead would
+    # make per-day gaps wobble with each day's fractional-day activity offset.)
+    date_marker = {}   # date -> _El (rendering + per-day scale anchor)
     for entry in day_entries:
         if entry[0] != "day":
             continue
         d = entry[1]
-        anchor = first_instant.get(d) or dt.datetime.combine(d, dt.time(12, 0))
+        anchor = dt.datetime.combine(d, dt.time(12, 0))
         m = _El(f"date-{d.isoformat()}", "date", anchor, (("C", 6),))
         date_marker[d] = m
         els.append(m)
+
+    # Every rendered day-marker (active days AND short idle days, but NOT days
+    # folded inside a collapsed quiet run) becomes a scale anchor, so each
+    # consecutive rendered day gets at least MIN_GAP_PX of separation. Without
+    # this, idle-day noon instants interpolate between two close real anchors
+    # and collapse to ~zero vertical gap. Quiet-run days are intentionally
+    # absent from date_marker, so their interior days never become anchors and
+    # the run still compresses to its single segment.
+    anchors += [m.when for m in date_marker.values()]
+    scale = TimeScale(anchors)
 
     # Both reading orders are laid out up front; the in-page toggle swaps
     # positions via the data attributes. Default = newest at top ("desc").
@@ -374,7 +382,25 @@ def render_html(project, items, *, generated, show_x=False):
                       f"{e.ys['desc'] + PAD_TOP:.0f}")
 
     parts = []
-    # Strands + bands first: they paint behind nodes and cards.
+    # A single full-height dotted base spine down the centre, painted BELOW the
+    # colored strands (which overpaint it solid wherever a phase is active). This
+    # guarantees a line is ALWAYS present between nodes — idle stretches show the
+    # dotted base. It spans the full content extent in each direction so it is
+    # never absent. Known limitation: with multiple parallel lanes the strands
+    # shift off-centre, leaving the centred dotted base visible alongside them;
+    # per the spec, visibility-while-overlapped does not matter — only absence.
+    if els:
+        spine_top_a = min(e.ys["asc"] - e.half() for e in els) + PAD_TOP
+        spine_bot_a = max(e.ys["asc"] + e.half() for e in els) + PAD_TOP
+        spine_top_d = min(e.ys["desc"] - e.half() for e in els) + PAD_TOP
+        spine_bot_d = max(e.ys["desc"] + e.half() for e in els) + PAD_TOP
+        parts.append(
+            f'<div class="base-spine" data-key="base-spine" '
+            f'style="top:{spine_top_d:.0f}px;height:{spine_bot_d - spine_top_d:.0f}px" '
+            f'data-ta="{spine_top_a:.0f}" data-ha="{spine_bot_a - spine_top_a:.0f}" '
+            f'data-td="{spine_top_d:.0f}" data-hd="{spine_bot_d - spine_top_d:.0f}"></div>')
+
+    # Strands + bands next: they paint behind nodes and cards, over the spine.
     by_phase = {}
     for e in els:
         if e.phase:
@@ -456,7 +482,7 @@ def render_html(project, items, *, generated, show_x=False):
                 f'<div class="open-label" data-key="{_html.escape(e.key)}" '
                 f'style="top:{td}px;color:{_color(e.key)}" '
                 f'data-ta="{ta}" data-td="{td}">'
-                f'{_html.escape(e.key)} in progress…</div>')
+                f'\U0001F3CE️ {_html.escape(e.key)} in progress…</div>')
         else:  # card
             if e.phase:
                 color, off = _color(e.phase), strand_off(lane_of[e.phase])
@@ -504,7 +530,7 @@ def _node_html(p, ta, td, off, color):
             f'{pos}></div>'
             f'<div class="phase-title" data-key="{key}" '
             f'style="top:{td}px;color:{color}" {pos}>'
-            f'{key} — {_html.escape(p.label())}</div>')
+            f'\U0001F3CE️ {key} — {_html.escape(p.label())}</div>')
 
 
 def _ring_html(p, ta, td, off):
@@ -517,7 +543,7 @@ def _ring_html(p, ta, td, off):
             f'{pos}></div>'
             f'<div class="ring-label" data-key="{key}" '
             f'style="top:{td}px;color:{ring}" {pos}>'
-            f'{key} — {_html.escape(p.label())} {label}</div>')
+            f'\U0001F3C1 {key} — {_html.escape(p.label())} {label}</div>')
 
 
 def _duration_text(started, closed):
@@ -573,8 +599,10 @@ header .meta{{font-size:12px;color:#888}}
 .chip i{{display:inline-block;width:9px;height:9px;border-radius:50%;
   margin-right:4px}}
 #wrap{{position:relative;max-width:980px;margin:30px auto;height:{height}px}}
+.base-spine{{position:absolute;left:50%;border-left:2px dotted #c4c4cc;
+  transform:translateX(-50%);z-index:0}}
 .strand{{position:absolute;left:50%;width:4px;border-radius:2px;
-  transform:translateX(-50%)}}
+  transform:translateX(-50%);z-index:1}}
 .phase-band{{position:absolute;left:0;right:0;height:34px;
   transform:translateY(-50%);border-radius:8px;z-index:0}}
 .phase-node{{position:absolute;left:50%;width:20px;height:20px;
@@ -583,10 +611,10 @@ header .meta{{font-size:12px;color:#888}}
 .phase-ring{{position:absolute;left:50%;width:14px;height:14px;
   border-radius:50%;background:#fff;border:3px solid;
   transform:translate(-50%,-50%);z-index:3}}
-.phase-title{{position:absolute;left:50%;margin-left:28px;font-size:15px;
-  font-weight:800;transform:translateY(-50%);max-width:40%;z-index:4;
+.phase-title{{position:absolute;left:50%;margin-left:28px;font-size:13px;
+  font-weight:700;transform:translateY(-50%);max-width:40%;z-index:4;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}
-.ring-label{{position:absolute;right:50%;margin-right:26px;font-size:12px;
+.ring-label{{position:absolute;right:50%;margin-right:26px;font-size:13px;
   font-weight:700;transform:translateY(-50%);max-width:40%;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}
 .open-label{{position:absolute;left:50%;margin-left:26px;font-size:11px;
