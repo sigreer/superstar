@@ -1,0 +1,24 @@
+1. Findings
+
+F1. RESOLVED. Severity: blocking. AC4 now separates placeholder masking from path scanning and explicitly says dangling inline-code repo paths warn while fenced-code paths are exempt (`docs/specs/2026-06-09-P9.S2-preflight-gate-self-review-design.md:227-235`). This resolves the prior inline-code contradiction.
+
+F2. RESOLVED. Severity: important. The spec now pins manifest/schema handling before round-number-based preflight (`docs/specs/2026-06-09-P9.S2-preflight-gate-self-review-design.md:159-166`, `docs/specs/2026-06-09-P9.S2-preflight-gate-self-review-design.md:181-195`). That matches the current manifest read/eager-write flow in `skills/external-review/scripts/external-reviewer.py:2614-2651` and removes the prior schema-too-new masking ambiguity.
+
+F3. Severity: important. The spec still leaves one exit-code/ordering edge ambiguous for existing early `--file` and `--context` validation. S2.a says missing context is a preflight `failure` surfaced with the rest of the findings (`docs/specs/2026-06-09-P9.S2-preflight-gate-self-review-design.md:144-146`), while S2.b says `review` resolves paths, reads the manifest, then runs preflight on round 1 (`docs/specs/2026-06-09-P9.S2-preflight-gate-self-review-design.md:181-186`) and AC5/AC6 require preflight failures to return exit 4 (`docs/specs/2026-06-09-P9.S2-preflight-gate-self-review-design.md:236-240`). Current code hard-fails missing target/context with exit 2 before chain discovery/manifest read (`skills/external-review/scripts/external-reviewer.py:2588-2600`). The spec should explicitly choose whether round-1 `review` defers target/context existence checks into preflight exit 4, or preserves the current exit-2 validation for missing files and scopes the preflight missing-file fixture to the standalone subcommand.
+
+2. Open questions / assumptions
+
+- I assume the intended design is to preserve existing `review` exit-2 behavior for missing `--file` / `--context`, because the spec also says `--no-preflight` should be byte-identical to today and missing files are already caught before any reviewer spawn.
+
+3. Suggested document edits
+
+- In S2.b step (1), change “resolve `--file` and `--context` paths” to explicitly say whether this includes existence validation.
+- In AC5/AC6, qualify “preflight failures return 4” as applying to failures actually reached by the auto-preflight gate, or state that existing early target/context exit-2 checks must be moved behind round-1 preflight.
+
+4. Verification gaps / commands that should be run
+
+- Add one subprocess regression for `review --kind spec --context missing.md` on a would-be round-1 chain, asserting the chosen behavior: either exit 2 before manifest/preflight, or exit 4 with a preflight finding.
+- Existing AC8 additions for inline-code path warning and schema-too-new-before-preflight are sufficient for the r1 findings.
+
+Overall verdict: ready with small edits
+
