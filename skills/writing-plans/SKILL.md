@@ -179,6 +179,15 @@ tasktool set <slice-id> --workflow-step implement
 
 See [[tasklist-discipline]] for the field summary.
 
+**Combined spec+plan gate.** When the slice used the combined gate path in `[[brainstorming]]` (the standalone spec review was skipped because the slice met all three eligibility conditions), invoke the plan review with `--combined-gate <spec-path>` so the reviewer also covers the spec:
+
+```bash
+external-reviewer review --kind plan --file <plan-path> \
+    --combined-gate <spec-path> --work-id <slice-id> --emit json
+```
+
+The eligibility conditions are defined in `[[brainstorming]]`; confirm them before using this flag. The combined gate persists on the chain — re-submissions do not need to repeat the flag. For combined-gate slices, the workflow step moves `spec → plan` directly (no standalone spec-review-passed step between them), so `tasktool set <slice-id> --workflow-step plan` is valid from spec state.
+
 ## Execution Handoff
 
 After both reviews are passed, write a **handoff prompt** for the next session and offer the execution choice.
