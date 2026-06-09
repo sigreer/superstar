@@ -400,7 +400,7 @@
         },
         {
           "blocked_on": null,
-          "closed": null,
+          "closed": "2026-06-09",
           "created": "2026-06-06",
           "depends_on": [
             "P9.S1",
@@ -414,7 +414,7 @@
           "notes": "",
           "parallel_group": null,
           "plan_path": "docs/plans/2026-06-09-P9.S3-combined-spec-plan-gate.md",
-          "planning_status": "proposed",
+          "planning_status": "ratified",
           "refs": [
             "docs/specs/2026-06-09-P9.S3-combined-spec-plan-gate-design.md",
             "docs/reviewer/p9-s3-combined-spec-plan-gate-design-spec",
@@ -422,12 +422,17 @@
             "docs/handoffs/2026-06-09-P9.S3-combined-spec-plan-gate-prompt.md",
             "docs/reviewer/p9-s3-combined-spec-plan-gate-plan"
           ],
-          "reviewer_chain": "docs/reviewer/p9-s3-combined-spec-plan-gate-plan",
-          "started": null,
-          "status": "ready",
+          "review_active": true,
+          "review_stage": "passed",
+          "reviewer_chain": "docs/reviewer/p9-s3-combined-spec-plan-gate-P9-S3-post-slice",
+          "started": "2026-06-09",
+          "status": "done",
           "tasks": [],
           "title": "Combined spec+plan gate for small slices",
-          "workflow_step": "implement"
+          "workflow_step": "implement",
+          "worktree_base_sha": "3f049ff9db098fefde7fe90e5afdb52fb608c1b1",
+          "worktree_branch": "worktree-p9-s3-combined-spec-plan-gate-for-small-slices",
+          "worktree_path": ".worktrees/worktree-p9-s3-combined-spec-plan-gate-for-small-slices"
         }
       ],
       "spec_path": "docs/specs/2026-06-06-P9-review-pipeline-efficiency-design.md",
