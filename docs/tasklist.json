@@ -422,14 +422,12 @@
             "docs/handoffs/2026-06-09-P9.S3-combined-spec-plan-gate-prompt.md",
             "docs/reviewer/p9-s3-combined-spec-plan-gate-plan"
           ],
-          "review_active": true,
-          "review_stage": "passed",
           "reviewer_chain": "docs/reviewer/p9-s3-combined-spec-plan-gate-plan",
           "started": null,
           "status": "ready",
           "tasks": [],
           "title": "Combined spec+plan gate for small slices",
-          "workflow_step": "plan"
+          "workflow_step": "implement"
         }
       ],
       "spec_path": "docs/specs/2026-06-06-P9-review-pipeline-efficiency-design.md",
