@@ -2236,6 +2236,25 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Only count rounds started on/after this UTC date/datetime (ISO format).",
     )
 
+    sp_preflight = subparsers.add_parser(
+        "preflight",
+        help="Run deterministic pre-review checks (no LLM calls).",
+    )
+    sp_preflight.add_argument("--file", required=True, help="Target document to check.")
+    sp_preflight.add_argument(
+        "--kind", required=True,
+        choices=["spec", "plan", "design", "implementation", "post-slice", "post-phase", "other"],
+        help="Review type, selects the required-section checks.",
+    )
+    sp_preflight.add_argument(
+        "--context", action="append", default=[],
+        help="Context file to check for existence/size. May repeat.",
+    )
+    sp_preflight.add_argument(
+        "--emit", choices=["text", "json"], default="text",
+        help="Output format.",
+    )
+
     return parser.parse_args(argv)
 
 
@@ -2645,6 +2664,40 @@ def run_stats(args) -> int:
     return 0
 
 
+def _print_preflight_text(result, stream=sys.stdout) -> None:
+    if not result.findings:
+        print("preflight passed: no findings.", file=stream)
+        return
+    for f in result.failures:
+        loc = f" (line {f.line})" if f.line else ""
+        print(f"FAILURE [{f.check}]{loc}: {f.message}", file=stream)
+    for f in result.warnings:
+        loc = f" (line {f.line})" if f.line else ""
+        print(f"warning [{f.check}]{loc}: {f.message}", file=stream)
+    print(
+        f"\npreflight: {len(result.failures)} failure(s), "
+        f"{len(result.warnings)} warning(s).",
+        file=stream,
+    )
+
+
+def run_preflight(args) -> int:
+    root = repo_root()
+    target = Path(args.file)
+    target = target if target.is_absolute() else root / target
+    context = [Path(c) for c in args.context]
+    result = run_preflight_checks(args.kind, target, context, root)
+    if args.emit == "json":
+        print(json.dumps({
+            "ok": result.ok,
+            "failures": [vars(f) for f in result.failures],
+            "warnings": [vars(f) for f in result.warnings],
+        }, indent=2))
+    else:
+        _print_preflight_text(result)
+    return 0 if result.ok else 4
+
+
 def current_head_sha(root: Path) -> str | None:
     try:
         out = subprocess.run(
@@ -2811,6 +2864,8 @@ def main() -> int:
         return run_clear_limit(args)
     if args.command == "stats":
         return run_stats(args)
+    if args.command == "preflight":
+        return run_preflight(args)
 
     # From here on: args.command == "review"
     if args.kind in ("post-slice", "post-phase") and not args.work_id:
