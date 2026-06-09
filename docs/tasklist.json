@@ -357,7 +357,7 @@
         },
         {
           "blocked_on": null,
-          "closed": null,
+          "closed": "2026-06-09",
           "created": "2026-06-05",
           "depends_on": [
             "P8.S1"
@@ -379,10 +379,10 @@
             "docs/reviewer/p8-s2-skill-closeout-sequence-plan"
           ],
           "review_active": true,
-          "review_stage": "applying_fixes",
-          "reviewer_chain": "docs/reviewer/p8-s2-skill-closeout-sequence-plan",
+          "review_stage": "passed",
+          "reviewer_chain": "docs/reviewer/p8-s2-skill-closeout-sequence-P8-S2-post-slice",
           "started": "2026-06-08",
-          "status": "in_progress",
+          "status": "done",
           "tasks": [],
           "title": "Skill updates: merge-back before close in slice-end sequence; clean (non-force) prune guidance; shared-tracker vs sibling-artifact boundary clarification",
           "workflow_step": "implement",
