@@ -1,0 +1,124 @@
+{
+  "schema_version": 1,
+  "chain": "p9-review-pipeline-efficiency-design-P9-post-phase",
+  "kind": "post-phase",
+  "target": "docs/specs/2026-06-06-P9-review-pipeline-efficiency-design.md",
+  "work_id": "P9",
+  "legacy_migrated": false,
+  "rounds": [
+    {
+      "round": 1,
+      "reviewers": [
+        {
+          "role": "primary",
+          "sweep_group": null,
+          "parent_round": 1,
+          "request": "r1-2026-06-09T2310-primary-request.md",
+          "response": "r1-2026-06-09T2310-primary-response.md",
+          "verdict": "revise",
+          "verdict_valid": true,
+          "returncode": 0,
+          "status": "ok",
+          "provider": "codex",
+          "caller_provider": "claude",
+          "model": null,
+          "sandbox": {
+            "repo_root": "/home/simon/Dev/sigreer/skills/superstar",
+            "scratch_dir": "/tmp/superstar-reviewer-p9-review-pipeline-efficiency-design-P9-post-phase-r1-primary-ff9927o3",
+            "response_dir": "docs/reviewer/p9-review-pipeline-efficiency-design-P9-post-phase/.reviewer-output/r1-primary",
+            "mode": "workspace-write-with-read-access"
+          },
+          "started_at": "2026-06-09T22:10:01.124Z",
+          "finished_at": "2026-06-09T22:13:38.198Z",
+          "duration_ms": 217073,
+          "estimated_usage": {
+            "formula": "ceil(chars / 4)",
+            "prompt_chars": 29206,
+            "response_chars": 3891,
+            "estimated_input_tokens": 7302,
+            "estimated_output_tokens": 973,
+            "estimated_total_tokens": 8275
+          },
+          "exact_usage": null,
+          "usage_capture_status": "estimated_only",
+          "usage_capture_error": null
+        },
+        {
+          "role": "sweep",
+          "sweep_group": 1,
+          "parent_round": 1,
+          "request": "r1-2026-06-09T2310-sweep1-request.md",
+          "response": "r1-2026-06-09T2310-sweep1-response.md",
+          "verdict": "revise",
+          "verdict_valid": true,
+          "returncode": 0,
+          "status": "ok",
+          "provider": "codex",
+          "caller_provider": "claude",
+          "model": null,
+          "sandbox": {
+            "repo_root": "/home/simon/Dev/sigreer/skills/superstar",
+            "scratch_dir": "/tmp/superstar-reviewer-p9-review-pipeline-efficiency-design-P9-post-phase-r1-sweep1-xydhdcpo",
+            "response_dir": "docs/reviewer/p9-review-pipeline-efficiency-design-P9-post-phase/.reviewer-output/r1-sweep1",
+            "mode": "workspace-write-with-read-access"
+          },
+          "started_at": "2026-06-09T22:13:38.207Z",
+          "finished_at": "2026-06-09T22:16:25.119Z",
+          "duration_ms": 166911,
+          "estimated_usage": {
+            "formula": "ceil(chars / 4)",
+            "prompt_chars": 29206,
+            "response_chars": 3191,
+            "estimated_input_tokens": 7302,
+            "estimated_output_tokens": 798,
+            "estimated_total_tokens": 8100
+          },
+          "exact_usage": null,
+          "usage_capture_status": "estimated_only",
+          "usage_capture_error": null
+        }
+      ],
+      "status": "ok",
+      "returncode": 0,
+      "started_at": "2026-06-09T22:10:01.124Z",
+      "finished_at": "2026-06-09T22:13:38.198Z",
+      "duration_ms": 217073,
+      "provider": "codex",
+      "caller_provider": "claude",
+      "model": null,
+      "estimated_usage": {
+        "formula": "ceil(chars / 4)",
+        "prompt_chars": 29206,
+        "response_chars": 3891,
+        "estimated_input_tokens": 7302,
+        "estimated_output_tokens": 973,
+        "estimated_total_tokens": 8275
+      },
+      "exact_usage": null,
+      "usage_capture_status": "estimated_only",
+      "usage_capture_error": null,
+      "merged_verdict": "revise",
+      "merged_findings": "r1-merged-findings.md",
+      "request": "r1-2026-06-09T2310-primary-request.md",
+      "response": "r1-2026-06-09T2310-primary-response.md",
+      "resolution": null,
+      "resolution_parse_status": null,
+      "resolution_waiver": false,
+      "head_sha_at_request": "01542dfc27cd4cf76d934ab180062fe30612bf80",
+      "head_sha_after_round": "01542dfc27cd4cf76d934ab180062fe30612bf80",
+      "worktree_dirty_at_request": true,
+      "verdict": "revise",
+      "verdict_valid": true,
+      "findings_count": 3,
+      "blocking_findings_count": 2,
+      "base_ref": null,
+      "base_ref_source": null,
+      "diff_included": false,
+      "depth_resolved": "thorough"
+    }
+  ],
+  "sweep_checkpoints": {
+    "first-round": "completed",
+    "final-ready": "pending"
+  }
+}

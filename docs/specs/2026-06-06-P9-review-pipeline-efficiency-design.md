@@ -1,7 +1,7 @@
 # P9 — Review-pipeline efficiency: fewer rounds, cheaper rounds
 
 **Date:** 2026-06-06
-**Status:** draft
+**Status:** implemented (P9.S1, P9.S2, P9.S3 closed; post-phase closeout 2026-06-09 — representative ≤4.5 rounds/slice measurement deferred to the multistore trial, see [closeout evidence](../handoffs/2026-06-09-P9-closeout-evidence.md))
 **Tracker:** P9 (phase)
 
 ## Problem
