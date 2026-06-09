@@ -2521,6 +2521,8 @@ def collect_review_stats(output_dir: Path, since: dt.datetime | None = None) -> 
     excluded_legacy_rounds = 0
     uncorrelated_chains: list[str] = []
     slice_chains: dict[str, dict[str, list]] = {}
+    combined_plan = {"chains": 0, "rounds": 0}
+    standalone_plan = {"chains": 0, "rounds": 0}
 
     for manifest_path in sorted(output_dir.glob("**/chain.json")):
         try:
@@ -2582,6 +2584,15 @@ def collect_review_stats(output_dir: Path, since: dt.datetime | None = None) -> 
                 if isinstance(invocation_duration, (int, float)):
                     provider_stats["total_duration_ms"] += int(invocation_duration)
 
+        # Combined-gate classification: plan chains only.
+        if kind == "plan" and in_window_rounds:
+            is_combined = any(
+                r.get("combined_gate") is True for r in in_window_rounds
+            )
+            bucket = combined_plan if is_combined else standalone_plan
+            bucket["chains"] += 1
+            bucket["rounds"] += len(in_window_rounds)
+
         # Per-slice correlation: spec/plan/post-slice chains only.
         if kind in ("spec", "plan", "post-slice") and in_window_rounds:
             work_id = manifest.get("work_id")
@@ -2642,6 +2653,7 @@ def collect_review_stats(output_dir: Path, since: dt.datetime | None = None) -> 
         "groups": groups,
         "provider_comparison": providers,
         "per_slice": per_slice,
+        "combined_gate": {"combined": combined_plan, "standalone": standalone_plan},
     }
 
 
@@ -2675,6 +2687,12 @@ def print_stats_table(stats: dict) -> None:
               f"{', '.join(ps['uncorrelated_chains'])}")
     if stats.get("excluded_legacy_rounds"):
         print(f"  note: {stats['excluded_legacy_rounds']} round(s) without timestamps excluded by --since")
+    cg = stats.get("combined_gate") or {}
+    comb = cg.get("combined") or {"chains": 0, "rounds": 0}
+    stand = cg.get("standalone") or {"chains": 0, "rounds": 0}
+    print(f"combined-gate (plan): "
+          f"combined={comb['chains']}c/{comb['rounds']}r  "
+          f"standalone={stand['chains']}c/{stand['rounds']}r")
 
 
 def run_stats(args) -> int:
