@@ -98,6 +98,10 @@ for root in (cache, current):
                 command = hook.get("command")
                 if isinstance(command, str):
                     command = command.replace(
+                        '"${PLUGIN_ROOT}/hooks/run-hook.cmd"',
+                        hook_runner,
+                    )
+                    command = command.replace(
                         '"${CLAUDE_PLUGIN_ROOT:-.}/hooks/run-hook.cmd"',
                         hook_runner,
                     )

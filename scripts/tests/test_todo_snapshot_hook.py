@@ -82,3 +82,16 @@ def test_snapshot_hook_is_synchronous_for_codex() -> None:
     assert post_tool_use["matcher"] == "TodoWrite|update_plan|functions.update_plan"
     assert post_tool_use["hooks"][0]["command"].endswith(" todo-snapshot")
     assert post_tool_use["hooks"][0]["async"] is False
+
+
+def test_plugin_hook_commands_use_exact_plugin_root_token() -> None:
+    config = json.loads(HOOKS_CONFIG.read_text(encoding="utf-8"))
+
+    for event_entries in config["hooks"].values():
+        for entry in event_entries:
+            for hook in entry["hooks"]:
+                command = hook["command"]
+                assert '${PLUGIN_ROOT:-.}' not in command
+                assert '${CLAUDE_PLUGIN_ROOT:-.}' not in command
+                assert command.startswith('"${PLUGIN_ROOT}/hooks/run-hook.cmd"')
+                assert hook["command_windows"].startswith('"%PLUGIN_ROOT%\\hooks\\run-hook.cmd"')

@@ -267,6 +267,25 @@ Checkpoint state (`first-round`, `final-ready`) is persisted in `chain.json` so 
 
 Each primary/sweep reviewer receives its own `AGENT_REVIEWER_RESPONSE_DIR` and `AGENT_REVIEWER_SCRATCH_DIR`, so parallel reviewer roles cannot overwrite one another's scratch/output files.
 
+## Combined spec+plan gate
+
+For an eligible small slice (see `[[brainstorming]]` / `[[writing-plans]]`), the
+plan review can also cover an un-reviewed spec:
+
+    external-reviewer review --kind plan --file <plan> \
+        --combined-gate <spec-path> --work-id <slice-id> --emit json
+
+- Valid only with `--kind plan` (else exit 2); the spec path must exist (else
+  exit 2). The spec is added to the review context automatically (deduped).
+- The reviewer is instructed to also review the attached spec and tag
+  spec-level findings distinctly.
+- The combination is persisted on the chain (`combined_gate_spec`). Later rounds
+  reuse it automatically; you need not repeat the flag. Passing a *different*
+  `--combined-gate` path, or adding it to a chain that started standalone, exits
+  6 (chain mismatch).
+- `external-reviewer stats` reports a `combined-gate (plan)` line segmenting
+  combined vs standalone plan chains.
+
 ## Resolution artifact
 
 When any round returns `merged_verdict: revise` (all kinds — spec and plan included as of P9.S1), the fixer MUST write `docs/reviewer/<chain>/r{N}-resolution.md` before the next round is submitted. For spec/plan reviews during planning the coordinator writes it directly; for post-slice/post-phase a fix subagent writes it. The script's gate refuses round N+1 without it (exit code 3) unless `--allow-missing-resolution` is passed.

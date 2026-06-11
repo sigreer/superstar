@@ -33,6 +33,6 @@ print(config["hooks"]["Stop"][0]["hooks"][0]["command"])
 PY
 )"
 
-env -u CLAUDE_PLUGIN_ROOT SUPERSTAR_NOTIFY_DRY_RUN=1 \
+env -u CLAUDE_PLUGIN_ROOT PLUGIN_ROOT="$ROOT" SUPERSTAR_NOTIFY_DRY_RUN=1 \
   bash -lc 'cd "$1" && eval "$2" >/dev/null' _ "$ROOT" "$stop_command"
-echo "PASS: Stop hook command runs without CLAUDE_PLUGIN_ROOT"
+echo "PASS: Stop hook command runs with PLUGIN_ROOT"

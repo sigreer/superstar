@@ -147,6 +147,16 @@ tasktool set <slice-id> --workflow-step spec
 
 After the spec review passes (verdict `ready` / `ready with small edits`), set `--workflow-step plan` before invoking writing-plans. See [[tasklist-discipline]] for the field summary. Setting the field is optional but encouraged — it primes downstream automation that future slices in `P6` will enable.
 
+**Combined spec+plan gate (slice specs only).** A slice spec may skip the standalone external spec review when **all three** of the following hold:
+
+1. Single-surface change — one tool, skill, or app area; no new subsystem introduced.
+2. No cross-repo or cross-plugin impact.
+3. Fits the existing phase direction — no new product decisions required.
+
+Phase-level specs always get a standalone spec review. When any condition is unclear or in doubt, use the standard two-gate flow.
+
+When eligible: still **write and commit** the spec (the artifact transaction must complete), but skip the standalone `--kind spec` review. Set `--workflow-step plan` directly and transition to `[[writing-plans]]`, which will run the plan review with `--combined-gate <spec-path>` so that spec coverage is included in the plan review gate.
+
 **Communication contract:** Do not ask the user before implementation planning. The validated design conversation already happened before the spec was written; the external reviewer is the post-write gate. Speak to the user only for genuine questions/blockers, or after both the spec and implementation plan have passed external review.
 
 **Implementation:**

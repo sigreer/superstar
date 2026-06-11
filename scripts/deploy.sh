@@ -302,7 +302,6 @@ run_check() {
     if [[ -r "$SOURCE_ROOT/VERSION" ]]; then
         dev_version="$(tr -d '[:space:]' < "$SOURCE_ROOT/VERSION")"
     fi
-    check_cache "codex-current" "${HOME}/.codex/plugins/cache/superstar-dev/superstar/current" "$dev_version" "$((1 - SKIP_CODEX))"
     check_cache "codex-version" "${HOME}/.codex/plugins/cache/superstar-dev/superstar/$dev_version" "$dev_version" "$((1 - SKIP_CODEX))"
     check_cache "claude-current" "${HOME}/.claude/plugins/cache/superstar-dev/superstar/current" "$dev_version" "$((1 - SKIP_CLAUDE))"
     check_cache "claude-version" "${HOME}/.claude/plugins/cache/superstar-dev/superstar/$dev_version" "$dev_version" "$((1 - SKIP_CLAUDE))"

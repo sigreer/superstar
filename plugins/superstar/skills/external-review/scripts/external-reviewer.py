@@ -123,6 +123,11 @@ deferred gates without justification, and regressions outside the phase scope.""
 and tailor findings to the supplied target and context.""",
 }
 
+COMBINED_GATE_GUIDANCE = (
+    "This plan's spec did not receive a standalone review. Also review the "
+    "attached spec for completeness, internal consistency, and groundedness; "
+    "tag spec-level findings distinctly."
+)
 
 PROMPT_SENTINEL_START = "<!-- superstar-prompt:start -->"
 PROMPT_SENTINEL_END = "<!-- superstar-prompt:end -->"
@@ -965,12 +970,16 @@ def make_prompt(
     mode: str = "broad",
     incremental_preamble: str | None = None,
     incremental_budget_chars: int | None = None,
+    extra_guidance: str | None = None,
 ) -> str:
     context_display = "\n".join(f"- {rel_or_abs(p, root)}" for p in context) or "- none"
+    mode_guidance = MODE_GUIDANCE[kind]
+    if extra_guidance:
+        mode_guidance = mode_guidance + "\n\n" + extra_guidance
     body = REVIEW_PROMPT.format(
         repo_root=root,
         kind=kind,
-        mode_guidance=MODE_GUIDANCE[kind],
+        mode_guidance=mode_guidance,
         target_file=rel_or_abs(target, root),
         context_files=context_display,
     )
@@ -2144,6 +2153,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Skip the round-1 deterministic preflight checks.",
     )
     sp_review.add_argument(
+        "--combined-gate",
+        default=None,
+        metavar="SPEC_PATH",
+        help="Plan-only. Attach this (un-reviewed) spec to the plan review so "
+             "one review covers both. Persisted on the chain; reused on later "
+             "rounds. Exits 2 if used with a non-plan kind or a missing path.",
+    )
+    sp_review.add_argument(
         "--mode",
         choices=["auto", "broad", "incremental"],
         default="auto",
@@ -2504,6 +2521,8 @@ def collect_review_stats(output_dir: Path, since: dt.datetime | None = None) -> 
     excluded_legacy_rounds = 0
     uncorrelated_chains: list[str] = []
     slice_chains: dict[str, dict[str, list]] = {}
+    combined_plan = {"chains": 0, "rounds": 0}
+    standalone_plan = {"chains": 0, "rounds": 0}
 
     for manifest_path in sorted(output_dir.glob("**/chain.json")):
         try:
@@ -2565,6 +2584,15 @@ def collect_review_stats(output_dir: Path, since: dt.datetime | None = None) -> 
                 if isinstance(invocation_duration, (int, float)):
                     provider_stats["total_duration_ms"] += int(invocation_duration)
 
+        # Combined-gate classification: plan chains only.
+        if kind == "plan" and in_window_rounds:
+            is_combined = any(
+                r.get("combined_gate") is True for r in in_window_rounds
+            )
+            bucket = combined_plan if is_combined else standalone_plan
+            bucket["chains"] += 1
+            bucket["rounds"] += len(in_window_rounds)
+
         # Per-slice correlation: spec/plan/post-slice chains only.
         if kind in ("spec", "plan", "post-slice") and in_window_rounds:
             work_id = manifest.get("work_id")
@@ -2625,6 +2653,7 @@ def collect_review_stats(output_dir: Path, since: dt.datetime | None = None) -> 
         "groups": groups,
         "provider_comparison": providers,
         "per_slice": per_slice,
+        "combined_gate": {"combined": combined_plan, "standalone": standalone_plan},
     }
 
 
@@ -2658,6 +2687,12 @@ def print_stats_table(stats: dict) -> None:
               f"{', '.join(ps['uncorrelated_chains'])}")
     if stats.get("excluded_legacy_rounds"):
         print(f"  note: {stats['excluded_legacy_rounds']} round(s) without timestamps excluded by --since")
+    cg = stats.get("combined_gate") or {}
+    comb = cg.get("combined") or {"chains": 0, "rounds": 0}
+    stand = cg.get("standalone") or {"chains": 0, "rounds": 0}
+    print(f"combined-gate (plan): "
+          f"combined={comb['chains']}c/{comb['rounds']}r  "
+          f"standalone={stand['chains']}c/{stand['rounds']}r")
 
 
 def run_stats(args) -> int:
@@ -2883,12 +2918,34 @@ def main() -> int:
             file=sys.stderr,
         )
         return 2
+    # --combined-gate is plan-only; validate before any chain work so misuse
+    # never creates a chain folder.
+    if args.combined_gate is not None and args.kind != "plan":
+        print(
+            "ERROR: --combined-gate is only valid with --kind plan.",
+            file=sys.stderr,
+        )
+        return 2
     args.review_depth = resolve_review_depth(args.review_depth, args.kind)
     root = repo_root()
     target = (root / args.file).resolve() if not Path(args.file).is_absolute() else Path(args.file).resolve()
     if not target.exists():
         print(f"ERROR: target file not found: {target}", file=sys.stderr)
         return 2
+
+    combined_gate_explicit: Path | None = None
+    if args.combined_gate is not None:
+        combined_gate_explicit = (
+            (root / args.combined_gate).resolve()
+            if not Path(args.combined_gate).is_absolute()
+            else Path(args.combined_gate).resolve()
+        )
+        if not combined_gate_explicit.exists():
+            print(
+                f"ERROR: --combined-gate spec not found: {combined_gate_explicit}",
+                file=sys.stderr,
+            )
+            return 2
 
     context: list[Path] = []
     for raw in args.context:
@@ -2948,6 +3005,9 @@ def main() -> int:
         # F3 (r3 fix): Eager-write so run_one_reviewer rate-limit paths can read
         # chain.json on the first round (before the normal post-reviewer write).
         write_manifest(manifest_path, manifest)
+        if combined_gate_explicit is not None:
+            manifest["combined_gate_spec"] = rel_or_abs(combined_gate_explicit, root)
+            write_manifest(manifest_path, manifest)
     else:
         # Existing manifest: refuse a work-id mismatch (someone trying to reuse a
         # chain folder for a different slice/phase). Stored work_id is the source
@@ -2969,6 +3029,52 @@ def main() -> int:
         # If the stored value is None and a CLI value was provided, backfill it.
         if stored_work_id is None and args.work_id is not None:
             manifest["work_id"] = args.work_id
+
+        # Combined-gate chain identity: a combined chain stays combined for its
+        # whole life (the spec remains un-reviewed). Mirror the work_id rule.
+        stored_combined = manifest.get("combined_gate_spec")
+        explicit_rel = (
+            rel_or_abs(combined_gate_explicit, root)
+            if combined_gate_explicit is not None else None
+        )
+        if explicit_rel is not None:
+            if stored_combined is None:
+                print(
+                    "ERROR: --combined-gate was not set when this chain was "
+                    "created; a chain cannot become combined mid-stream.",
+                    file=sys.stderr,
+                )
+                return 6
+            if stored_combined != explicit_rel:
+                print(
+                    f"ERROR: --combined-gate {explicit_rel!r} does not match the "
+                    f"chain's stored combined_gate_spec {stored_combined!r}. "
+                    "A combined chain cannot switch which spec it covers.",
+                    file=sys.stderr,
+                )
+                return 6
+
+    # Effective combined spec = explicit (round 1) or persisted (later rounds).
+    stored_combined = manifest.get("combined_gate_spec")
+    combined_gate_effective: Path | None = None
+    if combined_gate_explicit is not None:
+        combined_gate_effective = combined_gate_explicit
+    elif stored_combined is not None:
+        combined_gate_effective = (
+            (root / stored_combined).resolve()
+            if not Path(stored_combined).is_absolute()
+            else Path(stored_combined).resolve()
+        )
+        if not combined_gate_effective.exists():
+            print(
+                f"ERROR: chain's combined_gate_spec not found: "
+                f"{combined_gate_effective}",
+                file=sys.stderr,
+            )
+            return 2
+    if combined_gate_effective is not None:
+        if combined_gate_effective not in context:
+            context.append(combined_gate_effective)
 
     if (
         manifest["rounds"]
@@ -3081,11 +3187,15 @@ def main() -> int:
             diff_section=diff_section,
         )
 
+    combined_guidance = (
+        COMBINED_GATE_GUIDANCE if combined_gate_effective is not None else None
+    )
     prompt_text = make_prompt(
         root=root, target=target, kind=args.kind,
         context=context, max_lines=args.max_lines,
         mode=mode, incremental_preamble=incremental_preamble,
         incremental_budget_chars=args.incremental_budget_chars,
+        extra_guidance=combined_guidance,
     )
 
     head_sha_at_request = current_head_sha(root)
@@ -3193,6 +3303,7 @@ def main() -> int:
                     context=context, max_lines=args.max_lines,
                     mode="broad", incremental_preamble=None,
                     incremental_budget_chars=args.incremental_budget_chars,
+                    extra_guidance=combined_guidance,
                 )
             sweeps.append(run_one_reviewer(
                 role="sweep", sweep_index=k,
@@ -3310,6 +3421,11 @@ def main() -> int:
         "base_ref_source": base_source,
         "diff_included": base_source in ("auto", "explicit") and not args.no_diff and bool(diff_section),
         "depth_resolved": args.review_depth,
+        **(
+            {"combined_gate": True,
+             "combined_gate_spec": rel_or_abs(combined_gate_effective, root)}
+            if combined_gate_effective is not None else {}
+        ),
     }
     manifest["rounds"].append(round_entry)
     write_manifest(manifest_path, manifest)

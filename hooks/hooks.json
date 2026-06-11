@@ -6,7 +6,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT:-.}/hooks/run-hook.cmd\" session-start",
+            "command": "\"${PLUGIN_ROOT}/hooks/run-hook.cmd\" session-start",
+            "command_windows": "\"%PLUGIN_ROOT%\\hooks\\run-hook.cmd\" session-start",
             "async": false
           }
         ]
@@ -18,7 +19,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT:-.}/hooks/run-hook.cmd\" agent-finished",
+            "command": "\"${PLUGIN_ROOT}/hooks/run-hook.cmd\" agent-finished",
+            "command_windows": "\"%PLUGIN_ROOT%\\hooks\\run-hook.cmd\" agent-finished",
             "async": false
           }
         ]
@@ -30,7 +32,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT:-.}/hooks/run-hook.cmd\" agent-finished",
+            "command": "\"${PLUGIN_ROOT}/hooks/run-hook.cmd\" agent-finished",
+            "command_windows": "\"%PLUGIN_ROOT%\\hooks\\run-hook.cmd\" agent-finished",
             "async": false
           }
         ]
@@ -42,7 +45,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT:-.}/hooks/run-hook.cmd\" todo-snapshot",
+            "command": "\"${PLUGIN_ROOT}/hooks/run-hook.cmd\" todo-snapshot",
+            "command_windows": "\"%PLUGIN_ROOT%\\hooks\\run-hook.cmd\" todo-snapshot",
             "async": false
           }
         ]

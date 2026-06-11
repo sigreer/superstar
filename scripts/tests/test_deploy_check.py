@@ -25,6 +25,25 @@ def _make_stamped_shim(path: Path, *, name: str, version: str, source_root: str,
     path.chmod(0o755)
 
 
+def _install_cache(root: Path, source: Path) -> None:
+    root.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(source / "VERSION", root / "VERSION")
+    for required in (
+        "skills/using-superstar/SKILL.md",
+        "skills/project-setup/SKILL.md",
+        "skills/using-git-worktrees/SKILL.md",
+        "hooks/hooks.json",
+        "hooks/run-hook.cmd",
+        "hooks/agent-finished",
+        "hooks/todo-snapshot",
+        "tools/tasktool/notify.py",
+        "assets/app-icon.png",
+    ):
+        path = root / required
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("fixture\n")
+
+
 def _install_ok_caches(home: Path, source: Path) -> None:
     for rel in (
         ".codex/plugins/cache/superstar-dev/superstar/current",
@@ -33,22 +52,7 @@ def _install_ok_caches(home: Path, source: Path) -> None:
         ".claude/plugins/cache/superstar-dev/superstar/1.0.0",
     ):
         cache = home / rel
-        cache.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(source / "VERSION", cache / "VERSION")
-        for required in (
-            "skills/using-superstar/SKILL.md",
-            "skills/project-setup/SKILL.md",
-            "skills/using-git-worktrees/SKILL.md",
-            "hooks/hooks.json",
-            "hooks/run-hook.cmd",
-            "hooks/agent-finished",
-            "hooks/todo-snapshot",
-            "tools/tasktool/notify.py",
-            "assets/app-icon.png",
-        ):
-            path = cache / required
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text("fixture\n")
+        _install_cache(cache, source)
 
 
 def _run_check(
@@ -285,8 +289,24 @@ def test_check_exits_nonzero_on_missing_codex_cache(tmp_path: Path) -> None:
     shutil.copyfile(source / "VERSION", claude_cache / "VERSION")
     result = _run_check(home, source, install_caches=False)
     assert result.returncode != 0
-    assert "codex-current" in result.stdout
+    assert "codex-version" in result.stdout
     assert "MISSING_CACHE" in result.stdout
+
+
+def test_check_accepts_codex_version_cache_without_current_symlink(tmp_path: Path) -> None:
+    home = tmp_path / "home"; (home / ".local" / "bin").mkdir(parents=True)
+    source = tmp_path / "src"; source.mkdir()
+    (source / "VERSION").write_text("1.0.0\n")
+    _all_ok_shims(home, source)
+    _install_cache(home / ".codex/plugins/cache/superstar-dev/superstar/1.0.0", source)
+    _install_cache(home / ".claude/plugins/cache/superstar-dev/superstar/current", source)
+    _install_cache(home / ".claude/plugins/cache/superstar-dev/superstar/1.0.0", source)
+
+    result = _run_check(home, source, install_caches=False)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "codex-current" not in result.stdout
+    assert "codex-version" in result.stdout
 
 
 def test_check_exits_nonzero_on_missing_claude_cache(tmp_path: Path) -> None:

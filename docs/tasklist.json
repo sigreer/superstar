@@ -240,6 +240,28 @@
       "title": "Visual work-history timeline generator (tools/timeline)",
       "worktree_branch": "worktree-x29-visual-work-history-timeline-generator",
       "worktree_path": ".worktrees/worktree-x29-visual-work-history-timeline-generator"
+    },
+    {
+      "closed": null,
+      "created": "2026-06-12",
+      "id": "X30",
+      "notes": "Implemented hook root cleanup and Codex deploy-cache check alignment. Verification: python3 -m pytest scripts/tests -q; bash tests/claude-code/test-hook-config.sh; bash tests/claude-code/test-publish-to-local-claude.sh; bash tests/codex-plugin-sync/test-publish-to-local-codex.sh; ./scripts/bump-version.sh --check; ./scripts/deploy.sh --check; tasktool validate --strict-format (only pre-existing X29 missing-ref warnings); git diff --check.\nIncluded embedded Codex payload sync produced by publish/deploy materialization so plugins/superstar mirrors the canonical top-level skills.",
+      "refs": [
+        "hooks/hooks.json",
+        "plugins/superstar/hooks/hooks.json",
+        "scripts/deploy.sh",
+        "scripts/lib/publish-common.sh",
+        "scripts/tests/test_todo_snapshot_hook.py",
+        "scripts/tests/test_deploy_check.py",
+        "tests/claude-code/test-hook-config.sh",
+        "plugins/superstar/skills/brainstorming/SKILL.md",
+        "plugins/superstar/skills/external-review/SKILL.md",
+        "plugins/superstar/skills/external-review/scripts/external-reviewer.py",
+        "plugins/superstar/skills/writing-plans/SKILL.md"
+      ],
+      "started": "2026-06-12",
+      "status": "in_progress",
+      "title": "Harden Codex plugin hook root handling and deploy cache checks"
     }
   ],
   "last_reviewed": "2026-05-18",
