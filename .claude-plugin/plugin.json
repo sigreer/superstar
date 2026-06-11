@@ -1,7 +1,7 @@
 {
   "name": "superstar",
   "description": "Core skills library for Claude Code: TDD, debugging, collaboration patterns, and proven techniques",
-  "version": "6.10.0",
+  "version": "6.10.1",
   "author": {
     "name": "Simon Greer",
     "email": "simon@sidewayssystems.co.uk"
