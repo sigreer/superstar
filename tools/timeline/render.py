@@ -5,6 +5,7 @@ from __future__ import annotations
 import bisect
 import datetime as dt
 import html as _html
+import re
 
 PALETTE = ["#7c5cff", "#10ac84", "#ff9f43", "#4cc2ff",
            "#ee5253", "#f368e0", "#01a3a4", "#feca57"]
@@ -159,8 +160,34 @@ class RenderResult:
 
 PAD_TOP = 40        # px of breathing room above the first element
 PAD_BOTTOM = 60
-TRACK_PAD = 6       # extra px between adjacent occupants of the same track
+TRACK_PAD = 12      # extra px between adjacent occupants of the same track
+# Half-height a phase band reserves on every track. The band is full-width, so a
+# node/ring must keep cards on BOTH sides clear of it; this is half the CSS
+# .phase-band height (54px) so neighbouring elements never slide under the band.
+PHASE_BAND_HALF = 27
+# Centre-track half-height a date pill reserves. Larger than the pill's real
+# half (~8px) so the collision sweep pushes a pill that lands on a phase band
+# clear of it by >= 1.5x the pill height; still below the natural per-day gap so
+# interior date pills keep their uniform rhythm. See test_short_idle_runs_*.
+DATE_PILL_HALF = 22
 _RANK = {"date": -1, "node": 0, "card": 1, "open": 1, "ring": 2}  # tie-break at equal y
+_SEQ_RE = re.compile(r"^P(\d+)(?:\.S(\d+)([a-z]*))?$")
+
+
+def _seq_key(key):
+    """Stable secondary order for elements resolving to the same instant: group
+    by parent phase number, then slice sequence (numeric, suffix-aware). Without
+    this, equal-instant cards fall back to lexicographic key order, which sorts
+    'P10' before 'P2' and 'S10' before 'S2'. Phase-level anchors sort before
+    their own slices; cross-cutting (X) items sort after all phases by number."""
+    m = _SEQ_RE.match(key)
+    if m:
+        seq = int(m.group(2)) if m.group(2) else -1
+        return (0, int(m.group(1)), seq, m.group(3) or "")
+    mx = re.match(r"^X(\d+)", key)
+    if mx:
+        return (1, int(mx.group(1)), 0, "")
+    return (2, 0, 0, key)
 
 
 class _El:
@@ -228,7 +255,7 @@ def layout(els, scale, direction="asc"):
                 bottom_el.ys[direction] = max(others) + 1
 
     bottom = {}
-    for e in sorted(els, key=lambda e: (e.ys[direction], _RANK[e.kind], e.key)):
+    for e in sorted(els, key=lambda e: (e.ys[direction], _RANK[e.kind], _seq_key(e.key))):
         y = e.ys[direction]
         for t, h in e.tracks:
             if t in bottom:
@@ -306,12 +333,18 @@ def render_html(project, items, *, generated, show_x=False):
     els = []
     for p in placeable_phases:
         start, end, close_only = spans[p.key]
+        # Reserve the band's full half-height on every track (it is full-width),
+        # so neither cards (L/R) nor date pills (C) slide under the band; the
+        # date pill's own enlarged C reservation then keeps it clear by >= 1.5x
+        # its height.
+        band_tracks = (("C", PHASE_BAND_HALF), ("L", PHASE_BAND_HALF),
+                       ("R", PHASE_BAND_HALF))
         if not close_only:
             els.append(_El(p.key, "node", start,
-                           (("C", 12), ("R", 17)), phase=p.key, item=p))
+                           band_tracks, phase=p.key, item=p))
         if end is not None:
             els.append(_El(p.key, "ring", end,
-                           (("C", 8), ("L", 9)), phase=p.key, item=p))
+                           band_tracks, phase=p.key, item=p))
         else:
             els.append(_El(p.key, "open", generated,
                            (("R", 9),), phase=p.key, item=p))
@@ -327,7 +360,7 @@ def render_html(project, items, *, generated, show_x=False):
         else:
             side = "left" if n % 2 == 0 else "right"
         els.append(_El(s.key, "card", _eff_end(s.closed),
-                       (("L" if side == "left" else "R", 14), ("C", 7)),
+                       (("L" if side == "left" else "R", 14),),
                        phase=s.parent, item=s, side=side))
 
     # X-items reserve layout space even while hidden, so toggling them on
@@ -335,7 +368,7 @@ def render_html(project, items, *, generated, show_x=False):
     for n, i in enumerate(sorted(xs, key=lambda i: _eff_end(i.closed))):
         side = "left" if n % 2 == 0 else "right"
         els.append(_El(i.key, "card", _eff_end(i.closed),
-                       (("L" if side == "left" else "R", 14), ("C", 7)),
+                       (("L" if side == "left" else "R", 14),),
                        item=i, side=side))
 
     # Active days = every embedded point event's local date, including ALL X
@@ -367,7 +400,7 @@ def render_html(project, items, *, generated, show_x=False):
             continue
         d = entry[1]
         anchor = dt.datetime.combine(d, dt.time(12, 0))
-        m = _El(f"date-{d.isoformat()}", "date", anchor, (("C", 6),))
+        m = _El(f"date-{d.isoformat()}", "date", anchor, (("C", DATE_PILL_HALF),))
         date_marker[d] = m
         els.append(m)
 
@@ -529,30 +562,36 @@ def _overlap_keys(spans):
     return out
 
 
+def _band(p, td, pos, color, cls, icon, status=""):
+    """Full-width phase band: icon + phase number on the left, title + icon on
+    the right. Used for both phase start (node) and phase finish (ring) so each
+    consumes the full row width symmetrically."""
+    key = _html.escape(p.key)
+    num = f'{icon} <b>{key}</b>' + (f' {status}' if status else "")
+    return (f'<div class="phase-band {cls}" data-key="{key}" '
+            f'style="top:{td}px;color:#fff;background:{color}" {pos}>'
+            f'<span class="pb-num">{num}</span>'
+            f'<span class="pb-title">{_html.escape(p.label())} {icon}</span></div>')
+
+
 def _node_html(p, ta, td, off, color):
     key = _html.escape(p.key)
     pos = f'data-ta="{ta}" data-td="{td}"'
-    return (f'<div class="phase-band" data-key="{key}" '
-            f'style="top:{td}px;background:{color}0d" {pos}></div>'
+    return (_band(p, td, pos, color, "start", "\U0001F3CE️") +
             f'<div class="phase-node" data-key="{key}" '
             f'style="top:{td}px;margin-left:{off:.0f}px;background:{color}" '
-            f'{pos}></div>'
-            f'<div class="phase-title" data-key="{key}" '
-            f'style="top:{td}px;color:{color}" {pos}>'
-            f'\U0001F3CE️ {key} — {_html.escape(p.label())}</div>')
+            f'{pos}></div>')
 
 
 def _ring_html(p, ta, td, off):
     ring = "#9aa0a6" if p.status == "cancelled" else _color(p.key)
-    label = "cancelled" if p.status == "cancelled" else "complete"
+    status = "cancelled" if p.status == "cancelled" else "complete"
     key = _html.escape(p.key)
     pos = f'data-ta="{ta}" data-td="{td}"'
-    return (f'<div class="phase-ring" data-key="{key}" '
+    return (_band(p, td, pos, ring, "finish", "\U0001F3C1", status) +
+            f'<div class="phase-ring" data-key="{key}" '
             f'style="top:{td}px;margin-left:{off:.0f}px;border-color:{ring}" '
-            f'{pos}></div>'
-            f'<div class="ring-label" data-key="{key}" '
-            f'style="top:{td}px;color:{ring}" {pos}>'
-            f'\U0001F3C1 {key} — {_html.escape(p.label())} {label}</div>')
+            f'{pos}></div>')
 
 
 def _duration_text(started, closed):
@@ -583,12 +622,15 @@ def _card(item, ta, td, side, color, off, css):
               f'{started_clause}closed {_fmt(item.closed)}'
               f'{_duration_text(item.started, item.closed)}</div>')
     dot_css = "dot x-node" if "x-node" in css else "dot"
+    conn_css = "connector x-node" if "x-node" in css else "connector"
     key = _html.escape(item.key)
     pos = f'data-ta="{ta}" data-td="{td}"'
-    return (f'<div class="{css} {side}" data-key="{key}" '
+    return (f'<div class="{conn_css} {side}" data-key="{key}" '
+            f'style="top:{td}px;background:{color}" {pos}></div>'
+            f'<div class="{css} {side}" data-key="{key}" '
             f'title="{_html.escape(item.label())}" '
             f'onclick="this.classList.toggle(\'open\')" '
-            f'style="top:{td}px;border-color:{color}66;background:{color}14" '
+            f'style="top:{td}px;border-color:{color};background:{color}" '
             f'{pos}>'
             f'<b>{key}</b> {_html.escape(item.label())}{detail}</div>'
             f'<div class="{dot_css} {side}-dot" data-key="{key}" '
@@ -612,20 +654,18 @@ header .meta{{font-size:12px;color:#888}}
   transform:translateX(-50%);z-index:0}}
 .strand{{position:absolute;left:50%;width:4px;border-radius:2px;
   transform:translateX(-50%);z-index:1}}
-.phase-band{{position:absolute;left:0;right:0;height:34px;
-  transform:translateY(-50%);border-radius:8px;z-index:0}}
+.phase-band{{position:absolute;left:0;right:0;height:54px;display:flex;
+  align-items:center;justify-content:space-between;padding:0 22px;
+  box-sizing:border-box;transform:translateY(-50%);border-radius:8px;z-index:0}}
+.pb-num{{font-size:24px;font-weight:700;white-space:nowrap;z-index:1}}
+.pb-title{{font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis;max-width:44%;text-align:right;z-index:1}}
 .phase-node{{position:absolute;left:50%;width:20px;height:20px;
   border-radius:50%;border:3px solid #fff;transform:translate(-50%,-50%);
   box-shadow:0 0 0 2px currentColor;z-index:3}}
 .phase-ring{{position:absolute;left:50%;width:14px;height:14px;
   border-radius:50%;background:#fff;border:3px solid;
   transform:translate(-50%,-50%);z-index:3}}
-.phase-title{{position:absolute;left:50%;margin-left:28px;font-size:13px;
-  font-weight:700;transform:translateY(-50%);max-width:40%;z-index:4;
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}
-.ring-label{{position:absolute;right:50%;margin-right:26px;font-size:13px;
-  font-weight:700;transform:translateY(-50%);max-width:40%;
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}
 .open-label{{position:absolute;left:50%;margin-left:26px;font-size:11px;
   font-style:italic;transform:translateY(-50%)}}
 .dim{{color:#999;font-weight:400;font-size:11px}}
@@ -639,13 +679,17 @@ header .meta{{font-size:12px;color:#888}}
   background:#fff;border:1px solid #d9d2f5;color:#6d28d9;font-size:10px;
   font-weight:700;padding:2px 8px;border-radius:11px;white-space:nowrap;z-index:4}}
 .slice-card{{position:absolute;max-width:38%;font-size:12px;cursor:pointer;
-  border:1px solid;border-radius:6px;padding:6px 10px;
+  border:1px solid;border-radius:6px;padding:6px 10px;color:#fff;
   transform:translateY(-50%);z-index:2;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}
 .slice-card:hover,.slice-card.open{{white-space:normal;overflow:visible;
-  text-overflow:clip;z-index:6;background:#fff!important}}
-.slice-card.left{{right:50%;margin-right:22px;text-align:right}}
-.slice-card.right{{left:50%;margin-left:22px}}
+  text-overflow:clip;z-index:6;background:#fff!important;color:#333}}
+.slice-card.left{{right:50%;margin-right:48px;text-align:right}}
+.slice-card.right{{left:50%;margin-left:48px}}
+.connector{{position:absolute;height:2px;width:48px;
+  transform:translateY(-50%);z-index:1}}
+.connector.left{{right:50%}}
+.connector.right{{left:50%}}
 .dot{{position:absolute;left:50%;width:11px;height:11px;border-radius:50%;
   transform:translate(-50%,-50%);z-index:3}}
 .detail{{display:none;margin-top:6px;padding-top:6px;

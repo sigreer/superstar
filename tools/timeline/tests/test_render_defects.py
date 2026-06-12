@@ -37,32 +37,35 @@ def _tops(html, cls, attr="data-ta"):
 # --- Defect 1: matching font + emoji markers -------------------------------
 
 def test_phase_title_and_ring_label_share_font():
+    # Start and finish bands render via the SAME .pb-num/.pb-title classes, so
+    # their prominence is identical and never swaps with reading direction;
+    # start/end identity is carried by the emoji instead. Within a band, the
+    # phase number reads as a heading — larger than the title.
     p = _phase("P1", status="done", started="2026-06-01", closed="2026-06-02")
     h = render.render_html("t", [p], generated=GEN).html
-    title = re.search(r"\.phase-title\{([^}]*)\}", h).group(1)
-    ring = re.search(r"\.ring-label\{([^}]*)\}", h).group(1)
-    title_fw = re.search(r"font-weight:(\d+)", title).group(1)
-    ring_fw = re.search(r"font-weight:(\d+)", ring).group(1)
-    title_fs = re.search(r"font-size:(\d+px)", title).group(1)
-    ring_fs = re.search(r"font-size:(\d+px)", ring).group(1)
-    assert title_fw == ring_fw, "start/end labels must share font-weight"
-    assert title_fs == ring_fs, "start/end labels must share font-size"
+    assert 'class="phase-band start"' in h
+    assert 'class="phase-band finish"' in h
+    num_fs = int(re.search(r"\.pb-num\{[^}]*font-size:(\d+)px", h).group(1))
+    title_fs = int(re.search(r"\.pb-title\{[^}]*font-size:(\d+)px", h).group(1))
+    assert num_fs > title_fs, "phase number should be more prominent than title"
 
 
 def test_start_label_carries_racing_car_emoji():
     p = _phase("P1", status="done", started="2026-06-01", closed="2026-06-02",
                title="Big unit of work")
     h = render.render_html("t", [p], generated=GEN).html
-    title = re.search(r'<div class="phase-title"[^>]*>(.*?)</div>', h, re.S).group(1)
-    assert title.startswith("\U0001F3CE️ "), repr(title)
+    num = re.search(r'<div class="phase-band start".*?'
+                    r'<span class="pb-num">(.*?)</span>', h, re.S).group(1)
+    assert num.startswith("\U0001F3CE️ "), repr(num)
 
 
 def test_end_label_carries_chequered_flag_emoji():
     p = _phase("P1", status="done", started="2026-06-01", closed="2026-06-02",
                title="Big unit of work")
     h = render.render_html("t", [p], generated=GEN).html
-    ring = re.search(r'<div class="ring-label"[^>]*>(.*?)</div>', h, re.S).group(1)
-    assert ring.startswith("\U0001F3C1 "), repr(ring)
+    num = re.search(r'<div class="phase-band finish".*?'
+                    r'<span class="pb-num">(.*?)</span>', h, re.S).group(1)
+    assert num.startswith("\U0001F3C1 "), repr(num)
 
 
 def test_open_label_carries_racing_car_emoji():
@@ -124,13 +127,15 @@ def test_short_idle_runs_keep_fixed_per_day_gap():
         gaps = _pill_gaps(h, attr)
         assert len(gaps) == 5, (attr, gaps)        # 19..24 May -> 5 consecutive gaps
         # No idle-day collapse: every consecutive day clears the fixed threshold
-        # and is comfortably larger than a single pill's height. (The scale anchors
-        # every day-marker a uniform 24h apart; the per-direction collision sweep
-        # may nudge the boundary pills next to the start node / end ring, so we
-        # assert tight consistency rather than bit-exact equality.)
+        # and is comfortably larger than a single pill's height.
         assert all(g >= threshold for g in gaps), (attr, gaps)
         assert all(g > pill_height for g in gaps), (attr, gaps)
-        assert max(gaps) <= 1.4 * min(gaps), (attr, gaps)
+        # Interior days sit a uniform 24h apart on the scale. The first/last
+        # pills border the phase start node / end ring band and are pushed
+        # outward to keep >= 1.5x the pill height clear of it, so uniformity is
+        # asserted on the interior gaps only.
+        interior = gaps[1:-1]
+        assert max(interior) <= 1.15 * min(interior), (attr, gaps)
 
 
 def test_quiet_run_still_collapses_with_label():

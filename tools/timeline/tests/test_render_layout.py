@@ -99,11 +99,12 @@ def test_phase_prominence_markup():
                title="Big unit of work")
     s = _slice("P1", "S1", status="done", closed="2026-06-01")
     h = render.render_html("t", [p, s], generated=GEN).html
-    assert 'class="phase-band"' in h          # full-width band at phase start
-    # Start (.phase-title) and end (.ring-label) labels share an identical font
-    # so prominence does not swap with reading direction; start/end identity is
-    # carried by emoji markers instead (see test_render_defects).
-    assert re.search(r"\.phase-title\{[^}]*font-weight:700", h)
-    assert re.search(r"\.phase-title\{[^}]*font-size:13px", h)
-    assert re.search(r"\.ring-label\{[^}]*font-weight:700", h)
-    assert re.search(r"\.ring-label\{[^}]*font-size:13px", h)
+    assert 'class="phase-band start"' in h    # full-width band at phase start
+    assert 'class="phase-band finish"' in h   # full-width band at phase finish
+    # Start and finish bands share the .pb-num/.pb-title font so prominence does
+    # not swap with reading direction; start/end identity is carried by emoji
+    # markers instead (see test_render_defects).
+    assert re.search(r"\.pb-num\{[^}]*font-weight:700", h)
+    assert re.search(r"\.pb-num\{[^}]*font-size:24px", h)
+    assert re.search(r"\.pb-title\{[^}]*font-weight:700", h)
+    assert re.search(r"\.pb-title\{[^}]*font-size:14px", h)

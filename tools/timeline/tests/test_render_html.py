@@ -214,7 +214,9 @@ def test_phase_node_and_ring_faces_have_no_inline_date():
     items = [model._item("P1", "phase", None,
                          phase("P1", status="done", started="2026-05-19", closed="2026-05-20"))]
     html = render.render_html("fixture", items, generated=GEN).html
-    title = re.search(r'<div class="phase-title"[^>]*>(.*?)</div>', html, re.S).group(1)
-    assert "May" not in title               # node title face carries no date
-    ring = re.search(r'<div class="ring-label"[^>]*>(.*?)</div>', html, re.S).group(1)
-    assert "May" not in ring and "complete" in ring
+    start = re.search(r'<div class="phase-band start"[^>]*>(.*?)</div>',
+                      html, re.S).group(1)
+    assert "May" not in start               # start band carries no date
+    finish = re.search(r'<div class="phase-band finish"[^>]*>(.*?)</div>',
+                       html, re.S).group(1)
+    assert "May" not in finish and "complete" in finish
