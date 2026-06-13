@@ -383,3 +383,38 @@ def test_show_renders_worktree_base_sha(tmp_path):
     assert run(root, "start", "P1.S1").returncode == 0
     out = run(root, "show", "P1.S1").stdout
     assert "worktree_base_sha:" in out
+
+
+_FRESH_DEPS_WARNING = "fresh linked worktree with NO installed"
+
+
+def test_start_warns_about_missing_deps_when_manifest_present(tmp_path):
+    # A repo carrying a dependency manifest gets a fresh-worktree deps reminder.
+    root = seed_repo(tmp_path)
+    (root / "package.json").write_text("{}")
+    r = run(root, "start", "P1.S1")
+    assert r.returncode == 0, r.stdout + r.stderr
+    # Warning goes to stderr only — stdout must stay a clean `cd` line so callers
+    # can safely `eval` it.
+    assert _FRESH_DEPS_WARNING in r.stderr
+    assert _FRESH_DEPS_WARNING not in r.stdout
+    assert r.stdout.strip().startswith("cd ")
+
+
+def test_start_silent_about_deps_without_manifest(tmp_path):
+    # No dependency manifest at the repo root → no reminder, no noise.
+    root = seed_repo(tmp_path)
+    r = run(root, "start", "P1.S1")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert _FRESH_DEPS_WARNING not in r.stderr
+
+
+def test_start_deps_warning_only_on_fresh_creation(tmp_path):
+    # The reminder is for genuinely fresh worktrees; an idempotent re-start of an
+    # already-created worktree must not repeat it.
+    root = seed_repo(tmp_path)
+    (root / "package.json").write_text("{}")
+    assert run(root, "start", "P1.S1").returncode == 0
+    r = run(root, "start", "P1.S1")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert _FRESH_DEPS_WARNING not in r.stderr
