@@ -1099,6 +1099,39 @@ def _apply_start_default(write_root: Path, qid: str, item, *, resume: bool) -> N
     item.worktree_branch = canonical_branch
     item.worktree_in_place = False
     print(f"cd {canonical_path}")
+    _warn_fresh_worktree_dependencies(write_root, canonical_rel)
+
+
+# Manifests that imply a per-checkout dependency-install step. A fresh linked
+# worktree never inherits the main checkout's installed dependency tree
+# (node_modules, .venv, vendor/, target/ …), so running tests or verification
+# gates inside it before installing resolves dependencies by walking UP to the
+# main checkout — which surfaces spurious failures (missing workspace symlinks,
+# named-export link errors, etc.) that masquerade as real defects.
+_DEPENDENCY_MANIFESTS = (
+    "package.json", "bun.lockb", "bun.lock", "pnpm-lock.yaml", "yarn.lock",
+    "pyproject.toml", "requirements.txt", "Cargo.toml", "go.mod", "Gemfile",
+    "composer.json",
+)
+
+
+def _warn_fresh_worktree_dependencies(write_root: Path, worktree_rel: str) -> None:
+    """Advise that a freshly-created worktree has no installed dependencies.
+
+    Emitted to stderr (never stdout) so it cannot contaminate the `cd <path>`
+    line a caller may evaluate. Only fires when the repo root carries a known
+    dependency manifest, to stay quiet in manifest-less projects.
+    """
+    if not any((write_root / m).exists() for m in _DEPENDENCY_MANIFESTS):
+        return
+    print(
+        f"note: {worktree_rel} is a fresh linked worktree with NO installed "
+        f"dependencies. Run your project's install command (e.g. `bun install`) "
+        f"inside it before running tests or verification gates — otherwise "
+        f"dependency resolution falls through to the main checkout and can "
+        f"surface spurious failures that look like real defects.",
+        file=sys.stderr,
+    )
 
 
 def _apply_start_in_place(write_root: Path, qid: str, item) -> None:
