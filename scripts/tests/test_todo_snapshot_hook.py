@@ -84,14 +84,16 @@ def test_snapshot_hook_is_synchronous_for_codex() -> None:
     assert post_tool_use["hooks"][0]["async"] is False
 
 
-def test_plugin_hook_commands_use_exact_plugin_root_token() -> None:
+def test_plugin_hook_commands_use_cross_harness_plugin_root_token() -> None:
+    # Claude Code injects CLAUDE_PLUGIN_ROOT; Codex injects both CLAUDE_PLUGIN_ROOT
+    # and PLUGIN_ROOT. Using ${CLAUDE_PLUGIN_ROOT:-.} resolves correctly on both
+    # harnesses (the bare ${PLUGIN_ROOT} form expands to empty under Claude).
     config = json.loads(HOOKS_CONFIG.read_text(encoding="utf-8"))
 
     for event_entries in config["hooks"].values():
         for entry in event_entries:
             for hook in entry["hooks"]:
                 command = hook["command"]
-                assert '${PLUGIN_ROOT:-.}' not in command
-                assert '${CLAUDE_PLUGIN_ROOT:-.}' not in command
-                assert command.startswith('"${PLUGIN_ROOT}/hooks/run-hook.cmd"')
-                assert hook["command_windows"].startswith('"%PLUGIN_ROOT%\\hooks\\run-hook.cmd"')
+                assert '${PLUGIN_ROOT}' not in command
+                assert command.startswith('"${CLAUDE_PLUGIN_ROOT:-.}/hooks/run-hook.cmd"')
+                assert hook["command_windows"].startswith('"%CLAUDE_PLUGIN_ROOT%\\hooks\\run-hook.cmd"')
