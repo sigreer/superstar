@@ -246,6 +246,19 @@
       "title": "Visual work-history timeline generator (tools/timeline)",
       "worktree_branch": "worktree-x29-visual-work-history-timeline-generator",
       "worktree_path": ".worktrees/worktree-x29-visual-work-history-timeline-generator"
+    },
+    {
+      "closed": null,
+      "created": "2026-06-21",
+      "id": "X31",
+      "notes": "",
+      "refs": [
+        "docs/specs/2026-06-21-X31-tasktool-janitor-skill-design.md",
+        "docs/reviewer/x31-tasktool-janitor-skill-design-spec"
+      ],
+      "started": null,
+      "status": "ready",
+      "title": "Tasktool janitor cleanup skill"
     }
   ],
   "last_reviewed": "2026-05-18",
