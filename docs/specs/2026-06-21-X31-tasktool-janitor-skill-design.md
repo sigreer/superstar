@@ -62,9 +62,9 @@ When the user asks for crosscuts, the coordinator isolates `X*` rows from the op
 
 If `git status --short` shows unrelated dirty or staged work, the coordinator records that fact in the audit context and avoids committing or reverting it. Dirty work does not automatically block read-only audit. Before mutation, however, the coordinator must specifically check whether `docs/tasklist.json` is itself dirty or staged with unrelated edits.
 
-`tasktool close` auto-commits scoped tracker/archive changes by default, so pre-existing tracker dirt can be folded into that lifecycle commit; use `tasktool close --no-commit` only when the operator intentionally wants the tracker to remain staged.
+`tasktool close` auto-commits only scoped lifecycle tracker/archive changes by default; unrelated tracker dirt must be cleared before close or cancel. Use `tasktool close --no-commit` only when the operator intentionally wants the tracker to remain staged.
 
-The cancel command stages tracker/archive changes instead. That command has no equivalent opt-out flag, so the operator must handle the staged lifecycle package deliberately. Resolve or stash unrelated tracker dirt before either command.
+The cancel command stages the archive and leaves the tracker edit unstaged, with no auto-commit. That command has no equivalent opt-out flag, so the operator must handle the lifecycle package deliberately. Resolve or stash unrelated tracker dirt before either command.
 
 ### 2. Batching and Delegation
 
@@ -146,8 +146,8 @@ The skill must state:
 - `tasktool cancel XNN --reason "..."` is for abandoned, superseded, invalid, or intentionally unshipped work.
 - `tasktool cancel` does not apply to task rows; non-cross lifecycle details remain owned by `tasklist-discipline`.
 - `tasktool close XNN` on a cross row still passes tasktool's landed-branch gate. If the row records an unlanded worktree branch, close is refused; do not improvise flags, and consult `tasklist-discipline` for any sanctioned override and required reason.
-- Before any mutation, confirm `docs/tasklist.json` is not itself dirty or staged with unrelated edits. `close` auto-commits scoped tracker/archive changes by default and supports `--no-commit` for an intentional staged lifecycle package.
-- The cancel command stages tracker/archive changes instead, with no equivalent opt-out flag, and requires the operator to commit or otherwise handle that staged package deliberately.
+- Before any mutation, confirm `docs/tasklist.json` is not itself dirty or staged with unrelated edits. After clearing unrelated dirt, `close` auto-commits scoped tracker/archive changes by default and supports `--no-commit` for an intentional staged lifecycle package.
+- The cancel command stages the archive and leaves the tracker edit unstaged, with no auto-commit and no equivalent opt-out flag, and requires the operator to commit or otherwise handle that lifecycle package deliberately.
 - Apply changes in small batches.
 - Run `tasktool validate` and re-check open rows after each batch.
 - Preserve unrelated dirty/staged work.

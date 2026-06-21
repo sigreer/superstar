@@ -358,7 +358,7 @@ def test_tasktool_janitor_requires_approval_and_safe_mutation_batches() -> None:
     assert "unrelated tracker dirt must be cleared before close or cancel" in text
     assert "close` auto-commits" in text
     assert "has no equivalent opt-out flag" in text
-    assert "stages tracker/archive changes instead" in text
+    assert "stages the archive and leaves the tracker edit unstaged" in text
     assert "small batches" in text
     assert "tasktool validate" in text
     assert "re-check open rows" in text
