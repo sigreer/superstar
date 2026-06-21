@@ -441,6 +441,20 @@
       "started": null,
       "status": "ready",
       "title": "Review-pipeline efficiency: fewer rounds, cheaper rounds"
+    },
+    {
+      "closed": null,
+      "created": "2026-06-12",
+      "id": "P10",
+      "notes": "",
+      "phase_reviewer_chain": null,
+      "plan_path": null,
+      "planning_path": null,
+      "slices": [],
+      "spec_path": "docs/specs/2026-06-12-P10-external-task-state-store-design.md",
+      "started": null,
+      "status": "ready",
+      "title": "External task-state store (sharded global git repo)"
     }
   ],
   "project": "superstar",
