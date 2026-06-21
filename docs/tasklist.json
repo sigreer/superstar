@@ -259,9 +259,11 @@
         "docs/handoffs/2026-06-21-X31-tasktool-janitor-skill-prompt.md",
         "docs/reviewer/x31-tasktool-janitor-skill-plan"
       ],
-      "started": null,
-      "status": "ready",
-      "title": "Tasktool janitor cleanup skill"
+      "started": "2026-06-21",
+      "status": "in_progress",
+      "title": "Tasktool janitor cleanup skill",
+      "worktree_branch": "worktree-x31-tasktool-janitor-cleanup-skill",
+      "worktree_path": ".worktrees/worktree-x31-tasktool-janitor-cleanup-skill"
     }
   ],
   "last_reviewed": "2026-05-18",
