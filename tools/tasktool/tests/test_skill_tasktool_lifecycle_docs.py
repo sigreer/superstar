@@ -293,3 +293,82 @@ def test_phase_planning_and_writing_plans_document_surface_tables() -> None:
         assert "tasktool surface check <phase-id>" in text, (
             f"{skill} must tell the author to run surface check before ratifying"
         )
+
+
+def test_tasktool_janitor_skill_exists_with_trigger_frontmatter() -> None:
+    text = skill_text("tasktool-janitor")
+
+    assert "name: tasktool-janitor" in text
+    assert "description: Use when cleaning up open tasktool rows" in text
+    assert "cross-cutting X items" in text
+    assert "large sets of heterogeneous tasklist cleanup candidates" in text
+
+
+def test_tasktool_janitor_starts_read_only_and_batches_work() -> None:
+    text = skill_text("tasktool-janitor")
+
+    assert "tasktool list --open" in text
+    assert "git status --short" in text
+    assert "read-only" in text.lower()
+    assert "more than six candidate rows" in text
+    assert "4-6 rows" in text
+    assert "dispatching-parallel-agents" in text
+    assert "must not review 20+ heterogeneous rows alone" in text
+
+
+def test_tasktool_janitor_forbids_worker_mutations() -> None:
+    text = skill_text("tasktool-janitor")
+
+    assert "Workers must not run" in text
+    assert "tasktool close <id>" in text
+    assert "tasktool cancel <id> --reason" in text
+    assert "tasktool set <id>" in text
+    assert "tasktool note <id>" in text
+    assert "tasktool ref <id>" in text
+    assert "must not edit files" in text
+
+
+def test_tasktool_janitor_defines_dossier_contract() -> None:
+    text = skill_text("tasktool-janitor")
+
+    for field in [
+        "Recommended action",
+        "Evidence checked",
+        "Rationale",
+        "Proposed command",
+        "Confidence / risk notes",
+    ]:
+        assert field in text
+
+    for action in ["keep", "close", "cancel", "promote", "uncertain"]:
+        assert action in text
+
+    assert "Age alone is never evidence" in text
+    assert "promote" in text and "normal Superstar spec/plan workflow" in text
+
+
+def test_tasktool_janitor_requires_approval_and_safe_mutation_batches() -> None:
+    text = skill_text("tasktool-janitor")
+
+    assert "explicit user approval" in text
+    assert "tasktool close XNN" in text
+    assert "tasktool cancel XNN --reason" in text
+    assert "landed-branch gate" in text
+    assert "docs/tasklist.json" in text
+    assert "unrelated tracker dirt must be cleared before close or cancel" in text
+    assert "close` auto-commits" in text
+    assert "has no equivalent opt-out flag" in text
+    assert "stages tracker/archive changes instead" in text
+    assert "small batches" in text
+    assert "tasktool validate" in text
+    assert "re-check open rows" in text
+    assert "Stop and report if tasktool refuses" in text
+
+
+def test_tasktool_janitor_requires_audit_trail_for_substantial_cleanup() -> None:
+    text = skill_text("tasktool-janitor")
+
+    assert "durable audit artifact" in text
+    assert "unless the user explicitly requests chat-only" in text
+    assert "docs/handoffs/YYYY-MM-DD-tasktool-janitor-audit.md" in text
+    assert "archived-task path" in text
