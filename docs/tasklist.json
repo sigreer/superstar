@@ -173,6 +173,12 @@
       "archived_path": "docs/archived-tasks/X30-harden-codex-plugin-hook-root-handling-a.md",
       "id": "X30",
       "title": "Harden Codex plugin hook root handling and deploy cache checks"
+    },
+    {
+      "archived_date": "2026-06-21",
+      "archived_path": "docs/archived-tasks/X31-tasktool-janitor-cleanup-skill.md",
+      "id": "X31",
+      "title": "Tasktool janitor cleanup skill"
     }
   ],
   "archived_phases": [
@@ -246,24 +252,6 @@
       "title": "Visual work-history timeline generator (tools/timeline)",
       "worktree_branch": "worktree-x29-visual-work-history-timeline-generator",
       "worktree_path": ".worktrees/worktree-x29-visual-work-history-timeline-generator"
-    },
-    {
-      "closed": null,
-      "created": "2026-06-21",
-      "id": "X31",
-      "notes": "",
-      "refs": [
-        "docs/specs/2026-06-21-X31-tasktool-janitor-skill-design.md",
-        "docs/reviewer/x31-tasktool-janitor-skill-design-spec",
-        "docs/plans/2026-06-21-X31-tasktool-janitor-skill.md",
-        "docs/handoffs/2026-06-21-X31-tasktool-janitor-skill-prompt.md",
-        "docs/reviewer/x31-tasktool-janitor-skill-plan"
-      ],
-      "started": "2026-06-21",
-      "status": "in_progress",
-      "title": "Tasktool janitor cleanup skill",
-      "worktree_branch": "worktree-x31-tasktool-janitor-cleanup-skill",
-      "worktree_path": ".worktrees/worktree-x31-tasktool-janitor-cleanup-skill"
     }
   ],
   "last_reviewed": "2026-05-18",
