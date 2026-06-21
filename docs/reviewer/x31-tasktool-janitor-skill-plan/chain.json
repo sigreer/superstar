@@ -1,0 +1,152 @@
+{
+  "schema_version": 1,
+  "chain": "x31-tasktool-janitor-skill-plan",
+  "kind": "plan",
+  "target": "docs/plans/2026-06-21-X31-tasktool-janitor-skill.md",
+  "work_id": "X31",
+  "legacy_migrated": false,
+  "rounds": [
+    {
+      "round": 1,
+      "reviewers": [
+        {
+          "role": "primary",
+          "sweep_group": null,
+          "parent_round": 1,
+          "request": "r1-2026-06-21T0204-request.md",
+          "response": "r1-2026-06-21T0204-response.md",
+          "verdict": "ready with small edits",
+          "verdict_valid": true,
+          "returncode": 0,
+          "status": "ok",
+          "provider": "claude",
+          "caller_provider": "codex",
+          "model": null,
+          "sandbox": {
+            "repo_root": "/home/simon/Dev/sigreer/skills/superstar",
+            "scratch_dir": "/tmp/superstar-reviewer-x31-tasktool-janitor-skill-plan-r1-primary-nnp2jsvw",
+            "response_dir": "docs/reviewer/x31-tasktool-janitor-skill-plan/.reviewer-output/r1-primary",
+            "mode": "plan-read-only"
+          },
+          "started_at": "2026-06-21T01:04:28.261Z",
+          "finished_at": "2026-06-21T01:07:19.930Z",
+          "duration_ms": 171669,
+          "estimated_usage": {
+            "formula": "ceil(chars / 4)",
+            "prompt_chars": 35008,
+            "response_chars": 7386,
+            "estimated_input_tokens": 8752,
+            "estimated_output_tokens": 1847,
+            "estimated_total_tokens": 10599
+          },
+          "exact_usage": {
+            "input_tokens": 10094,
+            "cache_creation_input_tokens": 66926,
+            "cache_read_input_tokens": 581280,
+            "output_tokens": 12646,
+            "server_tool_use": {
+              "web_search_requests": 0,
+              "web_fetch_requests": 0
+            },
+            "service_tier": "standard",
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 66926,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "inference_geo": "not_available",
+            "iterations": [
+              {
+                "input_tokens": 2,
+                "output_tokens": 6837,
+                "cache_read_input_tokens": 81413,
+                "cache_creation_input_tokens": 1263,
+                "cache_creation": {
+                  "ephemeral_5m_input_tokens": 0,
+                  "ephemeral_1h_input_tokens": 1263
+                },
+                "type": "message"
+              }
+            ],
+            "speed": "standard",
+            "total_tokens": 670946,
+            "provider": "claude"
+          },
+          "usage_capture_status": "exact",
+          "usage_capture_error": null
+        }
+      ],
+      "status": "ok",
+      "returncode": 0,
+      "started_at": "2026-06-21T01:04:28.261Z",
+      "finished_at": "2026-06-21T01:07:19.930Z",
+      "duration_ms": 171669,
+      "provider": "claude",
+      "caller_provider": "codex",
+      "model": null,
+      "estimated_usage": {
+        "formula": "ceil(chars / 4)",
+        "prompt_chars": 35008,
+        "response_chars": 7386,
+        "estimated_input_tokens": 8752,
+        "estimated_output_tokens": 1847,
+        "estimated_total_tokens": 10599
+      },
+      "exact_usage": {
+        "input_tokens": 10094,
+        "cache_creation_input_tokens": 66926,
+        "cache_read_input_tokens": 581280,
+        "output_tokens": 12646,
+        "server_tool_use": {
+          "web_search_requests": 0,
+          "web_fetch_requests": 0
+        },
+        "service_tier": "standard",
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 66926,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "inference_geo": "not_available",
+        "iterations": [
+          {
+            "input_tokens": 2,
+            "output_tokens": 6837,
+            "cache_read_input_tokens": 81413,
+            "cache_creation_input_tokens": 1263,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 1263
+            },
+            "type": "message"
+          }
+        ],
+        "speed": "standard",
+        "total_tokens": 670946,
+        "provider": "claude"
+      },
+      "usage_capture_status": "exact",
+      "usage_capture_error": null,
+      "merged_verdict": "ready with small edits",
+      "merged_findings": null,
+      "request": "r1-2026-06-21T0204-request.md",
+      "response": "r1-2026-06-21T0204-response.md",
+      "resolution": null,
+      "resolution_parse_status": null,
+      "resolution_waiver": false,
+      "head_sha_at_request": "f6de9a191fd59dd85b026d2b12f290d609f30cf6",
+      "head_sha_after_round": "f6de9a191fd59dd85b026d2b12f290d609f30cf6",
+      "worktree_dirty_at_request": true,
+      "verdict": "ready with small edits",
+      "verdict_valid": true,
+      "findings_count": 5,
+      "blocking_findings_count": 0,
+      "base_ref": null,
+      "base_ref_source": null,
+      "diff_included": false,
+      "depth_resolved": "standard"
+    }
+  ],
+  "sweep_checkpoints": {
+    "first-round": "pending",
+    "final-ready": "pending"
+  }
+}
